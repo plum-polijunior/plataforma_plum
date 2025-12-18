@@ -5,12 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import plumbLogo from "@/assets/plumb-logo.png";
+import plumLogo from "@/assets/plum-logo.png";
 
 type Message = {
   id: number;
   content: string;
-  sender: "user" | "plumb";
+  sender: "user" | "plum";
   buttons?: { label: string; action: string }[];
 };
 
@@ -36,23 +36,33 @@ export function WhatsAppChat() {
   const [chatState, setChatState] = useState<ChatState>("initial");
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [pendingAnswer, setPendingAnswer] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(0);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const addMessage = (content: string, sender: "user" | "plumb", buttons?: { label: string; action: string }[]) => {
+  const addMessage = (content: string, sender: "user" | "plum", buttons?: { label: string; action: string }[]) => {
     idCounter.current += 1;
     setMessages((prev) => [...prev, { id: idCounter.current, content, sender, buttons }]);
   };
 
-  const handleSend = () => {
+  const handleSend = (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     if (!inputValue.trim()) return;
 
     const userMessage = inputValue.trim();
@@ -61,18 +71,17 @@ export function WhatsAppChat() {
 
     if (chatState === "initial") {
       setTimeout(() => {
-        addMessage("Olá! Como você quer consultar seus dados?", "plumb", [
+        addMessage("Olá! Como você quer consultar seus dados?", "plum", [
           { label: "Agente de IA", action: "ai_agent" },
           { label: "Menu Botões", action: "menu_buttons" },
         ]);
         setChatState("choose_mode");
       }, 600);
     } else if (chatState === "ai_agent_suggest") {
-      // User sent the AI query
       setPendingQuestion(userMessage);
       setPendingAnswer(RESPONSES.ai_query);
       setTimeout(() => {
-        addMessage("Como você quer receber essa informação?", "plumb", [
+        addMessage("Como você quer receber essa informação?", "plum", [
           { label: "Delivery recorrente", action: "delivery" },
           { label: "Consulta pontual", action: "pontual" },
         ]);
@@ -94,7 +103,7 @@ export function WhatsAppChat() {
       case "menu_buttons":
         addMessage("Menu Botões", "user");
         setTimeout(() => {
-          addMessage("Escolha uma consulta:", "plumb", [
+          addMessage("Escolha uma consulta:", "plum", [
             { label: "Faturamento", action: "query_faturamento" },
             { label: "Produto mais vendido", action: "query_produto" },
             { label: "Maior vendedor do mês", action: "query_vendedor" },
@@ -108,7 +117,7 @@ export function WhatsAppChat() {
         setPendingQuestion("Qual é o faturamento?");
         setPendingAnswer(RESPONSES.faturamento);
         setTimeout(() => {
-          addMessage("Como você quer receber essa informação?", "plumb", [
+          addMessage("Como você quer receber essa informação?", "plum", [
             { label: "Delivery recorrente", action: "delivery" },
             { label: "Consulta pontual", action: "pontual" },
           ]);
@@ -121,7 +130,7 @@ export function WhatsAppChat() {
         setPendingQuestion("Qual é o produto mais vendido?");
         setPendingAnswer(RESPONSES.produto);
         setTimeout(() => {
-          addMessage("Como você quer receber essa informação?", "plumb", [
+          addMessage("Como você quer receber essa informação?", "plum", [
             { label: "Delivery recorrente", action: "delivery" },
             { label: "Consulta pontual", action: "pontual" },
           ]);
@@ -134,7 +143,7 @@ export function WhatsAppChat() {
         setPendingQuestion("Quem é o maior vendedor do mês?");
         setPendingAnswer(RESPONSES.vendedor);
         setTimeout(() => {
-          addMessage("Como você quer receber essa informação?", "plumb", [
+          addMessage("Como você quer receber essa informação?", "plum", [
             { label: "Delivery recorrente", action: "delivery" },
             { label: "Consulta pontual", action: "pontual" },
           ]);
@@ -145,7 +154,7 @@ export function WhatsAppChat() {
       case "delivery":
         addMessage("Delivery recorrente", "user");
         setTimeout(() => {
-          addMessage("Você quer receber essa informação de quanto em quanto tempo?", "plumb", [
+          addMessage("Você quer receber essa informação de quanto em quanto tempo?", "plum", [
             { label: "De 12 em 12 horas", action: "interval_12h" },
             { label: "Diariamente", action: "interval_daily" },
             { label: "Semanalmente", action: "interval_weekly" },
@@ -158,10 +167,10 @@ export function WhatsAppChat() {
         addMessage("Consulta pontual", "user");
         setTimeout(() => {
           if (pendingAnswer) {
-            addMessage(pendingAnswer, "plumb");
+            addMessage(pendingAnswer, "plum");
           }
           setTimeout(() => {
-            addMessage("Deseja fazer outra consulta?", "plumb", [
+            addMessage("Deseja fazer outra consulta?", "plum", [
               { label: "Nova pergunta", action: "reset" },
             ]);
             setChatState("complete");
@@ -173,10 +182,10 @@ export function WhatsAppChat() {
         addMessage("De 12 em 12 horas", "user");
         setTimeout(() => {
           if (pendingAnswer) {
-            addMessage(pendingAnswer, "plumb");
+            addMessage(pendingAnswer, "plum");
           }
           setTimeout(() => {
-            addMessage("✓ Mensagem agendada para: a cada 12 horas", "plumb", [
+            addMessage("✓ Mensagem agendada para: a cada 12 horas", "plum", [
               { label: "Nova pergunta", action: "reset" },
             ]);
             setChatState("complete");
@@ -188,10 +197,10 @@ export function WhatsAppChat() {
         addMessage("Diariamente", "user");
         setTimeout(() => {
           if (pendingAnswer) {
-            addMessage(pendingAnswer, "plumb");
+            addMessage(pendingAnswer, "plum");
           }
           setTimeout(() => {
-            addMessage("✓ Mensagem agendada para: diariamente", "plumb", [
+            addMessage("✓ Mensagem agendada para: diariamente", "plum", [
               { label: "Nova pergunta", action: "reset" },
             ]);
             setChatState("complete");
@@ -203,10 +212,10 @@ export function WhatsAppChat() {
         addMessage("Semanalmente", "user");
         setTimeout(() => {
           if (pendingAnswer) {
-            addMessage(pendingAnswer, "plumb");
+            addMessage(pendingAnswer, "plum");
           }
           setTimeout(() => {
-            addMessage("✓ Mensagem agendada para: semanalmente", "plumb", [
+            addMessage("✓ Mensagem agendada para: semanalmente", "plum", [
               { label: "Nova pergunta", action: "reset" },
             ]);
             setChatState("complete");
@@ -229,13 +238,6 @@ export function WhatsAppChat() {
     idCounter.current = 0;
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   return (
     <div className="w-full max-w-md mx-auto">
       {/* Chat container */}
@@ -243,10 +245,10 @@ export function WhatsAppChat() {
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 bg-card/50 backdrop-blur">
           <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
-            <img src={plumbLogo} alt="Plumb" className="w-7 h-7 object-contain" />
+            <img src={plumLogo} alt="Plum" className="w-7 h-7 object-contain" />
           </div>
           <div className="flex-1">
-            <h4 className="font-semibold text-foreground text-sm">Plumb Assistant</h4>
+            <h4 className="font-semibold text-foreground text-sm">Plum Assistant</h4>
             <p className="text-xs text-muted-foreground">Online</p>
           </div>
           <Button
@@ -259,8 +261,12 @@ export function WhatsAppChat() {
           </Button>
         </div>
 
-        {/* Messages area */}
-        <div className="h-[350px] overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-background/50 to-background/80">
+        {/* Messages area - fixed height with hidden scrollbar */}
+        <div
+          ref={messagesContainerRef}
+          className="h-[350px] md:h-[420px] max-h-[60vh] overflow-y-auto no-scrollbar overscroll-contain p-4 space-y-3 bg-gradient-to-b from-background/50 to-background/80"
+          style={{ touchAction: "pan-y" }}
+        >
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground text-sm text-center">
@@ -304,16 +310,14 @@ export function WhatsAppChat() {
               </motion.div>
             ))}
           </AnimatePresence>
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Input area */}
-        <div className="p-3 border-t border-border/20 bg-card/30 backdrop-blur">
+        <form onSubmit={handleSend} className="p-3 border-t border-border/20 bg-card/30 backdrop-blur">
           <div className="flex gap-2">
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
               placeholder={
                 chatState === "ai_agent_suggest"
                   ? "Sugerido: envie a pergunta"
@@ -322,7 +326,7 @@ export function WhatsAppChat() {
               className="flex-1 bg-muted/30 border-border/30 focus:border-primary/50"
             />
             <Button
-              onClick={handleSend}
+              type="submit"
               size="icon"
               variant="hero"
               className="shrink-0"
@@ -330,7 +334,7 @@ export function WhatsAppChat() {
               <Send className="w-4 h-4" />
             </Button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

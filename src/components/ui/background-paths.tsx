@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import plumbLogo from "@/assets/plumb-logo.png";
+import plumLogo from "@/assets/plum-logo.png";
 function FloatingPaths({
   position
 }: {
@@ -35,7 +35,7 @@ function FloatingPaths({
 }
 export function BackgroundPaths({
   subtitle = "Dados da sua operação. Em segundos. No WhatsApp.",
-  ctaLabel = "Entender o Plumb →",
+  ctaLabel = "Entender o Plum →",
   onCta
 }: {
   subtitle?: string;
@@ -75,7 +75,7 @@ export function BackgroundPaths({
           stiffness: 100,
           damping: 20
         }} className="mb-8">
-            <img src={plumbLogo} alt="Plumb Logo" className="w-48 h-48 sm:w-64 sm:h-64 mx-auto object-contain drop-shadow-2xl" />
+            <img src={plumLogo} alt="Plum Logo" className="w-48 h-48 sm:w-64 sm:h-64 mx-auto object-contain drop-shadow-2xl" />
           </motion.div>
 
           <motion.p initial={{

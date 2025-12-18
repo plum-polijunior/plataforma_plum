@@ -15,7 +15,7 @@ const cards = [
   {
     icon: Zap,
     title: "A Solução",
-    description: "O Plumb propõe um chatbot de consulta e avisos operacionais programáveis, conectando funcionários à base de dados e facilitando a busca e o recebimento de informações pontuais.",
+    description: "O Plum propõe um chatbot de consulta e avisos operacionais programáveis, conectando funcionários à base de dados e facilitando a busca e o recebimento de informações pontuais.",
   },
 ];
 

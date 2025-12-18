@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { MultiStepForm } from "@/components/ui/multistep-form";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import plumbLogo from "@/assets/plumb-logo.png";
+import plumLogo from "@/assets/plum-logo.png";
 
 export function ContactSection() {
   const { toast } = useToast();
@@ -53,13 +53,13 @@ export function ContactSection() {
           className="text-center mb-12"
         >
           <div className="flex justify-center mb-6">
-            <img src={plumbLogo} alt="Plumb" className="h-12 w-auto opacity-60" />
+            <img src={plumLogo} alt="Plum" className="h-12 w-auto opacity-60" />
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
             Contato
           </h2>
           <p className="text-muted-foreground">
-            Solicite uma demonstração gratuita do Plumb.
+            Solicite uma demonstração gratuita do Plum.
           </p>
         </motion.div>
 
@@ -81,7 +81,7 @@ export function ContactSection() {
           viewport={{ once: true }}
           className="text-center mt-12 text-muted-foreground/60 text-sm"
         >
-          © 2025 Plumb. Todos os direitos reservados.
+          © PLUM Direitos Reservados 2026
         </motion.div>
       </div>
     </section>
