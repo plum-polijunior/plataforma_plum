@@ -51,7 +51,27 @@ export function FeaturesSection() {
           </p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-3 gap-8 mb-16">
+        {/* WhatsApp Chat Simulation - BEFORE feature cards */}
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          viewport={{ once: true }}
+          className="mb-16"
+        >
+          <div className="text-center mb-8">
+            <h3 className="text-2xl font-bold text-foreground mb-2">
+              Simule o Plum no WhatsApp
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              Experimente como seria consultar seus dados em tempo real.
+            </p>
+          </div>
+          <WhatsAppChat />
+        </motion.div>
+
+        {/* Feature cards - AFTER simulation */}
+        <div className="grid lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}
@@ -96,25 +116,6 @@ export function FeaturesSection() {
             </motion.div>
           ))}
         </div>
-
-        {/* WhatsApp Chat Simulation */}
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
-          viewport={{ once: true }}
-          className="mt-8"
-        >
-          <div className="text-center mb-8">
-            <h3 className="text-2xl font-bold text-foreground mb-2">
-              Simule o Plumb no WhatsApp
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              Experimente como seria consultar seus dados em tempo real.
-            </p>
-          </div>
-          <WhatsAppChat />
-        </motion.div>
       </div>
     </section>
   );

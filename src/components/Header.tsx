@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import plumbLogo from "@/assets/plumb-logo.png";
+import plumLogo from "@/assets/plum-logo.png";
 
 interface HeaderProps {
   onNavigate: (sectionId: string) => void;
@@ -13,6 +13,7 @@ const navItems = [
   { id: "inicio", label: "Início" },
   { id: "sobre", label: "O que somos" },
   { id: "funcionalidades", label: "Funcionalidades" },
+  { id: "localizacao", label: "Localização" },
   { id: "faq", label: "FAQ" },
   { id: "contato", label: "Contato" },
 ];
@@ -39,8 +40,8 @@ export function Header({ onNavigate, activeSection }: HeaderProps) {
             onClick={() => handleNavClick("inicio")}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
           >
-            <img src={plumbLogo} alt="Plumb" className="h-8 w-8 object-contain" />
-            <span className="text-lg font-semibold text-gradient">Plumb</span>
+            <img src={plumLogo} alt="Plum" className="h-8 w-8 object-contain" />
+            <span className="text-lg font-semibold text-gradient">Plum</span>
           </button>
 
           {/* Desktop Navigation */}
