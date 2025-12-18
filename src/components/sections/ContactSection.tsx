@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 function formatPhone(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -45,11 +45,11 @@ export function ContactSection() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("leads").insert([
+      const { error } = await supabase.from("Leads").insert([
         {
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone.replace(/\D/g, ""),
+          Nome: formData.name,
+          Email: formData.email,
+          Telefone: formData.phone.replace(/\D/g, ""),
         },
       ]);
 
