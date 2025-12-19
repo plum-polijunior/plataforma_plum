@@ -4,6 +4,12 @@ import { WhatsAppChat } from "@/components/WhatsAppChat";
 
 const features = [
   {
+    icon: Brain,
+    title: "Agente de IA",
+    description: "Perguntas subjetivas com métricas estatísticas e nota de confiabilidade.",
+    example: '"Qual produto está com tendência de crescimento?"',
+  },
+  {
     icon: Database,
     title: "Consulta de dados históricos",
     description: "Acesse métricas e relatórios de qualquer período com perguntas simples.",
@@ -14,13 +20,6 @@ const features = [
     title: "Delivery recorrente de dados",
     description: "Configure alertas e relatórios automáticos no horário que preferir.",
     example: '"Informe toda segunda-feira a média de faturamento da semana anterior"',
-  },
-  {
-    icon: Brain,
-    title: "Agente de IA",
-    description: "Perguntas subjetivas com métricas estatísticas e nota de confiabilidade.",
-    example: '"Qual produto está com tendência de crescimento?"',
-    badge: "Opcional",
   },
 ];
 
@@ -86,12 +85,6 @@ export function FeaturesSection() {
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 
                 <div className="relative z-10">
-                  {feature.badge && (
-                    <span className="inline-block px-3 py-1 text-xs font-medium bg-accent/20 text-accent rounded-full mb-4">
-                      {feature.badge}
-                    </span>
-                  )}
-                  
                   <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center mb-6 group-hover:bg-primary/30 group-hover:scale-110 transition-all duration-300">
                     <feature.icon className="w-7 h-7 text-primary" />
                   </div>

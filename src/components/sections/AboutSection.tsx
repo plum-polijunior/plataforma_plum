@@ -1,29 +1,23 @@
 import { motion } from "framer-motion";
-import { Users, Target, Zap, Building2, Briefcase, TrendingUp, DollarSign } from "lucide-react";
+import { Users, Target, Zap } from "lucide-react";
+import DatabaseWithRestApi from "@/components/ui/database-with-rest-api";
 
 const cards = [
   {
     icon: Users,
     title: "O Problema",
-    description: "Clientes relatam dificuldade na hora de consultar informações sobre a empresa.",
+    description: "Necessidade por mecanismo de simples obtenção de informações e dados em meio a softwares complexos, lentos e burocráticos .",
   },
   {
     icon: Target,
     title: "O Contexto",
-    description: "Seja por quererem algo simples em meio a softwares complexos, ou por serem coordenadores mais velhos em cargos estratégicos que não dominam tais aplicações.",
+    description: "Busca por mecanismos simples em meio a softwares complexo, lentos e burocráticos disponíveis no mercado,",
   },
   {
     icon: Zap,
     title: "A Solução",
     description: "O Plum propõe um chatbot de consulta e avisos operacionais programáveis, conectando funcionários à base de dados e facilitando a busca e o recebimento de informações pontuais.",
   },
-];
-
-const targetAudience = [
-  { icon: Building2, label: "Diretoria / C-Level" },
-  { icon: Briefcase, label: "Gestores e Coordenadores" },
-  { icon: TrendingUp, label: "Operações" },
-  { icon: DollarSign, label: "Financeiro" },
 ];
 
 export function AboutSection() {
@@ -76,34 +70,25 @@ export function AboutSection() {
           ))}
         </div>
 
-        {/* Target Audience */}
+        {/* Para quem - Database with animated wires */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.3 }}
           viewport={{ once: true }}
-          className="glass rounded-2xl p-8"
+          className="flex flex-col items-center"
         >
-          <h3 className="text-xl font-semibold mb-6 text-center text-foreground">
-            Para quem é
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {targetAudience.map((item, index) => (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
-                viewport={{ once: true }}
-                className="flex flex-col items-center gap-3 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-              >
-                <item.icon className="w-6 h-6 text-primary" />
-                <span className="text-sm text-muted-foreground text-center font-medium">
-                  {item.label}
-                </span>
-              </motion.div>
-            ))}
-          </div>
+          <DatabaseWithRestApi
+            title="Para quem"
+            circleText="Uso de dados"
+            lightColor="#A855F7"
+            badgeTexts={{
+              first: "Varejistas",
+              second: "Agências",
+              third: "Financeiro",
+              fourth: "Indústrias",
+            }}
+          />
         </motion.div>
       </div>
     </section>
