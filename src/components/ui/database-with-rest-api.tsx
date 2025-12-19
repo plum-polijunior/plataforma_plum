@@ -3,6 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { MovingBorderButton } from "./moving-border";
 
 interface DatabaseWithRestApiProps {
   className?: string;
@@ -123,28 +124,18 @@ const DatabaseWithRestApi = ({
         />
       </div>
 
-      {/* Main Pill Box - "Uso de dados" */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 1.2 }}
-        viewport={{ once: true }}
-        className="relative mt-2 flex items-center justify-center rounded-full border border-primary/40 bg-card/80 backdrop-blur-sm px-8 py-4"
-        style={{
-          boxShadow: `0 0 30px ${lightColor}20, 0 0 60px ${lightColor}10`,
-        }}
+      {/* Main Pill Box - "Uso de dados" with Moving Border */}
+      <MovingBorderButton
+        as="div"
+        borderRadius="9999px"
+        duration={3000}
+        containerClassName="mt-2"
+        className="px-8 py-4"
       >
-        {/* Glow effect */}
-        <div
-          className="absolute -inset-2 rounded-full opacity-20 blur-xl"
-          style={{ background: `radial-gradient(circle, ${lightColor}40, transparent)` }}
-        />
-
-        {/* Pill text */}
-        <span className="relative text-sm lg:text-base font-semibold text-primary">
+        <span className="text-sm lg:text-base font-semibold text-primary">
           {circleText}
         </span>
-      </motion.div>
+      </MovingBorderButton>
     </div>
   );
 };
