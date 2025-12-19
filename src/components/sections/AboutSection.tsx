@@ -6,12 +6,12 @@ const cards = [
   {
     icon: Users,
     title: "O Problema",
-    description: "Necessidade por mecanismo de simples obtenção de informações e dados em meio a softwares complexos, lentos e burocráticos .",
+    description: "Necessidade por mecanismo de simples obtenção de informações e dados em meio a softwares complexos, lentos e burocráticos.",
   },
   {
     icon: Target,
     title: "O Contexto",
-    description: "Busca por mecanismos simples em meio a softwares complexo, lentos e burocráticos disponíveis no mercado,",
+    description: "Busca por mecanismos simples em meio a softwares complexos, lentos e burocráticos disponíveis no mercado.",
   },
   {
     icon: Zap,
