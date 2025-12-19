@@ -18,6 +18,7 @@ interface DatabaseWithRestApiProps {
 
 interface PathData {
   d: string;
+  duration: number;
 }
 
 const DatabaseWithRestApi = ({
@@ -35,6 +36,7 @@ const DatabaseWithRestApi = ({
   const boxRefs = useRef<(HTMLDivElement | null)[]>([]);
   const pillRef = useRef<HTMLDivElement>(null);
   const [paths, setPaths] = useState<PathData[]>([]);
+  const [trunkPath, setTrunkPath] = useState<string>("");
   const [finalDotPos, setFinalDotPos] = useState({ x: 0, y: 0 });
   const [svgSize, setSvgSize] = useState({ width: 0, height: 0 });
 
@@ -46,43 +48,65 @@ const DatabaseWithRestApi = ({
 
     // Final dot position: centered above the pill
     const finalX = pillRect.left + pillRect.width / 2 - containerRect.left;
-    const finalY = pillRect.top - containerRect.top - 12; // 12px above pill
+    const finalY = pillRect.top - containerRect.top - 14;
 
     setFinalDotPos({ x: finalX, y: finalY });
     setSvgSize({ width: containerRect.width, height: pillRect.top - containerRect.top });
 
     // Junction point where all wires converge
-    const junctionY = finalY - 30;
+    const junctionX = finalX;
+    const junctionY = finalY - 35;
+    const cornerRadius = 10;
 
     const newPaths: PathData[] = [];
+    const durations = [3.2, 3.5, 3.8, 3.4];
 
-    boxRefs.current.forEach((boxEl) => {
+    boxRefs.current.forEach((boxEl, index) => {
       if (!boxEl) return;
 
       const boxRect = boxEl.getBoundingClientRect();
-      // Start point: center bottom of each box
       const startX = boxRect.left + boxRect.width / 2 - containerRect.left;
-      const startY = boxRect.bottom - containerRect.top + 6; // Below the node dot
+      const startY = boxRect.bottom - containerRect.top + 8;
 
-      // Create curved path to junction then down to final dot
-      const midY = startY + 40;
-      
-      // Path: go down, curve toward center, then down to final
-      const d = `M ${startX} ${startY} 
-                 L ${startX} ${midY} 
-                 Q ${startX} ${junctionY} ${finalX} ${junctionY}
-                 L ${finalX} ${finalY}`;
+      // Mid Y point for horizontal segment
+      const midY = startY + 35;
 
-      newPaths.push({ d });
+      // Build path with straight lines and small rounded corners
+      let d: string;
+
+      if (Math.abs(startX - junctionX) < 5) {
+        // If already aligned, just go straight down
+        d = `M ${startX} ${startY} L ${startX} ${junctionY}`;
+      } else {
+        // Create L-shaped path with rounded corners
+        const goingRight = startX < junctionX;
+        
+        // Path: down, then horizontal, then down to junction
+        d = `M ${startX} ${startY} 
+             L ${startX} ${midY - cornerRadius}
+             Q ${startX} ${midY} ${startX + (goingRight ? cornerRadius : -cornerRadius)} ${midY}
+             L ${junctionX + (goingRight ? -cornerRadius : cornerRadius)} ${midY}
+             Q ${junctionX} ${midY} ${junctionX} ${midY + cornerRadius}
+             L ${junctionX} ${junctionY}`;
+      }
+
+      newPaths.push({ d, duration: durations[index] });
     });
 
     setPaths(newPaths);
+
+    // Trunk path from junction to final dot
+    setTrunkPath(`M ${junctionX} ${junctionY} L ${junctionX} ${finalY}`);
   }, []);
 
   useLayoutEffect(() => {
-    calculatePaths();
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(calculatePaths, 100);
     window.addEventListener("resize", calculatePaths);
-    return () => window.removeEventListener("resize", calculatePaths);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", calculatePaths);
+    };
   }, [calculatePaths]);
 
   const badges = [
@@ -140,18 +164,53 @@ const DatabaseWithRestApi = ({
           style={{ overflow: "visible" }}
         >
           <defs>
-            <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor={lightColor} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={lightColor} stopOpacity="0.7" />
+            <linearGradient id="wireGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor={lightColor} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={lightColor} stopOpacity="0.5" />
             </linearGradient>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
 
           {/* Wire paths */}
-          <g strokeWidth="2" stroke="url(#purpleGradient)" fill="none">
+          <g strokeWidth="2" stroke="url(#wireGradient)" fill="none">
             {paths.map((path, index) => (
               <path key={index} d={path.d} />
             ))}
+            {/* Trunk path */}
+            {trunkPath && <path d={trunkPath} />}
           </g>
+
+          {/* Animated light circles moving along paths */}
+          {paths.map((path, index) => (
+            <circle
+              key={`light-${index}`}
+              r="4"
+              fill={lightColor}
+              filter="url(#glow)"
+            >
+              <animateMotion
+                dur={`${path.duration}s`}
+                repeatCount="indefinite"
+                path={path.d}
+                keyPoints="0;1"
+                keyTimes="0;1"
+                calcMode="spline"
+                keySplines="0.4 0 0.2 1"
+              />
+              <animate
+                attributeName="opacity"
+                values="0.6;1;0.6"
+                dur={`${path.duration}s`}
+                repeatCount="indefinite"
+              />
+            </circle>
+          ))}
 
           {/* Final convergence dot */}
           <circle
@@ -159,8 +218,15 @@ const DatabaseWithRestApi = ({
             cy={finalDotPos.y}
             r="6"
             fill={lightColor}
-            style={{ filter: `drop-shadow(0 0 6px ${lightColor})` }}
-          />
+            filter="url(#glow)"
+          >
+            <animate
+              attributeName="opacity"
+              values="0.7;1;0.7"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
         </svg>
       )}
 
