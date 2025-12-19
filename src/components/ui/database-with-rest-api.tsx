@@ -23,29 +23,27 @@ const DatabaseWithRestApi = ({
   circleText = "Uso de dados",
   badgeTexts = {
     first: "Varejistas",
-    second: "Agências",
+    second: "Agências de Marketing",
     third: "Financeiro",
     fourth: "Indústrias",
   },
   title = "Para quem",
   lightColor = "#A855F7",
 }: DatabaseWithRestApiProps) => {
-  const icons = [Store, Megaphone, Landmark, Factory];
-
   return (
     <div
       className={cn(
-        "relative flex h-[320px] w-full max-w-[400px] items-end justify-center",
+        "relative flex h-[460px] w-full max-w-[760px] items-end justify-center",
         className
       )}
     >
       {/* SVG Paths */}
       <svg
         fill="none"
-        viewBox="0 0 200 140"
+        viewBox="0 0 200 100"
         className="absolute left-1/2 top-0 -translate-x-1/2"
-        width="400"
-        height="280"
+        width="760"
+        height="380"
       >
         <defs>
           <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -55,17 +53,17 @@ const DatabaseWithRestApi = ({
           </linearGradient>
         </defs>
 
-        {/* Static paths */}
+        {/* Static paths - starting from bottom of badges (y=18) and converging to top of pill (y=78) */}
         <g strokeWidth="0.5" stroke="url(#purpleGradient)">
-          <path d="M 31 10 v 15 q 0 5 5 5 h 59 q 5 0 5 5 v 25" />
-          <path d="M 77 10 v 10 q 0 5 5 5 h 13 q 5 0 5 5 v 25" />
-          <path d="M 124 10 v 10 q 0 5 -5 5 h -14 q -5 0 -5 5 v 25" />
-          <path d="M 170 10 v 15 q 0 5 -5 5 h -60 q -5 0 -5 5 v 25" />
+          <path d="M 25 18 v 15 q 0 5 5 5 h 65 q 5 0 5 5 v 35" />
+          <path d="M 68 18 v 12 q 0 5 5 5 h 22 q 5 0 5 5 v 38" />
+          <path d="M 132 18 v 12 q 0 5 -5 5 h -22 q -5 0 -5 5 v 38" />
+          <path d="M 175 18 v 15 q 0 5 -5 5 h -65 q -5 0 -5 5 v 35" />
         </g>
 
         {/* Animated Lights */}
         <g>
-          <circle r="2" fill={lightColor} className="database db-light-1">
+          <circle r="3" fill={lightColor} className="database db-light-1">
             <animate
               attributeName="opacity"
               values="0;1;0"
@@ -73,7 +71,7 @@ const DatabaseWithRestApi = ({
               repeatCount="indefinite"
             />
           </circle>
-          <circle r="2" fill={lightColor} className="database db-light-2">
+          <circle r="3" fill={lightColor} className="database db-light-2">
             <animate
               attributeName="opacity"
               values="0;1;0"
@@ -82,7 +80,7 @@ const DatabaseWithRestApi = ({
               repeatCount="indefinite"
             />
           </circle>
-          <circle r="2" fill={lightColor} className="database db-light-3">
+          <circle r="3" fill={lightColor} className="database db-light-3">
             <animate
               attributeName="opacity"
               values="0;1;0"
@@ -91,7 +89,7 @@ const DatabaseWithRestApi = ({
               repeatCount="indefinite"
             />
           </circle>
-          <circle r="2" fill={lightColor} className="database db-light-4">
+          <circle r="3" fill={lightColor} className="database db-light-4">
             <animate
               attributeName="opacity"
               values="0;1;0"
@@ -102,92 +100,67 @@ const DatabaseWithRestApi = ({
           </circle>
         </g>
 
-        {/* Top badges */}
+        {/* Top badges - larger boxes */}
         <g>
           {[
-            { x: 8, text: badgeTexts.first, Icon: icons[0] },
-            { x: 54, text: badgeTexts.second, Icon: icons[1] },
-            { x: 100, text: badgeTexts.third, Icon: icons[2] },
-            { x: 146, text: badgeTexts.fourth, Icon: icons[3] },
+            { x: 2, cx: 25, text: badgeTexts.first },
+            { x: 42, cx: 68, text: badgeTexts.second },
+            { x: 108, cx: 132, text: badgeTexts.third },
+            { x: 152, cx: 175, text: badgeTexts.fourth },
           ].map((badge, index) => (
             <g key={index}>
               <rect
                 x={badge.x}
-                y="0"
+                y="4"
                 width="46"
-                height="16"
+                height="14"
                 rx="4"
                 fill="hsl(260 30% 12%)"
                 stroke={lightColor}
-                strokeWidth="0.3"
-                strokeOpacity="0.5"
+                strokeWidth="0.4"
+                strokeOpacity="0.6"
               />
               <text
                 x={badge.x + 23}
-                y="11"
+                y="13"
                 textAnchor="middle"
                 fill="hsl(270 20% 90%)"
-                fontSize="5"
+                fontSize="4.5"
                 fontWeight="500"
               >
                 {badge.text}
               </text>
+              {/* Connection dot at bottom of badge */}
+              <circle cx={badge.cx} cy="18" r="1.5" fill={lightColor} fillOpacity="0.7" />
             </g>
           ))}
         </g>
 
-        {/* Connection dots */}
-        <g fill={lightColor} fillOpacity="0.6">
-          <circle cx="31" cy="10" r="2" />
-          <circle cx="77" cy="10" r="2" />
-          <circle cx="124" cy="10" r="2" />
-          <circle cx="170" cy="10" r="2" />
-          <circle cx="100" cy="60" r="3" fill={lightColor} />
-        </g>
+        {/* Convergence point dot */}
+        <circle cx="100" cy="78" r="2.5" fill={lightColor} />
       </svg>
 
-      {/* Main Box */}
+      {/* Main Pill Box - "Uso de dados" */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         viewport={{ once: true }}
-        className="relative z-10 flex h-[100px] w-[160px] flex-col items-center justify-center rounded-xl border border-primary/30 bg-card/80 backdrop-blur-sm"
+        className="relative z-10 flex items-center justify-center rounded-full border border-primary/40 bg-card/80 backdrop-blur-sm px-8 py-4"
         style={{
-          boxShadow: `0 0 30px ${lightColor}20, 0 0 60px ${lightColor}10`,
+          boxShadow: `0 0 40px ${lightColor}25, 0 0 80px ${lightColor}15`,
         }}
       >
         {/* Glow effect */}
         <div
-          className="absolute -inset-1 rounded-xl opacity-30 blur-lg"
-          style={{ background: `radial-gradient(circle, ${lightColor}40, transparent)` }}
+          className="absolute -inset-2 rounded-full opacity-25 blur-xl"
+          style={{ background: `radial-gradient(circle, ${lightColor}50, transparent)` }}
         />
 
-        {/* Title */}
-        <div className="relative flex items-center gap-2 mb-2">
-          <div
-            className="h-2 w-2 rounded-full"
-            style={{ background: lightColor }}
-          />
-          <span className="text-xs font-medium text-muted-foreground">
-            {title}
-          </span>
-        </div>
-
-        {/* Circle text */}
-        <div className="relative flex h-14 w-14 items-center justify-center rounded-full border border-primary/40 bg-muted/50">
-          <span className="text-[10px] font-semibold text-primary text-center leading-tight px-1">
-            {circleText}
-          </span>
-        </div>
-
-        {/* Bottom decoration */}
-        <div className="absolute -bottom-2 flex gap-1">
-          <div className="h-1 w-1 rounded-full bg-primary/60" />
-          <div className="h-1 w-1 rounded-full bg-primary/40" />
-          <div className="h-1 w-1 rounded-full bg-primary/60" />
-          <div className="h-1 w-1 rounded-full bg-primary/40" />
-        </div>
+        {/* Pill text */}
+        <span className="relative text-base font-semibold text-primary">
+          {circleText}
+        </span>
       </motion.div>
     </div>
   );

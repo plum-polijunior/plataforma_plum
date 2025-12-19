@@ -70,7 +70,7 @@ export function AboutSection() {
           ))}
         </div>
 
-        {/* Para quem - Database with animated wires */}
+        {/* Para quem - Subtitle + Database with animated wires */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -78,13 +78,15 @@ export function AboutSection() {
           viewport={{ once: true }}
           className="flex flex-col items-center"
         >
+          <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-8">
+            Para quem
+          </h3>
           <DatabaseWithRestApi
-            title="Para quem"
             circleText="Uso de dados"
             lightColor="#A855F7"
             badgeTexts={{
               first: "Varejistas",
-              second: "Agências",
+              second: "Agências de Marketing",
               third: "Financeiro",
               fourth: "Indústrias",
             }}
