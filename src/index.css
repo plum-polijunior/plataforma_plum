@@ -156,10 +156,10 @@
   animation-delay: 1s;
 }
 
-.db-light-1 { offset-path: path("M 25 18 v 15 q 0 5 5 5 h 65 q 5 0 5 5 v 35"); }
-.db-light-2 { offset-path: path("M 68 18 v 12 q 0 5 5 5 h 22 q 5 0 5 5 v 38"); }
-.db-light-3 { offset-path: path("M 132 18 v 12 q 0 5 -5 5 h -22 q -5 0 -5 5 v 38"); }
-.db-light-4 { offset-path: path("M 175 18 v 15 q 0 5 -5 5 h -65 q -5 0 -5 5 v 35"); }
+.db-light-1 { offset-path: path("M 50 0 L 50 40 Q 50 50 60 50 L 190 50 Q 200 50 200 60 L 200 105"); }
+.db-light-2 { offset-path: path("M 150 0 L 150 30 Q 150 40 160 40 L 190 40 Q 200 40 200 50 L 200 105"); }
+.db-light-3 { offset-path: path("M 250 0 L 250 30 Q 250 40 240 40 L 210 40 Q 200 40 200 50 L 200 105"); }
+.db-light-4 { offset-path: path("M 350 0 L 350 40 Q 350 50 340 50 L 210 50 Q 200 50 200 60 L 200 105"); }
 
 @keyframes database-animation-path {
   0% { offset-distance: 0%; }

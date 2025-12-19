@@ -9,23 +9,23 @@ import {
 const faqs = [
   {
     question: "Os dados da minha empresa estão seguros?",
-    answer: "Sim. Utilizamos criptografia de ponta a ponta e estamos em conformidade com a LGPD. Os dados permanecem nos servidores da sua empresa — o Plum apenas faz a consulta sob demanda.",
-  },
-  {
-    question: "O Plum substitui o BI da minha empresa?",
-    answer: "Não. O Plum complementa seu BI existente, oferecendo uma camada de acesso simplificada via WhatsApp para consultas rápidas. Para análises profundas, seu BI continua sendo a ferramenta ideal.",
+    answer: "Sim, os dados permanecem nos servidores da sua empresa — o Plum apenas faz a consulta sob demanda.",
   },
   {
     question: "Quais sistemas o Plum integra?",
-    answer: "Integramos com os principais ERPs (SAP, TOTVS, Oracle), bancos de dados SQL, planilhas Google/Excel, APIs REST e diversas outras fontes de dados.",
+    answer: "Integramos com os principais ERPs (SAP, TOTVS, Oracle), bancos de dados SQL, planilhas Google/Excel e APIs REST.",
   },
   {
     question: "Quanto tempo leva a implantação?",
-    answer: "Em média, 2 a 4 semanas, dependendo da complexidade das integrações. Projetos simples podem ser entregues em menos de 1 semana.",
+    answer: "Em média, 2 a 4 semanas, dependendo da complexidade. Projetos simples podem ser entregues em menos de 1 semana.",
+  },
+  {
+    question: "Quantos usuários podem usar o Plum?",
+    answer: "Não há limite. Toda a sua equipe pode consultar dados via WhatsApp simultaneamente.",
   },
   {
     question: "Preciso instalar algum software?",
-    answer: "Não. O Plum funciona 100% via WhatsApp. Não é necessário instalar aplicativos ou acessar painéis — tudo acontece na conversa.",
+    answer: "Não. O Plum funciona 100% via WhatsApp. Não é necessário instalar aplicativos ou acessar painéis.",
   },
   {
     question: "Posso personalizar os relatórios automáticos?",
