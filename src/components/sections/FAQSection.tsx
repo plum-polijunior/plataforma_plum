@@ -9,19 +9,15 @@ import {
 const faqs = [
   {
     question: "Os dados da minha empresa estão seguros?",
-    answer: "Sim. Utilizamos criptografia de ponta a ponta e estamos em conformidade com a LGPD. Os dados permanecem nos servidores da sua empresa — o Plumb apenas faz a consulta sob demanda.",
+    answer: "Sim. Utilizamos criptografia de ponta a ponta e estamos em conformidade com a LGPD. Os dados permanecem nos servidores da sua empresa — o Plum apenas faz a consulta sob demanda.",
   },
   {
-    question: "O Plumb substitui o BI da minha empresa?",
-    answer: "Não. O Plumb complementa seu BI existente, oferecendo uma camada de acesso simplificada via WhatsApp para consultas rápidas. Para análises profundas, seu BI continua sendo a ferramenta ideal.",
+    question: "O Plum substitui o BI da minha empresa?",
+    answer: "Não. O Plum complementa seu BI existente, oferecendo uma camada de acesso simplificada via WhatsApp para consultas rápidas. Para análises profundas, seu BI continua sendo a ferramenta ideal.",
   },
   {
-    question: "Quais sistemas o Plumb integra?",
-    answer: "Integramos com os principais ERPs (SAP, TOTVS, Oracle), bancos de dados SQL, planilhas Google/Excel, APIs REST e diversas outras fontes de dados. Caso seu sistema não esteja listado, entre em contato.",
-  },
-  {
-    question: "O agente de IA pode cometer erros?",
-    answer: "Sim, como qualquer IA. Por isso, toda resposta do agente inclui uma nota de confiabilidade e a fonte dos dados. Recomendamos validar insights importantes com seu time de dados.",
+    question: "Quais sistemas o Plum integra?",
+    answer: "Integramos com os principais ERPs (SAP, TOTVS, Oracle), bancos de dados SQL, planilhas Google/Excel, APIs REST e diversas outras fontes de dados.",
   },
   {
     question: "Quanto tempo leva a implantação?",
@@ -29,23 +25,11 @@ const faqs = [
   },
   {
     question: "Preciso instalar algum software?",
-    answer: "Não. O Plumb funciona 100% via WhatsApp. Não é necessário instalar aplicativos ou acessar painéis — tudo acontece na conversa.",
+    answer: "Não. O Plum funciona 100% via WhatsApp. Não é necessário instalar aplicativos ou acessar painéis — tudo acontece na conversa.",
   },
   {
     question: "Posso personalizar os relatórios automáticos?",
     answer: "Sim. Você define quais métricas receber, em qual frequência (diária, semanal, mensal) e quem deve receber cada relatório.",
-  },
-  {
-    question: "Qual o custo do Plumb?",
-    answer: "O modelo é por assinatura, com planos baseados no volume de consultas e número de usuários. Entre em contato para uma proposta personalizada.",
-  },
-  {
-    question: "O Plumb funciona em grupo de WhatsApp?",
-    answer: "Sim, é possível configurar o bot para responder em grupos específicos, permitindo que times inteiros tenham acesso às informações operacionais.",
-  },
-  {
-    question: "Como faço para testar?",
-    answer: "Solicite uma demonstração pelo formulário de contato. Agendaremos uma call para entender suas necessidades e mostrar o Plumb em ação.",
   },
 ];
 
@@ -71,7 +55,7 @@ export function FAQSection() {
             FAQ
           </h2>
           <p className="text-muted-foreground">
-            Perguntas frequentes sobre o Plumb.
+            Perguntas frequentes sobre o Plum.
           </p>
         </motion.div>
 

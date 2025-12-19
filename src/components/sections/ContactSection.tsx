@@ -30,8 +30,8 @@ export function ContactSection() {
     }
 
     toast({
-      title: "Solicitação enviada!",
-      description: "Entraremos em contato em breve para agendar sua demo.",
+      title: "Você está na lista!",
+      description: "Entraremos em contato assim que houver vagas disponíveis.",
     });
   };
 
@@ -56,10 +56,10 @@ export function ContactSection() {
             <img src={plumLogo} alt="Plum" className="h-12 w-auto opacity-60" />
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            Contato
+            Lista de Espera
           </h2>
           <p className="text-muted-foreground">
-            Solicite uma demonstração gratuita do Plum.
+            Entre na lista de espera e seja um dos primeiros a usar o Plum.
           </p>
         </motion.div>
 

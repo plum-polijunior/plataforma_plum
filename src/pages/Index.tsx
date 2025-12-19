@@ -70,7 +70,7 @@ const Index = () => {
   // Track active section
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ["inicio", "sobre", "funcionalidades", "localizacao", "faq", "contato"];
+      const sections = ["inicio", "sobre", "funcionalidades", "faq", "localizacao", "contato"];
       const scrollPosition = window.scrollY + window.innerHeight / 3;
 
       for (const section of sections) {
@@ -113,8 +113,8 @@ const Index = () => {
       {/* Other Sections */}
       <AboutSection />
       <FeaturesSection />
-      <LocationSection />
       <FAQSection />
+      <LocationSection />
       <ContactSection />
     </div>
   );
