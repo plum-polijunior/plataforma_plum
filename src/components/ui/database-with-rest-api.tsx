@@ -40,23 +40,25 @@ const DatabaseWithRestApi = ({
   const [finalDotPos, setFinalDotPos] = useState({ x: 0, y: 0 });
   const [svgSize, setSvgSize] = useState({ width: 0, height: 0 });
 
+  // Clearance between boxes and wire start
+  const CLEARANCE = 35;
+
   const calculatePaths = useCallback(() => {
     if (!containerRef.current || !pillRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const pillRect = pillRef.current.getBoundingClientRect();
 
-    // Final dot position: centered above the pill
+    // Final dot position: exactly at the top border of the pill, centered
     const finalX = pillRect.left + pillRect.width / 2 - containerRect.left;
-    const finalY = pillRect.top - containerRect.top - 14;
+    const finalY = pillRect.top - containerRect.top;
 
     setFinalDotPos({ x: finalX, y: finalY });
-    setSvgSize({ width: containerRect.width, height: pillRect.top - containerRect.top });
+    setSvgSize({ width: containerRect.width, height: pillRect.top - containerRect.top + 10 });
 
-    // Junction point where all wires converge
+    // Junction point where all wires converge (above the final dot)
     const junctionX = finalX;
-    const junctionY = finalY - 35;
-    const cornerRadius = 10;
+    const junctionY = finalY - 40;
 
     const newPaths: PathData[] = [];
     const durations = [3.2, 3.5, 3.8, 3.4];
@@ -65,29 +67,23 @@ const DatabaseWithRestApi = ({
       if (!boxEl) return;
 
       const boxRect = boxEl.getBoundingClientRect();
+      // Start point: center bottom of each box + clearance
       const startX = boxRect.left + boxRect.width / 2 - containerRect.left;
-      const startY = boxRect.bottom - containerRect.top + 8;
+      const startY = boxRect.bottom - containerRect.top + 8 + CLEARANCE;
 
-      // Mid Y point for horizontal segment
-      const midY = startY + 35;
+      // Mid Y for the horizontal segment
+      const midY = junctionY - 25;
 
-      // Build path with straight lines and small rounded corners
+      // Build path with ONLY straight lines (M and L commands) - no curves
       let d: string;
 
       if (Math.abs(startX - junctionX) < 5) {
         // If already aligned, just go straight down
         d = `M ${startX} ${startY} L ${startX} ${junctionY}`;
       } else {
-        // Create L-shaped path with rounded corners
-        const goingRight = startX < junctionX;
-        
-        // Path: down, then horizontal, then down to junction
-        d = `M ${startX} ${startY} 
-             L ${startX} ${midY - cornerRadius}
-             Q ${startX} ${midY} ${startX + (goingRight ? cornerRadius : -cornerRadius)} ${midY}
-             L ${junctionX + (goingRight ? -cornerRadius : cornerRadius)} ${midY}
-             Q ${junctionX} ${midY} ${junctionX} ${midY + cornerRadius}
-             L ${junctionX} ${junctionY}`;
+        // Create L-shaped path with 90° corners
+        // Down -> horizontal -> down to junction
+        d = `M ${startX} ${startY} L ${startX} ${midY} L ${junctionX} ${midY} L ${junctionX} ${junctionY}`;
       }
 
       newPaths.push({ d, duration: durations[index] });
@@ -95,12 +91,11 @@ const DatabaseWithRestApi = ({
 
     setPaths(newPaths);
 
-    // Trunk path from junction to final dot
+    // Trunk path from junction to final dot (touching the pill)
     setTrunkPath(`M ${junctionX} ${junctionY} L ${junctionX} ${finalY}`);
   }, []);
 
   useLayoutEffect(() => {
-    // Small delay to ensure DOM is ready
     const timer = setTimeout(calculatePaths, 100);
     window.addEventListener("resize", calculatePaths);
     return () => {
@@ -125,7 +120,7 @@ const DatabaseWithRestApi = ({
       )}
     >
       {/* Top badges - responsive grid: 4 cols desktop, 2x2 mobile */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 w-full">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 w-full mb-12">
         {badges.map((badge, index) => (
           <div
             key={index}
@@ -177,7 +172,7 @@ const DatabaseWithRestApi = ({
             </filter>
           </defs>
 
-          {/* Wire paths */}
+          {/* Wire paths - straight lines only */}
           <g strokeWidth="2" stroke="url(#wireGradient)" fill="none">
             {paths.map((path, index) => (
               <path key={index} d={path.d} />
@@ -212,7 +207,7 @@ const DatabaseWithRestApi = ({
             </circle>
           ))}
 
-          {/* Final convergence dot */}
+          {/* Final convergence dot - touching the pill top */}
           <circle
             cx={finalDotPos.x}
             cy={finalDotPos.y}
@@ -231,7 +226,7 @@ const DatabaseWithRestApi = ({
       )}
 
       {/* Spacer for SVG area */}
-      <div className="h-[120px] lg:h-[140px]" />
+      <div className="h-[100px] lg:h-[120px]" />
 
       {/* Main Pill Box - "Uso de dados" */}
       <motion.div

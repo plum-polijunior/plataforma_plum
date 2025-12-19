@@ -7,7 +7,7 @@ const features = [
     icon: Brain,
     title: "Agente de IA",
     description: "Perguntas subjetivas com métricas estatísticas e nota de confiabilidade.",
-    example: '"Qual produto está com tendência de crescimento?"',
+    example: '"Qual foi a maior venda já registrada na empresa?"',
   },
   {
     icon: Database,
