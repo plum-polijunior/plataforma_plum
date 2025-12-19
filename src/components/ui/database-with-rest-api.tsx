@@ -40,8 +40,8 @@ const DatabaseWithRestApi = ({
   const [finalDotPos, setFinalDotPos] = useState({ x: 0, y: 0 });
   const [svgSize, setSvgSize] = useState({ width: 0, height: 0 });
 
-  // Clearance between boxes and wire start
-  const CLEARANCE = 35;
+  const CLEARANCE = 28; // Space below boxes before wires start
+  const LANE_SPACING = 20; // Vertical spacing between horizontal lanes
 
   const calculatePaths = useCallback(() => {
     if (!containerRef.current || !pillRef.current) return;
@@ -56,34 +56,41 @@ const DatabaseWithRestApi = ({
     setFinalDotPos({ x: finalX, y: finalY });
     setSvgSize({ width: containerRect.width, height: pillRect.top - containerRect.top + 10 });
 
-    // Junction point where all wires converge (above the final dot)
+    // Junction point where all wires converge
     const junctionX = finalX;
-    const junctionY = finalY - 40;
+    
+    // Calculate the base lane Y (where horizontal segments will be)
+    // Each wire gets its own lane to prevent crossing
+    const baseLaneY = finalY - 60;
 
     const newPaths: PathData[] = [];
-    const durations = [3.2, 3.5, 3.8, 3.4];
+    const durations = [3.0, 3.3, 3.6, 3.9];
+
+    // Lane assignments: outer wires get higher lanes, inner wires get lower lanes
+    // This ensures wires don't cross
+    const laneOffsets = [0, LANE_SPACING, LANE_SPACING, 0]; // [Varejistas, Agências, Financeiro, Indústrias]
 
     boxRefs.current.forEach((boxEl, index) => {
       if (!boxEl) return;
 
       const boxRect = boxEl.getBoundingClientRect();
-      // Start point: center bottom of each box + clearance
       const startX = boxRect.left + boxRect.width / 2 - containerRect.left;
       const startY = boxRect.bottom - containerRect.top + 8 + CLEARANCE;
 
-      // Mid Y for the horizontal segment
-      const midY = junctionY - 25;
+      // Each wire gets its own horizontal lane
+      const laneY = baseLaneY - laneOffsets[index];
+      
+      // Junction Y is below all lanes
+      const junctionY = baseLaneY + LANE_SPACING + 10;
 
-      // Build path with ONLY straight lines (M and L commands) - no curves
       let d: string;
 
       if (Math.abs(startX - junctionX) < 5) {
-        // If already aligned, just go straight down
+        // If already aligned with junction, go straight down
         d = `M ${startX} ${startY} L ${startX} ${junctionY}`;
       } else {
-        // Create L-shaped path with 90° corners
-        // Down -> horizontal -> down to junction
-        d = `M ${startX} ${startY} L ${startX} ${midY} L ${junctionX} ${midY} L ${junctionX} ${junctionY}`;
+        // L-shaped path: down to lane, horizontal to junction X, down to junction Y
+        d = `M ${startX} ${startY} L ${startX} ${laneY} L ${junctionX} ${laneY} L ${junctionX} ${junctionY}`;
       }
 
       newPaths.push({ d, duration: durations[index] });
@@ -92,11 +99,12 @@ const DatabaseWithRestApi = ({
     setPaths(newPaths);
 
     // Trunk path from junction to final dot (touching the pill)
+    const junctionY = baseLaneY + LANE_SPACING + 10;
     setTrunkPath(`M ${junctionX} ${junctionY} L ${junctionX} ${finalY}`);
   }, []);
 
   useLayoutEffect(() => {
-    const timer = setTimeout(calculatePaths, 100);
+    const timer = setTimeout(calculatePaths, 150);
     window.addEventListener("resize", calculatePaths);
     return () => {
       clearTimeout(timer);
@@ -115,12 +123,12 @@ const DatabaseWithRestApi = ({
     <div
       ref={containerRef}
       className={cn(
-        "relative flex flex-col items-center w-full max-w-[900px] mx-auto",
+        "relative flex flex-col items-center w-full max-w-[950px] mx-auto",
         className
       )}
     >
-      {/* Top badges - responsive grid: 4 cols desktop, 2x2 mobile */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 w-full mb-12">
+      {/* Top badges - 4 cols desktop, 2x2 mobile - HIGH Z-INDEX */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-x-16 w-full mb-10 relative z-10">
         {badges.map((badge, index) => (
           <div
             key={index}
@@ -129,7 +137,7 @@ const DatabaseWithRestApi = ({
           >
             {/* Badge box */}
             <div
-              className="relative min-w-[140px] lg:min-w-[160px] px-4 lg:px-5 py-3 lg:py-4 rounded-xl text-center border border-primary/40 bg-card/80 backdrop-blur-sm"
+              className="relative min-w-[130px] lg:min-w-[150px] px-4 lg:px-5 py-3 lg:py-4 rounded-xl text-center border border-primary/40 bg-card backdrop-blur-sm"
               style={{
                 boxShadow: `0 0 20px ${lightColor}15`,
               }}
@@ -150,18 +158,18 @@ const DatabaseWithRestApi = ({
         ))}
       </div>
 
-      {/* SVG Wires - dynamically positioned */}
+      {/* SVG Wires - LOW Z-INDEX, pointer-events-none */}
       {svgSize.width > 0 && svgSize.height > 0 && (
         <svg
-          className="absolute top-0 left-0 pointer-events-none"
+          className="absolute top-0 left-0 z-0 pointer-events-none"
           width={svgSize.width}
           height={svgSize.height}
           style={{ overflow: "visible" }}
         >
           <defs>
             <linearGradient id="wireGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor={lightColor} stopOpacity="0.3" />
-              <stop offset="100%" stopColor={lightColor} stopOpacity="0.5" />
+              <stop offset="0%" stopColor={lightColor} stopOpacity="0.35" />
+              <stop offset="100%" stopColor={lightColor} stopOpacity="0.55" />
             </linearGradient>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="2" result="coloredBlur" />
@@ -178,10 +186,10 @@ const DatabaseWithRestApi = ({
               <path key={index} d={path.d} />
             ))}
             {/* Trunk path */}
-            {trunkPath && <path d={trunkPath} />}
+            {trunkPath && <path d={trunkPath} strokeWidth="2.5" />}
           </g>
 
-          {/* Animated light circles moving along paths */}
+          {/* Animated light circles moving along each path */}
           {paths.map((path, index) => (
             <circle
               key={`light-${index}`}
@@ -192,22 +200,21 @@ const DatabaseWithRestApi = ({
               <animateMotion
                 dur={`${path.duration}s`}
                 repeatCount="indefinite"
-                path={path.d}
+                path={path.d + (trunkPath ? ` ${trunkPath.replace('M', 'L')}` : '')}
                 keyPoints="0;1"
                 keyTimes="0;1"
-                calcMode="spline"
-                keySplines="0.4 0 0.2 1"
+                calcMode="linear"
               />
               <animate
                 attributeName="opacity"
-                values="0.6;1;0.6"
+                values="0.5;1;0.5"
                 dur={`${path.duration}s`}
                 repeatCount="indefinite"
               />
             </circle>
           ))}
 
-          {/* Final convergence dot - touching the pill top */}
+          {/* Final convergence dot - exactly at pill top border */}
           <circle
             cx={finalDotPos.x}
             cy={finalDotPos.y}
@@ -226,16 +233,16 @@ const DatabaseWithRestApi = ({
       )}
 
       {/* Spacer for SVG area */}
-      <div className="h-[100px] lg:h-[120px]" />
+      <div className="h-[110px] lg:h-[130px]" />
 
-      {/* Main Pill Box - "Uso de dados" */}
+      {/* Main Pill Box - "Uso de dados" - HIGH Z-INDEX */}
       <motion.div
         ref={pillRef}
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         viewport={{ once: true }}
-        className="relative z-10 flex items-center justify-center rounded-full border border-primary/40 bg-card/80 backdrop-blur-sm px-8 py-4"
+        className="relative z-10 flex items-center justify-center rounded-full border border-primary/40 bg-card backdrop-blur-sm px-8 py-4"
         style={{
           boxShadow: `0 0 40px ${lightColor}25, 0 0 80px ${lightColor}15`,
         }}
