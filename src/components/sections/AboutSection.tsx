@@ -5,7 +5,7 @@ const cards = [
   {
     icon: Users,
     title: "O Problema",
-    description: "Diversos executivos e gestores relatam dificuldade na hora de consultar informações e dados específicos sobre a operação.",
+    description: "Clientes relatam dificuldade na hora de consultar informações sobre a empresa.",
   },
   {
     icon: Target,
