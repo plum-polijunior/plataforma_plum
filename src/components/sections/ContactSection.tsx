@@ -53,7 +53,7 @@ export function ContactSection() {
           className="text-center mb-12"
         >
           <div className="flex justify-center mb-6">
-            <img src={plumLogo} alt="Plum" className="h-12 w-auto opacity-60" />
+            <img src={plumLogo} alt="Plum" className="h-16 w-auto opacity-60" />
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
             Lista de Espera
