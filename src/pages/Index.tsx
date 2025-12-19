@@ -34,6 +34,11 @@ const Index = () => {
     }
   }, []);
 
+  // Always start at the top on initial load
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   // Block scroll when on hero and not unlocked
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
