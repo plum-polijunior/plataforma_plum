@@ -12,14 +12,6 @@ const faqs = [
     answer: "Sim, os dados permanecem nos servidores da sua empresa — o Plum apenas faz a consulta sob demanda.",
   },
   {
-    question: "Quais sistemas o Plum integra?",
-    answer: "Integramos com os principais ERPs (SAP, TOTVS, Oracle), bancos de dados SQL, planilhas Google/Excel e APIs REST.",
-  },
-  {
-    question: "Quanto tempo leva a implantação?",
-    answer: "Em média, 2 a 4 semanas, dependendo da complexidade. Projetos simples podem ser entregues em menos de 1 semana.",
-  },
-  {
     question: "Quantos usuários podem usar o Plum?",
     answer: "Não há limite. Toda a sua equipe pode consultar dados via WhatsApp simultaneamente.",
   },
