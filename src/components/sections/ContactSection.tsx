@@ -56,10 +56,10 @@ export function ContactSection() {
             <img src={plumLogo} alt="Plum" className="h-16 w-auto opacity-60" />
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            Lista de Espera
+            Quer conversar sobre?
           </h2>
           <p className="text-muted-foreground">
-            Entre na lista de espera e seja um dos primeiros a usar o Plum.
+            Deixe seus dados e entraremos em contato para entender suas necessidades.
           </p>
         </motion.div>
 
