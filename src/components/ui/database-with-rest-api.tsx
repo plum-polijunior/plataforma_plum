@@ -13,6 +13,8 @@ interface DatabaseWithRestApiProps {
     second: string;
     third: string;
     fourth: string;
+    fifth: string;
+    sixth: string;
   };
   lightColor?: string;
 }
@@ -25,6 +27,8 @@ const DatabaseWithRestApi = ({
     second: "Agências de Marketing",
     third: "Financeiro",
     fourth: "Indústrias",
+    fifth: "E-commerce",
+    sixth: "Consultórios",
   },
   lightColor = "#A855F7",
 }: DatabaseWithRestApiProps) => {
@@ -33,6 +37,8 @@ const DatabaseWithRestApi = ({
     badgeTexts.second,
     badgeTexts.third,
     badgeTexts.fourth,
+    badgeTexts.fifth,
+    badgeTexts.sixth,
   ];
 
   return (
@@ -43,7 +49,7 @@ const DatabaseWithRestApi = ({
       )}
     >
       {/* Grid of categories */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 w-full mb-12">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 w-full mb-12">
         {items.map((item, index) => (
           <motion.div
             key={index}
