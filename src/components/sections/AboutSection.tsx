@@ -6,12 +6,12 @@ const cards = [
   {
     icon: Users,
     title: "O Problema",
-    description: "Necessidade por mecanismo de simples obtenção de informações e dados em meio a softwares complexos, lentos e burocráticos.",
+    description: "Burocracia, lentidão e alta complexidade na obtenção de dados - os quais acabam sendo subutilizados.",
   },
   {
     icon: Target,
     title: "O Contexto",
-    description: "Busca por mecanismos simples em meio a softwares complexos, lentos e burocráticos disponíveis no mercado.",
+    description: "Necessidade por um mecanismo de simples obtenção de informações, de modo que seja fácil tornar esses dados em insights práticos.",
   },
   {
     icon: Zap,
@@ -89,6 +89,8 @@ export function AboutSection() {
               second: "Agências de Marketing",
               third: "Financeiro",
               fourth: "Indústrias",
+              fifth: "E-commerce",
+              sixth: "Consultórios",
             }}
           />
         </motion.div>
