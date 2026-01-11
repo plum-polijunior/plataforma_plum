@@ -18,18 +18,31 @@ function FloatingPaths({
   return <div className="absolute inset-0 pointer-events-none">
       <svg className="w-full h-full" viewBox="0 0 696 316" fill="none">
         <title>Background Paths</title>
-        {paths.map(path => <motion.path key={path.id} d={path.d} stroke="hsl(270 70% 60%)" strokeWidth={path.width} strokeOpacity={0.05 + path.id * 0.02} initial={{
-        pathLength: 0.3,
-        opacity: 0.6
-      }} animate={{
-        pathLength: 1,
-        opacity: [0.25, 0.6, 0.25],
-        pathOffset: [0, 1, 0]
-      }} transition={{
-        duration: 20 + Math.random() * 10,
-        repeat: Number.POSITIVE_INFINITY,
-        ease: "linear"
-      }} />)}
+        <defs>
+          <linearGradient id={`fadeGradient-${position}`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="white" stopOpacity="1" />
+            <stop offset="60%" stopColor="white" stopOpacity="1" />
+            <stop offset="85%" stopColor="white" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="white" stopOpacity="0" />
+          </linearGradient>
+          <mask id={`pathMask-${position}`}>
+            <rect x="-500" y="-500" width="2000" height="1500" fill={`url(#fadeGradient-${position})`} />
+          </mask>
+        </defs>
+        <g mask={`url(#pathMask-${position})`}>
+          {paths.map(path => <motion.path key={path.id} d={path.d} stroke="hsl(270 70% 60%)" strokeWidth={path.width} strokeOpacity={0.05 + path.id * 0.02} initial={{
+          pathLength: 0.3,
+          opacity: 0.6
+        }} animate={{
+          pathLength: 1,
+          opacity: [0.25, 0.6, 0.25],
+          pathOffset: [0, 1, 0]
+        }} transition={{
+          duration: 20 + Math.random() * 10,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: "linear"
+        }} />)}
+        </g>
       </svg>
     </div>;
 }
