@@ -39,34 +39,44 @@ const Index = () => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
 
-  // Block scroll when on hero and not unlocked
+  // Unlock scroll when user tries to scroll down
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (!scrollUnlocked && window.scrollY < window.innerHeight / 2) {
-        e.preventDefault();
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!scrollUnlocked && window.scrollY < window.innerHeight / 2) {
-        e.preventDefault();
+      if (!scrollUnlocked && window.scrollY < window.innerHeight / 2 && e.deltaY > 0) {
+        setScrollUnlocked(true);
       }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!scrollUnlocked && window.scrollY < window.innerHeight / 2) {
-        if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", " "].includes(e.key)) {
-          e.preventDefault();
+        if (["ArrowDown", "PageDown", " "].includes(e.key)) {
+          setScrollUnlocked(true);
         }
       }
     };
 
-    window.addEventListener("wheel", handleWheel, { passive: false });
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    let touchStartY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!scrollUnlocked && window.scrollY < window.innerHeight / 2) {
+        const touchY = e.touches[0].clientY;
+        if (touchStartY - touchY > 50) { // Swipe up (scroll down)
+          setScrollUnlocked(true);
+        }
+      }
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("touchstart", handleTouchStart);
       window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("keydown", handleKeyDown);
     };
