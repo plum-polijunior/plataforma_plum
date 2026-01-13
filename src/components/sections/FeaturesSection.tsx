@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Database, Calendar, Brain, MessageCircle } from "lucide-react";
-import { WhatsAppChat } from "@/components/WhatsAppChat";
-
+import { DataPlaygroundSection } from "@/components/sections/DataPlaygroundSection";
 const features = [
   {
     icon: Brain,
@@ -50,7 +49,7 @@ export function FeaturesSection() {
           </p>
         </motion.div>
 
-        {/* WhatsApp Chat Simulation - BEFORE feature cards */}
+        {/* Data Playground - BEFORE feature cards */}
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -60,13 +59,13 @@ export function FeaturesSection() {
         >
           <div className="text-center mb-8">
             <h3 className="text-2xl font-bold text-foreground mb-2">
-              Simule o Plum no WhatsApp
+              Simule o Plum
             </h3>
             <p className="text-muted-foreground text-sm">
-              Experimente como seria consultar seus dados em tempo real.
+              Edite a tabela de produtos e pergunte ao Plum sobre seus dados.
             </p>
           </div>
-          <WhatsAppChat />
+          <DataPlaygroundSection />
         </motion.div>
 
         {/* Feature cards - AFTER simulation */}

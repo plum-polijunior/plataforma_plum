@@ -1,1 +1,4 @@
 project_id = "hdxzcfdcovydzjcwkugc"
+
+[functions.plum-chat]
+verify_jwt = false
