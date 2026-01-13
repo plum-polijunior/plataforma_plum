@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, RotateCcw, Plus, Shuffle, Loader2, X } from "lucide-react";
+import { Send, RotateCcw, Plus, Shuffle, Loader2, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import plumLogo from "@/assets/plum-logo.png";
@@ -219,6 +219,11 @@ export function DataPlaygroundSection() {
     }));
 
     setProducts(newProducts);
+  };
+
+  const removeRow = (id: string) => {
+    if (products.length <= 1) return;
+    setProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
   // Calculate summary
@@ -460,6 +465,7 @@ export function DataPlaygroundSection() {
                     <th className="text-left py-2 px-2 text-muted-foreground font-medium text-xs">
                       Qtd. vendas mês
                     </th>
+                    <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -502,6 +508,18 @@ export function DataPlaygroundSection() {
                           type="text"
                           inputMode="numeric"
                         />
+                      </td>
+                      <td className="py-2 px-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeRow(product.id)}
+                          disabled={products.length <= 1}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                          title="Remover linha"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))}

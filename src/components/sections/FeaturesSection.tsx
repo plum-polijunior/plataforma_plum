@@ -62,7 +62,7 @@ export function FeaturesSection() {
               Simule o Plum
             </h3>
             <p className="text-muted-foreground text-sm">
-              Edite a tabela de produtos e pergunte ao Plum sobre seus dados.
+              Edite a tabela de produtos fictícia e pergunte ao Plum sobre seus dados.
             </p>
           </div>
           <DataPlaygroundSection />
