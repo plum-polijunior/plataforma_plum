@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, RotateCcw, Plus, Shuffle, Loader2 } from "lucide-react";
+import { Send, RotateCcw, Plus, Shuffle, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import plumLogo from "@/assets/plum-logo.png";
@@ -55,8 +55,19 @@ export function DataPlaygroundSection() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [userMessageCount, setUserMessageCount] = useState(0);
+  const [showLockedModal, setShowLockedModal] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(0);
+
+  const isLocked = userMessageCount >= 3;
+
+  const scrollToContact = () => {
+    const contactSection = document.getElementById("contato");
+    if (contactSection) {
+      contactSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
@@ -88,6 +99,15 @@ export function DataPlaygroundSection() {
     addMessage(userMessage, "user");
     setInputValue("");
     setIsLoading(true);
+
+    // Increment user message count
+    const newCount = userMessageCount + 1;
+    setUserMessageCount(newCount);
+
+    // Show locked modal after 3rd message (after response)
+    if (newCount >= 3) {
+      setTimeout(() => setShowLockedModal(true), 1500);
+    }
 
     try {
       // Prepare products data for the API
@@ -128,6 +148,8 @@ export function DataPlaygroundSection() {
   const resetChat = () => {
     setMessages([]);
     idCounter.current = 0;
+    setUserMessageCount(0);
+    setShowLockedModal(false);
   };
 
   const handleProductChange = (id: string, field: keyof Product, value: string) => {
@@ -178,8 +200,8 @@ export function DataPlaygroundSection() {
     <div className="w-full">
       <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
         {/* Chat - Left side */}
-        <div className="order-2 lg:order-1">
-          <div className="glass rounded-2xl overflow-hidden border border-border/30 h-full flex flex-col">
+        <div className="order-2 lg:order-1 relative">
+          <div className={`glass rounded-2xl overflow-hidden border border-border/30 h-full flex flex-col transition-all duration-300 ${isLocked ? "blur-sm brightness-75" : ""}`}>
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20 bg-card/50 backdrop-blur shrink-0">
               <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
@@ -264,16 +286,16 @@ export function DataPlaygroundSection() {
                 <Input
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Pergunte sobre seus dados..."
+                  placeholder={isLocked ? "Chat bloqueado" : "Pergunte sobre seus dados..."}
                   className="flex-1 bg-muted/30 border-border/30 focus:border-primary/50"
-                  disabled={isLoading}
+                  disabled={isLoading || isLocked}
                 />
                 <Button
                   type="submit"
                   size="icon"
                   variant="hero"
                   className="shrink-0"
-                  disabled={isLoading}
+                  disabled={isLoading || isLocked}
                 >
                   {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -284,6 +306,74 @@ export function DataPlaygroundSection() {
               </div>
             </form>
           </div>
+
+          {/* Locked overlay with modal */}
+          <AnimatePresence>
+            {isLocked && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 flex items-center justify-center z-10"
+              >
+                {/* Dark overlay */}
+                <div className="absolute inset-0 bg-background/40 rounded-2xl" />
+
+                {/* Modal */}
+                {showLockedModal && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="relative z-20 glass bg-background/80 backdrop-blur-xl rounded-2xl border border-primary/30 p-6 mx-4 max-w-sm shadow-2xl shadow-primary/20"
+                  >
+                    {/* Close button */}
+                    <button
+                      onClick={() => setShowLockedModal(false)}
+                      className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Fechar"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+
+                    <div className="text-center space-y-4">
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Para aplicar isso a sua empresa:
+                      </h3>
+                      <Button
+                        variant="hero"
+                        size="lg"
+                        onClick={scrollToContact}
+                        className="w-full"
+                      >
+                        Falar com o PLUM
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Leve isso para seus dados reais com a gente.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Floating button when modal is closed but still locked */}
+                {!showLockedModal && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <Button
+                      variant="hero"
+                      size="sm"
+                      onClick={scrollToContact}
+                      className="shadow-lg shadow-primary/30"
+                    >
+                      Ir para contato
+                    </Button>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Table - Right side */}
