@@ -62,7 +62,7 @@ export function DataPlaygroundSection() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(0);
 
-  const isLocked = userMessageCount >= 3;
+  const isLocked = userMessageCount >= 4;
 
   const scrollToContact = () => {
     const contactSection = document.getElementById("contato");
@@ -106,8 +106,8 @@ export function DataPlaygroundSection() {
     const newCount = userMessageCount + 1;
     setUserMessageCount(newCount);
 
-    // Show locked modal after 3rd message (after response)
-    if (newCount >= 3) {
+    // Show locked modal after 4th message (after response)
+    if (newCount >= 4) {
       setTimeout(() => setShowLockedModal(true), 1500);
     }
 
