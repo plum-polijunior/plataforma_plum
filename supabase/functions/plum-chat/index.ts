@@ -24,64 +24,87 @@ serve(async (req) => {
     console.log("Received question:", question);
     console.log("Products data:", JSON.stringify(products));
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      console.error("GEMINI_API_KEY is not configured");
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    // Build the system prompt with strict instructions
-    const systemPrompt = `Você é o Plum, um assistente de análise de dados de vendas. Você SOMENTE pode responder perguntas baseadas nos dados da tabela fornecida abaixo.
+    // Build the prompt with strict instructions for anti-hallucination
+    const systemInstruction = `Você é o assistente do PLUM, especializado em análise de dados de vendas.
 
-DADOS DA TABELA DE PRODUTOS:
-${JSON.stringify(products, null, 2)}
+REGRAS ESTRITAS (OBRIGATÓRIAS):
+1. Responda SOMENTE usando os dados da tabela fornecida em JSON
+2. Se a pergunta exigir dados que NÃO estão na tabela, responda que não é possível calcular e peça para o usuário preencher os dados necessários
+3. Seja breve, objetivo e "executivo"
+4. Sempre que fizer conta, mostre o resultado final claramente em R$ quando for receita
+5. Use formato de moeda brasileira (R$) para valores monetários
+6. NÃO invente dados. NÃO faça suposições. Use APENAS os dados fornecidos.
 
-REGRAS ESTRITAS:
-1. Responda APENAS com base nos dados fornecidos acima
-2. Se o usuário perguntar algo que não pode ser calculado com esses dados, diga educadamente que não tem essa informação e sugira que ele adicione os dados necessários na tabela
-3. Seja direto, conciso e "executivo" nas respostas
-4. Use formato de moeda brasileira (R$) para valores monetários
-5. Faça cálculos quando solicitado (faturamento = valor unitário × quantidade vendida)
-6. Você pode calcular: faturamento (hoje/mês), produto mais vendido, média de vendas, comparações entre produtos, impacto de mudanças de preço
-
-EXEMPLOS DE CÁLCULOS QUE VOCÊ PODE FAZER:
-- Faturamento hoje = soma de (valor unitário × qtd vendas hoje) para cada produto
-- Faturamento do mês = soma de (valor unitário × qtd vendas mês) para cada produto
+CÁLCULOS QUE VOCÊ PODE FAZER:
+- Faturamento hoje = soma de (unitPrice × salesToday) para cada produto
+- Faturamento do mês = soma de (unitPrice × salesMonth) para cada produto
 - Produto mais vendido = produto com maior quantidade de vendas
 - Produto com maior receita = produto com maior (valor × quantidade)
 - Média de vendas = total de vendas / número de produtos
-- Impacto de aumento de preço = calcular novo faturamento com preço ajustado`;
+- Impacto de mudança de preço = recalcular faturamento com novo preço`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: question },
-        ],
-        stream: false,
-      }),
-    });
+    const userPrompt = `DADOS DA TABELA DE PRODUTOS (JSON):
+${JSON.stringify(products, null, 2)}
+
+PERGUNTA DO USUÁRIO:
+${question}
+
+Responda de forma breve e objetiva, usando APENAS os dados acima.`;
+
+    // Call Gemini API directly
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: userPrompt }
+              ]
+            }
+          ],
+          systemInstruction: {
+            parts: [
+              { text: systemInstruction }
+            ]
+          },
+          generationConfig: {
+            temperature: 0.3,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error:", response.status, errorText);
+      
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
+          JSON.stringify({ error: "Limite de requisições do Gemini excedido. Tente novamente em alguns segundos." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
+      if (response.status === 403) {
         return new Response(
-          JSON.stringify({ error: "Créditos insuficientes. Adicione créditos à sua conta Lovable." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "API Key do Gemini inválida ou sem permissão." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      
       return new Response(
         JSON.stringify({ error: "Erro ao processar sua pergunta. Tente novamente." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -89,9 +112,12 @@ EXEMPLOS DE CÁLCULOS QUE VOCÊ PODE FAZER:
     }
 
     const data = await response.json();
-    const aiResponse = data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua pergunta.";
+    console.log("Gemini raw response:", JSON.stringify(data));
+    
+    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || 
+                       "Desculpe, não consegui processar sua pergunta.";
 
-    console.log("AI Response:", aiResponse);
+    console.log("Gemini Response:", aiResponse);
 
     return new Response(
       JSON.stringify({ response: aiResponse }),
