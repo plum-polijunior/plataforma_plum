@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { ContactForm } from "@/components/ContactForm";
 
 interface Product {
   id: string;
@@ -57,6 +58,7 @@ export function DataPlaygroundSection() {
   const [isLoading, setIsLoading] = useState(false);
   const [userMessageCount, setUserMessageCount] = useState(0);
   const [showLockedModal, setShowLockedModal] = useState(false);
+  const [formSubmitted, setFormSubmitted] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(0);
 
@@ -152,9 +154,46 @@ export function DataPlaygroundSection() {
     setShowLockedModal(false);
   };
 
+  // Regex for unit price: only digits, comma or dot, max 2 decimal places
+  const validateUnitPrice = (value: string): string => {
+    // Remove any character that is not digit, comma or dot
+    let sanitized = value.replace(/[^\d.,]/g, "");
+    
+    // Replace dot with comma for consistency (Brazilian format)
+    sanitized = sanitized.replace(/\./g, ",");
+    
+    // Ensure only one comma
+    const parts = sanitized.split(",");
+    if (parts.length > 2) {
+      sanitized = parts[0] + "," + parts.slice(1).join("");
+    }
+    
+    // Limit decimal places to 2
+    if (parts.length === 2 && parts[1].length > 2) {
+      sanitized = parts[0] + "," + parts[1].substring(0, 2);
+    }
+    
+    return sanitized;
+  };
+
   const handleProductChange = (id: string, field: keyof Product, value: string) => {
+    let processedValue = value;
+    
+    if (field === "unitPrice") {
+      processedValue = validateUnitPrice(value);
+    }
+    
     setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+      prev.map((p) => (p.id === id ? { ...p, [field]: processedValue } : p))
+    );
+  };
+
+  const handleUnitPriceBlur = (id: string, value: string) => {
+    // Remove trailing comma on blur
+    let normalized = value.replace(/,$/, "");
+    
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, unitPrice: normalized } : p))
     );
   };
 
@@ -319,38 +358,37 @@ export function DataPlaygroundSection() {
                 {/* Dark overlay */}
                 <div className="absolute inset-0 bg-background/40 rounded-2xl" />
 
-                {/* Modal */}
+                {/* Modal with Contact Form */}
                 {showLockedModal && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    className="relative z-20 glass bg-background/80 backdrop-blur-xl rounded-2xl border border-primary/30 p-6 mx-4 max-w-sm shadow-2xl shadow-primary/20"
+                    className="relative z-20 glass bg-background/90 backdrop-blur-xl rounded-2xl border border-primary/30 p-6 mx-4 max-w-md w-full shadow-2xl shadow-primary/20 max-h-[90vh] overflow-y-auto"
                   >
                     {/* Close button */}
                     <button
                       onClick={() => setShowLockedModal(false)}
-                      className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
+                      className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors z-10"
                       aria-label="Fechar"
                     >
                       <X className="w-4 h-4" />
                     </button>
 
-                    <div className="text-center space-y-4">
-                      <h3 className="text-lg font-semibold text-foreground">
-                        Para aplicar isso a sua empresa:
-                      </h3>
-                      <Button
-                        variant="hero"
-                        size="lg"
-                        onClick={scrollToContact}
-                        className="w-full"
-                      >
-                        Falar com o PLUM
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        Leve isso para seus dados reais com a gente.
-                      </p>
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <h3 className="text-lg font-semibold text-foreground">
+                          Para aplicar isso à sua empresa:
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Leve isso para seus dados reais com a gente.
+                        </p>
+                      </div>
+                      
+                      <ContactForm 
+                        onSuccess={() => setFormSubmitted(true)}
+                        className="pt-2"
+                      />
                     </div>
                   </motion.div>
                 )}
@@ -439,8 +477,10 @@ export function DataPlaygroundSection() {
                         <Input
                           value={product.unitPrice}
                           onChange={(e) => handleProductChange(product.id, "unitPrice", e.target.value)}
+                          onBlur={(e) => handleUnitPriceBlur(product.id, e.target.value)}
                           className="h-8 text-sm bg-muted/20 border-border/20 focus:border-primary/50 w-24"
                           placeholder="0,00"
+                          inputMode="decimal"
                         />
                       </td>
                       <td className="py-2 px-1">
