@@ -54,7 +54,12 @@ FÓRMULAS:
 - Produto mais vendido = produto com maior quantidade de vendas (salesToday ou salesMonth, conforme contexto)
 - Produto com maior receita = produto cujo (unitPrice × quantidade) é o maior
 - Média de vendas = total de vendas / número de produtos
-- Percentual de um produto = (faturamento do produto / faturamento total) × 100
+- Percentual de um produto no faturamento = (faturamento do produto / faturamento total do período) × 100
+- Percentual de vendas de um produto em relação ao total de unidades vendidas = (vendas do produto / soma de vendas de todos os produtos no período) × 100
+- Quanto o faturamento de X hoje representa do faturamento total do dia = (unitPrice × salesToday do produto X) / (soma de unitPrice × salesToday de TODOS) × 100
+- Quanto o faturamento de X no mês representa do faturamento total do mês = (unitPrice × salesMonth do produto X) / (soma de unitPrice × salesMonth de TODOS) × 100
+- Quanto as vendas de X hoje representam das vendas de X no mês = (salesToday de X / salesMonth de X) × 100
+- Qualquer pergunta de "quanto representa", "qual a porcentagem", "qual a participação" = calcule a divisão e multiplique por 100. NUNCA diga que não é possível calcular se os dados estão na tabela.
 
 EXEMPLO DE RESPOSTA CORRETA para "faturamento de hoje":
 - Camiseta: 59.90 × 12 = R$ 718,80
