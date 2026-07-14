@@ -49,11 +49,15 @@ function FloatingPaths({
 export function BackgroundPaths({
   subtitle = "Dados da sua operação. Em segundos. No WhatsApp.",
   ctaLabel = "Entender o Plum →",
-  onCta
+  onCta,
+  secondaryCtaLabel,
+  onSecondaryCta
 }: {
   subtitle?: string;
   ctaLabel?: string;
   onCta?: () => void;
+  secondaryCtaLabel?: string;
+  onSecondaryCta?: () => void;
 }) {
   return <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-background">
       {/* Glow roxo discreto */}
