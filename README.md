@@ -1,73 +1,59 @@
-# Welcome to your Lovable project
+# Plum — Landing Page
 
-## Project info
+Aplicação single-page em React + Vite + TypeScript, com Tailwind CSS, shadcn/ui, Framer Motion e integração com Supabase (formulário de leads + edge function de chat).
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Requisitos
 
-## How can I edit this code?
+- Node.js 18+ (recomendado 20+)
+- npm (ou pnpm/bun/yarn)
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Setup local
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# 1. Instalar dependências
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# 2. Configurar variáveis de ambiente
+cp .env.example .env
+# edite .env com as credenciais do seu projeto Supabase
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# 3. Rodar em modo dev (http://localhost:8080)
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Scripts
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- `npm run dev` — servidor de desenvolvimento (Vite) na porta 8080
+- `npm run build` — build de produção em `dist/`
+- `npm run build:dev` — build em modo development (source maps completos)
+- `npm run preview` — servir o build localmente
+- `npm run lint` — ESLint
 
-**Use GitHub Codespaces**
+## Variáveis de ambiente
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Ver `.env.example`. Todas prefixadas com `VITE_` (expostas ao bundle do cliente — a segurança dos dados depende das políticas RLS no Supabase).
 
-## What technologies are used for this project?
+## Estrutura
 
-This project is built with:
+- `src/pages/` — rotas (`Index`, `NotFound`)
+- `src/components/sections/` — seções da landing (Hero, About, Playground, Features, FAQ, Location, Contact)
+- `src/components/ui/` — componentes shadcn/ui
+- `src/integrations/supabase/` — cliente Supabase e tipos gerados
+- `supabase/functions/plum-chat/` — edge function do chat (deploy via Supabase CLI)
+- `supabase/migrations/` — migrações SQL
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Supabase
 
-## How can I deploy this project?
+O projeto usa uma tabela `Leads` (formulário de contato) e a edge function `plum-chat` (chat inteligente, requer o secret `LOVABLE_API_KEY` ou `GEMINI_API_KEY` configurado no projeto Supabase).
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Para aplicar as migrações e deployar a edge function localmente:
 
-## Can I connect a custom domain to my Lovable project?
+```sh
+npx supabase link --project-ref <seu-project-ref>
+npx supabase db push
+npx supabase functions deploy plum-chat
+```
 
-Yes, you can!
+## Stack
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Vite · React 18 · TypeScript · Tailwind CSS · shadcn/ui · Framer Motion · React Router · TanStack Query · Supabase JS
