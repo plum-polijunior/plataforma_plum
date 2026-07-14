@@ -130,6 +130,8 @@ const Index = () => {
           subtitle="Dados da sua operação. Em segundos. No WhatsApp."
           ctaLabel="Entender o Plum"
           onCta={handleCtaClick}
+          secondaryCtaLabel="Quero parar de perder tempo"
+          onSecondaryCta={handleContactClick}
         />
       </div>
 
