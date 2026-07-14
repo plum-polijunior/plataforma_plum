@@ -49,15 +49,11 @@ function FloatingPaths({
 export function BackgroundPaths({
   subtitle = "Dados da sua operação. Em segundos. No WhatsApp.",
   ctaLabel = "Entender o Plum →",
-  onCta,
-  secondaryCtaLabel,
-  onSecondaryCta
+  onCta
 }: {
   subtitle?: string;
   ctaLabel?: string;
   onCta?: () => void;
-  secondaryCtaLabel?: string;
-  onSecondaryCta?: () => void;
 }) {
   return <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-background">
       {/* Glow roxo discreto */}
@@ -118,23 +114,12 @@ export function BackgroundPaths({
           delay: 0.8,
           duration: 0.8
         }}>
-            <div className="flex flex-col items-center gap-4">
-              <div className="inline-block group relative bg-gradient-to-b from-primary/20 to-primary/5 p-px rounded-2xl backdrop-blur-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <Button variant="hero" size="xl" onClick={onCta} className="group">
-                  <span className="opacity-90 group-hover:opacity-100 transition-opacity">
-                    {ctaLabel}
-                  </span>
-                </Button>
-              </div>
-
-              {secondaryCtaLabel && onSecondaryCta && (
-                <button
-                  onClick={onSecondaryCta}
-                  className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors duration-300"
-                >
-                  {secondaryCtaLabel}
-                </button>
-              )}
+            <div className="inline-block group relative bg-gradient-to-b from-primary/20 to-primary/5 p-px rounded-2xl backdrop-blur-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
+              <Button variant="hero" size="xl" onClick={onCta} className="group">
+                <span className="opacity-90 group-hover:opacity-100 transition-opacity">
+                  {ctaLabel}
+                </span>
+              </Button>
             </div>
           </motion.div>
 
