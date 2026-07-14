@@ -34,6 +34,14 @@ const Index = () => {
     }
   }, []);
 
+  // Navigate to contact section
+  const handleContactClick = useCallback(() => {
+    setScrollUnlocked(true);
+    setTimeout(() => {
+      document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+  }, []);
+
   // Always start at the top on initial load
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
