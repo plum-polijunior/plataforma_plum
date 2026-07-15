@@ -27,11 +27,25 @@ export default function Dashboard() {
       // Fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('*, role:roles(name)')
+        .select('*')
         .eq('id', session.user.id)
         .single();
         
       if (profileError) throw profileError;
+
+      // Fetch user's role explicitly to ensure it loads perfectly
+      if (profileData && profileData.role_id) {
+        const { data: roleData } = await supabase
+          .from('roles')
+          .select('name')
+          .eq('id', profileData.role_id)
+          .maybeSingle();
+        
+        if (roleData) {
+          profileData.role = roleData;
+        }
+      }
+
       setProfile(profileData);
 
       if (profileData && profileData.organization_id) {
@@ -54,9 +68,16 @@ export default function Dashboard() {
         // Fetch all members of this organization
         const { data: membersData } = await supabase
           .from('profiles')
-          .select('*, role:roles(name)')
+          .select('*')
           .eq('organization_id', profileData.organization_id);
-        setMembers(membersData || []);
+          
+        // Enriquecer os membros com o nome do cargo buscando no array de roles já carregado
+        const enrichedMembers = (membersData || []).map((m: any) => ({
+          ...m,
+          role: (rolesData || []).find((r: any) => r.id === m.role_id) || null
+        }));
+        
+        setMembers(enrichedMembers);
       }
     } catch (error: any) {
       console.error(error);

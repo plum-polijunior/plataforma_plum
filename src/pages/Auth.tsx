@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LogIn, Globe } from "lucide-react";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 const Auth = () => {
   const { toast } = useToast();
   
+  // State for active tab (empty initially so no forms show)
+  const [activeTab, setActiveTab] = useState<string>("");
+
   // State for "Entrar em uma organização"
   const [orgId, setOrgId] = useState("");
   const [foundOrg, setFoundOrg] = useState<{ id: string; name: string } | null>(null);
@@ -157,38 +161,30 @@ const Auth = () => {
         return;
       }
 
-      // Cria a organização
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .insert({ name: newOrgName, share_id: shareId })
-        .select()
-        .single();
-        
-      if (orgError) throw orgError;
-      
-      // Cria a Role de Admin
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles')
-        .insert({ organization_id: orgData.id, name: 'Admin' })
-        .select()
-        .single();
-        
-      if (roleError) throw roleError;
-
-      // Cria o usuário Admin
+      // Cria o usuário Admin passando os dados para a Trigger SQL criar tudo atomicamente
       const { error: authError } = await supabase.auth.signUp({
         email: adminEmail,
         password: adminPassword,
         options: {
           data: {
-            organization_id: orgData.id,
-            role_id: roleData.id,
+            is_admin_setup: 'true',
+            org_name: newOrgName,
+            org_share_id: shareId,
             status: 'ativo'
           }
         }
       });
       
       if (authError) throw authError;
+
+      // Dispara o email de boas vindas (Edge Function)
+      try {
+        await supabase.functions.invoke('send-auth-email', {
+          body: { type: 'organization_created', userEmail: adminEmail, organizationName: newOrgName }
+        });
+      } catch (e) {
+        console.error("Falha ao enviar email de boas vindas:", e);
+      }
       
       toast({
         title: "Organização criada!",
@@ -211,7 +207,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-16 md:pt-24 p-4 relative overflow-hidden">
       {/* Glows do tema */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
@@ -221,145 +217,178 @@ const Auth = () => {
       {/* Botão voltar */}
       <Button 
         variant="ghost" 
-        onClick={() => window.location.href = '/'}
+        onClick={() => {
+          if (activeTab !== "") {
+            setActiveTab("");
+            setFoundOrg(null);
+          } else {
+            window.location.href = '/';
+          }
+        }}
         className="absolute top-4 left-4 z-20 text-muted-foreground hover:text-foreground"
       >
-        ← Voltar para o site
+        ← {activeTab !== "" ? "Voltar para seleção de acesso" : "Voltar para o site"}
       </Button>
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md z-10"
+        className="w-full max-w-2xl z-10"
       >
-        <div className="text-center mb-8">
+        <div className="text-center mb-16">
           <img src={plumLogo} alt="Plum" className="w-20 h-20 mx-auto object-contain mb-4" />
           <h1 className="text-2xl font-bold text-gradient">Plum Platform</h1>
           <p className="text-muted-foreground mt-2">Acesse os dados da sua operação</p>
         </div>
 
-        <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-2xl relative overflow-hidden">
-          <Tabs defaultValue="entrar" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted/30">
-              <TabsTrigger value="entrar" onClick={() => setFoundOrg(null)}>Entrar</TabsTrigger>
-              <TabsTrigger value="criar">Nova Org</TabsTrigger>
-            </TabsList>
+        <div className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            {activeTab === "" && (
+              <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 mb-10 bg-transparent gap-6 p-0 h-auto">
+              <TabsTrigger 
+                value="entrar" 
+                onClick={() => setFoundOrg(null)}
+                className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+              >
+                <span className="font-bold text-2xl mb-6 text-foreground">Entrar</span>
+                <LogIn className="h-16 w-16 mb-6 text-primary" />
+                <span className="text-base text-muted-foreground whitespace-normal text-center">
+                  Clique aqui se sua empresa já usa o Plum.
+                </span>
+              </TabsTrigger>
+              
+              <TabsTrigger 
+                value="criar"
+                className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+              >
+                <span className="font-bold text-2xl mb-6 text-foreground">Nova Organização</span>
+                <Globe className="h-16 w-16 mb-6 text-primary" />
+                <span className="text-base text-muted-foreground whitespace-normal text-center">
+                  Clique aqui para criar um novo ambiente para sua empresa.
+                </span>
+              </TabsTrigger>
+              </TabsList>
+            )}
 
             {/* TAB: ENTRAR EM UMA ORGANIZAÇÃO */}
             <TabsContent value="entrar">
-              {!foundOrg ? (
-                <form onSubmit={handleSearchOrg} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="orgId">ID da Organização (4 caracteres)</Label>
-                    <Input 
-                      id="orgId" 
-                      placeholder="Ex: CALI" 
-                      value={orgId}
-                      onChange={(e) => setOrgId(e.target.value.toUpperCase())}
-                      maxLength={4}
-                      required
-                      className="bg-background/50 uppercase"
-                    />
-                  </div>
-                  <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                    {isLoading ? "Buscando..." : "Buscar Organização"}
-                  </Button>
-                </form>
-              ) : (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-border/20">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Entrando em:</p>
-                      <p className="font-semibold text-foreground text-lg">{foundOrg.name}</p>
+              <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
+                {!foundOrg ? (
+                  <form onSubmit={handleSearchOrg} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="orgId">ID da Organização (4 caracteres)</Label>
+                      <Input 
+                        id="orgId" 
+                        placeholder="Ex: CALI" 
+                        value={orgId}
+                        onChange={(e) => setOrgId(e.target.value.toUpperCase())}
+                        maxLength={4}
+                        required
+                        className="bg-background/50 uppercase"
+                      />
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setFoundOrg(null)}>Trocar</Button>
-                  </div>
+                    <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
+                      {isLoading ? "Buscando..." : "Buscar Organização"}
+                    </Button>
+                  </form>
+                ) : (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="flex items-center justify-between mb-4 pb-4 border-b border-border/20">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Entrando em:</p>
+                        <p className="font-semibold text-foreground text-lg">{foundOrg.name}</p>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => setFoundOrg(null)}>Trocar</Button>
+                    </div>
 
-                  <Tabs defaultValue="login" className="w-full mt-4">
-                    <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/20">
-                      <TabsTrigger value="login">Login</TabsTrigger>
-                      <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="login">
-                      <form onSubmit={handleLogin} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="login-email">Email</Label>
-                          <Input id="login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required className="bg-background/50" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="login-password">Senha</Label>
-                          <Input id="login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
-                        </div>
-                        <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                          {isLoading ? "Entrando..." : "Entrar"}
-                        </Button>
-                      </form>
-                    </TabsContent>
+                    <Tabs defaultValue="login" className="w-full mt-4">
+                      <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/20">
+                        <TabsTrigger value="login">Login</TabsTrigger>
+                        <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="login">
+                        <form onSubmit={handleLogin} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="login-email">Email</Label>
+                            <Input id="login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required className="bg-background/50" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="login-password">Senha</Label>
+                            <Input id="login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
+                          </div>
+                          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
+                            {isLoading ? "Entrando..." : "Entrar"}
+                          </Button>
+                        </form>
+                      </TabsContent>
 
-                    <TabsContent value="cadastro">
-                      <form onSubmit={handleSignup} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="signup-email">Email Corporativo</Label>
-                          <Input id="signup-email" type="email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} required className="bg-background/50" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="signup-password">Senha</Label>
-                          <Input id="signup-password" type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} required className="bg-background/50" />
-                        </div>
-                        <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                          {isLoading ? "Solicitando..." : "Solicitar Acesso"}
-                        </Button>
-                        <p className="text-xs text-muted-foreground text-center mt-2">
-                          Você precisará da aprovação do administrador para entrar.
-                        </p>
-                      </form>
-                    </TabsContent>
-                  </Tabs>
-                </motion.div>
-              )}
+                      <TabsContent value="cadastro">
+                        <form onSubmit={handleSignup} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="signup-email">Email Corporativo</Label>
+                            <Input id="signup-email" type="email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} required className="bg-background/50" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="signup-password">Senha</Label>
+                            <Input id="signup-password" type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} required className="bg-background/50" />
+                          </div>
+                          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
+                            {isLoading ? "Solicitando..." : "Solicitar Acesso"}
+                          </Button>
+                          <p className="text-xs text-muted-foreground text-center mt-2">
+                            Você precisará da aprovação do administrador para entrar.
+                          </p>
+                        </form>
+                      </TabsContent>
+                    </Tabs>
+                  </motion.div>
+                )}
+              </div>
             </TabsContent>
 
             {/* TAB: CRIAR UMA ORGANIZAÇÃO */}
             <TabsContent value="criar">
-              <form onSubmit={handleCreateOrg} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-org-name">Nome da Empresa</Label>
-                  <Input id="new-org-name" placeholder="Ex: Cali Ltda" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} required className="bg-background/50" />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="new-org-id">ID Compartilhável (4 caracteres)</Label>
-                  <Input 
-                    id="new-org-id" 
-                    placeholder="Ex: CALI" 
-                    value={newOrgShareId} 
-                    onChange={(e) => setNewOrgShareId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
-                    maxLength={4}
-                    minLength={4}
-                    required 
-                    className="bg-background/50 uppercase" 
-                  />
-                  <p className="text-xs text-muted-foreground">Este ID será enviado aos seus colaboradores para entrarem na plataforma.</p>
-                </div>
-
-                <div className="pt-4 border-t border-border/20 space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground">Sua conta de Administrador</h3>
+              <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
+                <form onSubmit={handleCreateOrg} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="admin-email">Seu Email</Label>
-                    <Input id="admin-email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required className="bg-background/50" />
+                    <Label htmlFor="new-org-name">Nome da Empresa</Label>
+                    <Input id="new-org-name" placeholder="Ex: Cali Ltda" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} required className="bg-background/50" />
                   </div>
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="admin-password">Senha</Label>
-                    <Input id="admin-password" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="bg-background/50" />
+                    <Label htmlFor="new-org-id">ID Compartilhável (4 caracteres)</Label>
+                    <Input 
+                      id="new-org-id" 
+                      placeholder="Ex: CALI" 
+                      value={newOrgShareId} 
+                      onChange={(e) => setNewOrgShareId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
+                      maxLength={4}
+                      minLength={4}
+                      required 
+                      className="bg-background/50 uppercase" 
+                    />
+                    <p className="text-xs text-muted-foreground">Este ID será enviado aos seus colaboradores para entrarem na plataforma.</p>
                   </div>
-                </div>
 
-                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6" disabled={isLoading}>
-                  {isLoading ? "Criando ambiente..." : "Criar Organização"}
-                </Button>
-              </form>
+                  <div className="pt-4 border-t border-border/20 space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground">Sua conta de Administrador</h3>
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-email">Seu Email</Label>
+                      <Input id="admin-email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required className="bg-background/50" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-password">Senha</Label>
+                      <Input id="admin-password" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="bg-background/50" />
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6" disabled={isLoading}>
+                    {isLoading ? "Criando ambiente..." : "Criar Organização"}
+                  </Button>
+                </form>
+              </div>
             </TabsContent>
           </Tabs>
         </div>

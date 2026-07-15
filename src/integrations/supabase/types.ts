@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      organizations: {
+        Row: {
+          id: string
+          name: string
+          share_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          share_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          share_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      roles: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      profiles: {
+        Row: {
+          id: string
+          organization_id: string
+          role_id: string | null
+          status: "pendente" | "ativo" | "rejeitado" | "desativado"
+          created_at: string
+        }
+        Insert: {
+          id: string
+          organization_id: string
+          role_id?: string | null
+          status?: "pendente" | "ativo" | "rejeitado" | "desativado"
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          role_id?: string | null
+          status?: "pendente" | "ativo" | "rejeitado" | "desativado"
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       Leads: {
         Row: {
           created_at: string
@@ -46,7 +135,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_status: "pendente" | "ativo" | "rejeitado" | "desativado"
     }
     CompositeTypes: {
       [_ in never]: never

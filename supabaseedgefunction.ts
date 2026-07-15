@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 // Tipagem básica do payload que o frontend ou webhook enviará
 interface EmailPayload {
-  type: 'new_request' | 'account_approved';
+  type: 'new_request' | 'account_approved' | 'organization_created';
   userEmail: string;
   userName?: string;
   organizationName?: string;
@@ -11,7 +11,7 @@ interface EmailPayload {
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // CORS Headers para permitir que o frontend chame a função diretamente
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -51,6 +51,15 @@ serve(async (req) => {
         <p>Você já pode fazer login na plataforma e começar a usar o Plum.</p>
         <a href="https://app.seusite.com/auth">Fazer Login</a>
       `;
+    } else if (payload.type === 'organization_created') {
+      to = payload.userEmail; // Admin recém criado recebe
+      subject = 'Bem-vindo ao Plum! Sua organização foi criada.';
+      html = `
+        <h2>Sua organização foi criada com sucesso!</h2>
+        <p>Olá! Você acaba de criar a organização <strong>${payload.organizationName}</strong> no Plum.</p>
+        <p>Como administrador, você já pode convidar sua equipe e configurar as permissões.</p>
+        <a href="https://app.seusite.com/dashboard">Acessar Dashboard</a>
+      `;
     } else {
       throw new Error('Invalid email type');
     }
@@ -83,7 +92,7 @@ serve(async (req) => {
         status: 400,
       });
     }
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
