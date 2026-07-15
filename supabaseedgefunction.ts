@@ -80,7 +80,7 @@ serve(async (req: Request) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: 'Plum <onboarding@resend.dev>', // Importante: Troque pelo seu domínio verificado no Resend no futuro
+        from: 'Plum <contato@plum-polijunior.com.br>', // E-mail com o domínio oficial
         to: [to],
         subject: subject,
         html: html,
