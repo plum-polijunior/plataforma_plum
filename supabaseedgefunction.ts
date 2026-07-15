@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 // Tipagem básica do payload que o frontend ou webhook enviará
 interface EmailPayload {
-  type: 'new_request' | 'account_approved' | 'organization_created';
+  type: 'new_request' | 'account_approved' | 'organization_created' | 'lead_received';
   userEmail: string;
   userName?: string;
   organizationName?: string;
@@ -59,6 +59,14 @@ serve(async (req: Request) => {
         <p>Olá! Você acaba de criar a organização <strong>${payload.organizationName}</strong> no Plum.</p>
         <p>Como administrador, você já pode convidar sua equipe e configurar as permissões.</p>
         <a href="https://app.seusite.com/dashboard">Acessar Dashboard</a>
+      `;
+    } else if (payload.type === 'lead_received') {
+      to = payload.userEmail; // Lead recebe
+      subject = 'Recebemos seus dados! - Plum';
+      html = `
+        <h2>Olá${payload.userName ? ' ' + payload.userName : ''}, recebemos seus dados!</h2>
+        <p>Obrigado por demonstrar interesse no Plum. Entraremos em contato jajá para conversar sobre como podemos ajudar a sua operação.</p>
+        <p>Um abraço,<br/>Equipe Plum</p>
       `;
     } else {
       throw new Error('Invalid email type');

@@ -42,7 +42,7 @@ export default function Dashboard() {
           .maybeSingle();
         
         if (roleData) {
-          profileData.role = roleData;
+          (profileData as any).role = roleData;
         }
       }
 

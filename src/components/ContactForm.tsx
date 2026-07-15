@@ -34,9 +34,18 @@ export function ContactForm({ onSuccess, className }: ContactFormProps) {
       throw error;
     }
 
+    // Dispara o email de boas vindas para o lead usando a Edge Function
+    try {
+      await supabase.functions.invoke('send-auth-email', {
+        body: { type: 'lead_received', userEmail: payload.Email, userName: payload.Nome }
+      });
+    } catch (e) {
+      console.error("Falha ao enviar email do lead:", e);
+    }
+
     toast({
-      title: "Você está na lista!",
-      description: "Entraremos em contato assim que houver vagas disponíveis.",
+      title: "Recebemos seus dados!",
+      description: "Fique de olho no seu e-mail.",
     });
 
     onSuccess?.();
