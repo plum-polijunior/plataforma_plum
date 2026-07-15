@@ -1,4 +1,4 @@
-# Plum — Landing Page
+npm au# Plum — Landing Page
 
 Aplicação single-page em React + Vite + TypeScript, com Tailwind CSS, shadcn/ui, Framer Motion e integração com Supabase (formulário de leads + edge function de chat).
 

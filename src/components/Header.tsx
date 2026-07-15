@@ -59,6 +59,19 @@ export function Header({ onNavigate, activeSection }: HeaderProps) {
                 {item.label}
               </button>
             ))}
+            
+            <div className="ml-4 inline-block group relative bg-gradient-to-b from-primary/20 to-primary/5 p-px rounded-2xl backdrop-blur-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+              <Button 
+                variant="hero" 
+                size="default" 
+                onClick={() => window.location.href = '/auth'} 
+                className="group"
+              >
+                <span className="opacity-90 group-hover:opacity-100 transition-opacity">
+                  Entrar no Plum
+                </span>
+              </Button>
+            </div>
           </nav>
 
           {/* Mobile Menu Button */}
@@ -96,6 +109,19 @@ export function Header({ onNavigate, activeSection }: HeaderProps) {
                   {item.label}
                 </button>
               ))}
+              
+              <div className="mt-2 inline-block group relative bg-gradient-to-b from-primary/20 to-primary/5 p-px rounded-2xl backdrop-blur-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+                <Button 
+                  variant="hero" 
+                  size="default" 
+                  onClick={() => window.location.href = '/auth'} 
+                  className="group w-full"
+                >
+                  <span className="opacity-90 group-hover:opacity-100 transition-opacity">
+                    Entrar no Plum
+                  </span>
+                </Button>
+              </div>
             </nav>
           </motion.div>
         )}
