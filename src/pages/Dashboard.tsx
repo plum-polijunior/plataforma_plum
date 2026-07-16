@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { ShieldAlert, Users as UsersIcon, BadgeCheck, XCircle } from "lucide-react";
+import DatabasePipeline from "@/components/DatabasePipeline";
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -30,7 +31,7 @@ export default function Dashboard() {
         .select('*')
         .eq('id', session.user.id)
         .single();
-        
+
       if (profileError) throw profileError;
 
       // Fetch user's role explicitly to ensure it loads perfectly
@@ -40,7 +41,7 @@ export default function Dashboard() {
           .select('name')
           .eq('id', profileData.role_id)
           .maybeSingle();
-        
+
         if (roleData) {
           (profileData as any).role = roleData;
         }
@@ -70,13 +71,13 @@ export default function Dashboard() {
           .from('profiles')
           .select('*')
           .eq('organization_id', profileData.organization_id);
-          
+
         // Enriquecer os membros com o nome do cargo buscando no array de roles já carregado
         const enrichedMembers = (membersData || []).map((m: any) => ({
           ...m,
           role: (rolesData || []).find((r: any) => r.id === m.role_id) || null
         }));
-        
+
         setMembers(enrichedMembers);
       }
     } catch (error: any) {
@@ -106,9 +107,9 @@ export default function Dashboard() {
           organization_id: organization.id,
           name: newRoleName.trim()
         });
-      
+
       if (error) throw error;
-      
+
       toast({ title: "Cargo criado com sucesso" });
       setNewRoleName("");
       fetchData(); // reload
@@ -134,7 +135,7 @@ export default function Dashboard() {
       if (error) throw error;
 
       toast({ title: `Usuário ${newStatus === 'ativo' ? 'aprovado' : 'rejeitado'} com sucesso!` });
-      
+
       // Notify user via Edge Function if approved
       if (newStatus === 'ativo') {
         const user = members.find(m => m.id === userId);
@@ -171,7 +172,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold text-foreground">Minha Organização</h1>
           <p className="text-muted-foreground mt-1">Gerencie os acessos e membros da sua empresa.</p>
         </div>
-        
+
         {organization && (
           <div className="glass px-6 py-3 rounded-xl border border-primary/20 bg-primary/5 flex items-center gap-4">
             <div>
@@ -261,10 +262,10 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Solicitou em {new Date(member.created_at).toLocaleDateString()}</p>
                         </div>
                       </div>
-                      
+
                       {isAdmin ? (
                         <div className="flex items-center gap-2">
-                          <select 
+                          <select
                             className="bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary"
                             id={`role-select-${member.id}`}
                             defaultValue=""
@@ -274,9 +275,9 @@ export default function Dashboard() {
                               <option key={r.id} value={r.id}>{r.name}</option>
                             ))}
                           </select>
-                          
-                          <Button 
-                            variant="default" 
+
+                          <Button
+                            variant="default"
                             className="bg-green-600 hover:bg-green-700 text-white"
                             onClick={() => {
                               const select = document.getElementById(`role-select-${member.id}`) as HTMLSelectElement;
@@ -289,7 +290,7 @@ export default function Dashboard() {
                           >
                             <BadgeCheck className="h-4 w-4 mr-1" /> Aprovar
                           </Button>
-                          <Button 
+                          <Button
                             variant="destructive"
                             onClick={() => handleUpdateStatus(member.id, 'rejeitado')}
                           >
@@ -310,9 +311,9 @@ export default function Dashboard() {
                 <form onSubmit={handleCreateRole} className="flex items-end gap-4 p-4 rounded-lg border border-primary/20 bg-primary/5">
                   <div className="flex-1 space-y-2">
                     <Label htmlFor="new-role">Criar novo cargo</Label>
-                    <Input 
-                      id="new-role" 
-                      placeholder="Ex: Analista de Produção" 
+                    <Input
+                      id="new-role"
+                      placeholder="Ex: Analista de Produção"
                       value={newRoleName}
                       onChange={e => setNewRoleName(e.target.value)}
                       className="bg-background"
@@ -331,7 +332,7 @@ export default function Dashboard() {
                       <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
                         <UsersIcon className="h-3 w-3" /> {roleMembers.length} membro(s)
                       </p>
-                      
+
                       <div className="mt-4 pt-4 border-t border-border/20 flex-1">
                         {roleMembers.length > 0 ? (
                           <div className="flex -space-x-2 overflow-hidden">

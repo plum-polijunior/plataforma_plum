@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Outlet, Navigate, useNavigate } from "react-router-dom";
-import { Building2, LogOut, Menu, X, Users, Settings } from "lucide-react";
+import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
+import { Building2, LogOut, Menu, X, Users, Settings, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ export function DashboardLayout() {
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,10 +70,19 @@ export function DashboardLayout() {
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-2">
-            <Button variant="secondary" className="w-full justify-start text-primary">
-              <Building2 className="mr-2 h-4 w-4" />
-              Minha Organização
-            </Button>
+            <Link to="/dashboard">
+              <Button variant={location.pathname === "/dashboard" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/dashboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                <Building2 className="mr-2 h-4 w-4" />
+                Minha Organização
+              </Button>
+            </Link>
+            
+            <Link to="/dashboard/database">
+              <Button variant={location.pathname === "/dashboard/database" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/dashboard/database" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                <Layers className="mr-2 h-4 w-4" />
+                Minha Base de Dados
+              </Button>
+            </Link>
             {/* Future items */}
             {/* <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground">
               <Users className="mr-2 h-4 w-4" />

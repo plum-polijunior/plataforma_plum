@@ -137,3 +137,41 @@ GRANT ALL ON TABLE public.organizations TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.roles TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.profiles TO anon, authenticated, service_role;
 
+
+-- =========================================================================
+-- 9. TABELA DATASETS (BASE DE DADOS DO USUÁRIO)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.datasets (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    organization_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE,
+    name text NOT NULL,
+    google_sheet_id text,
+    schema_metadata jsonb,
+    status text DEFAULT 'processing',
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.datasets ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view datasets in their organization" ON public.datasets;
+CREATE POLICY "Users can view datasets in their organization"
+ON public.datasets FOR SELECT
+USING ( organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+));
+
+DROP POLICY IF EXISTS "Users can insert datasets" ON public.datasets;
+CREATE POLICY "Users can insert datasets"
+ON public.datasets FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update their datasets" ON public.datasets;
+CREATE POLICY "Users can update their datasets"
+ON public.datasets FOR UPDATE
+TO authenticated
+USING ( organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+));
+
+GRANT ALL ON TABLE public.datasets TO anon, authenticated, service_role;
