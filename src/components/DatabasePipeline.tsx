@@ -260,6 +260,56 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     }
   };
 
+  const handleFinalizeAndSave = async () => {
+    if (!organizationId) {
+      toast({ title: "Erro", description: "Organização não identificada", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const schemaMetadata = {
+        columns: Object.values(normalizedColumns).reduce((acc: any, col) => {
+          acc[col] = {
+            semantic_definition: semanticDefinitions[col] || "",
+            cleaning_rule: formattingRules[col] || ""
+          };
+          return acc;
+        }, {})
+      };
+
+      const { error } = await supabase
+        .from('datasets')
+        .insert({
+          organization_id: organizationId,
+          name: fileName || "Nova Planilha",
+          status: "ativo",
+          schema_metadata: schemaMetadata as any
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Planilha e Dicionário Salvos com Sucesso!",
+        description: `A base "${fileName || "Nova Planilha"}" foi registrada no Supabase e está pronta para configuração de acessos por cargo.`
+      });
+      setStep(0);
+      setFileName("");
+      setOriginalColumns([]);
+      setNormalizedColumns({});
+      setDataSamples([]);
+      setSemanticDefinitions({});
+      setFormattingRules({});
+    } catch (err: any) {
+      toast({
+        title: "Erro ao salvar no Supabase",
+        description: err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -544,9 +594,10 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border/30">
-              <Button variant="outline" onClick={() => setStep(3)}>Voltar</Button>
-              <Button onClick={() => toast({ title: "Fase 5 Iniciada", description: "Exportando para o Google Sheets e salvando JSON no Supabase!" })}>
-                Salvar no Google Sheets <ArrowRight className="ml-2 h-4 w-4" />
+              <Button variant="outline" onClick={() => setStep(3)} disabled={isProcessing}>Voltar</Button>
+              <Button onClick={handleFinalizeAndSave} disabled={isProcessing} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Salvar Base e Dicionário no Supabase <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           </div>

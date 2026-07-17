@@ -64,6 +64,103 @@ export type Database = {
           }
         ]
       }
+      datasets: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          google_sheet_id: string | null
+          schema_metadata: Json | null
+          status: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          google_sheet_id?: string | null
+          schema_metadata?: Json | null
+          status?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          google_sheet_id?: string | null
+          schema_metadata?: Json | null
+          status?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "datasets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      role_permissions: {
+        Row: {
+          id: string
+          organization_id: string
+          role_id: string
+          dataset_id: string
+          allowed_columns: string[]
+          created_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          role_id: string
+          dataset_id: string
+          allowed_columns?: string[]
+          created_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          role_id?: string
+          dataset_id?: string
+          allowed_columns?: string[]
+          created_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       profiles: {
         Row: {
           id: string

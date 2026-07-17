@@ -175,3 +175,52 @@ USING ( organization_id IN (
 ));
 
 GRANT ALL ON TABLE public.datasets TO anon, authenticated, service_role;
+
+
+-- =========================================================================
+-- 10. TABELA RELACIONAL DE PERMISSÕES POR COLUNA (RBAC)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.role_permissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+    role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
+    dataset_id UUID NOT NULL REFERENCES public.datasets(id) ON DELETE CASCADE,
+    allowed_columns TEXT[] NOT NULL DEFAULT '{}',
+    created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_role_dataset UNIQUE (role_id, dataset_id)
+);
+
+ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view role_permissions in their organization" ON public.role_permissions;
+CREATE POLICY "Users can view role_permissions in their organization"
+ON public.role_permissions FOR SELECT
+USING ( organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+));
+
+DROP POLICY IF EXISTS "Users can insert role_permissions" ON public.role_permissions;
+CREATE POLICY "Users can insert role_permissions"
+ON public.role_permissions FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update role_permissions" ON public.role_permissions;
+CREATE POLICY "Users can update role_permissions"
+ON public.role_permissions FOR UPDATE
+TO authenticated
+USING ( organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+));
+
+DROP POLICY IF EXISTS "Users can delete role_permissions" ON public.role_permissions;
+CREATE POLICY "Users can delete role_permissions"
+ON public.role_permissions FOR DELETE
+TO authenticated
+USING ( organization_id IN (
+    SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+));
+
+GRANT ALL ON TABLE public.role_permissions TO anon, authenticated, service_role;
+
