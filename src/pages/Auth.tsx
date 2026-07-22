@@ -104,8 +104,8 @@ const Auth = () => {
         password: signupPassword,
         options: {
           data: {
-            organization_id: foundOrg.id,
-            status: 'pendente'
+            organization_id: foundOrg.id
+            // `status` NÃO é enviado: quem define é o servidor.
           }
         }
       });
@@ -169,8 +169,8 @@ const Auth = () => {
           data: {
             is_admin_setup: 'true',
             org_name: newOrgName,
-            org_share_id: shareId,
-            status: 'ativo'
+            org_share_id: shareId
+            // `status` NÃO é enviado: quem define é o servidor.
           }
         }
       });
