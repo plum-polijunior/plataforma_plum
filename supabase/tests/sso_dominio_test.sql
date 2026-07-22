@@ -296,3 +296,14 @@ BEGIN
 END $$;
 
 ROLLBACK;
+
+-- -------------------------------------------------------------------------
+-- CONFIRMACAO VISIVEL
+-- -------------------------------------------------------------------------
+-- O SQL Editor do Supabase nao exibe mensagens RAISE NOTICE. Como qualquer
+-- cenario que falha aborta a execucao com RAISE EXCEPTION, esta linha so e
+-- alcancada se TODOS tiverem passado.
+SELECT
+  'TODOS OS 10 CENARIOS PASSARAM' AS resultado,
+  'a,b,c,d,e,f,g,h,i,j' AS cenarios,
+  'Nenhum dado foi gravado (ROLLBACK)' AS observacao;

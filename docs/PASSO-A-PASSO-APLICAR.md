@@ -138,17 +138,22 @@ Confirma que tudo funciona antes de você testar na mão.
 1. **SQL Editor** → **+ New query**.
 2. Abra `supabase/tests/sso_dominio_test.sql`, copie tudo, cole, **Run**.
 
-**O que esperar:** o script termina com `ROLLBACK` — ele **não salva nada**,
-só testa. Procure as mensagens na aba **Results** ou no rodapé:
+**O que esperar:** uma tabela com uma linha só:
 
 ```
-(a) OK — dominio verificado -> org correta, status pendente
-(b) OK — provedor publico barrado antes do lookup
-...
-TODOS OS CENARIOS PASSARAM
+resultado                        cenarios              observacao
+TODOS OS 10 CENARIOS PASSARAM    a,b,c,d,e,f,g,h,i,j   Nenhum dado foi gravado (ROLLBACK)
 ```
 
-Se aparecer qualquer `FALHOU`, **pare aqui** e leve a mensagem para revisão.
+O script **não salva nada** — ele testa e desfaz tudo.
+
+**Se aparecer erro em vermelho**, ele nomeia o cenário que falhou
+(ex.: `(e) FALHOU: membro pendente leu 1 dataset(s)`). **Pare aqui** e leve
+a mensagem para revisão. Seu banco não foi alterado.
+
+> Se você rodar uma versão antiga deste arquivo e vir apenas
+> **"Success. No rows returned"**, também está aprovado: toda falha aborta
+> com erro visível, então terminar sem erro significa que tudo passou.
 
 ---
 
