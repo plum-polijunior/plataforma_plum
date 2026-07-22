@@ -203,8 +203,10 @@ BEGIN
   DECLARE
     u_hd UUID := gen_random_uuid();
   BEGIN
+    -- E-mail distinto do usado no cenario (b): auth.users tem indice
+    -- unico em email e o teste (b) ja consumiu 'pessoa@gmail.com'.
     INSERT INTO auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
-    VALUES (u_hd, 'pessoa@gmail.com',
+    VALUES (u_hd, 'pessoa.workspace@gmail.com',
             json_build_object('hd', 'empresa-a.com')::jsonb, '{}'::jsonb);
 
     SELECT organization_id INTO v_org FROM public.profiles WHERE id = u_hd;
