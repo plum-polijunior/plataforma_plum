@@ -164,21 +164,24 @@ export type Database = {
       profiles: {
         Row: {
           id: string
-          organization_id: string
+          email: string | null
+          organization_id: string | null
           role_id: string | null
           status: "pendente" | "ativo" | "rejeitado" | "desativado"
           created_at: string
         }
         Insert: {
           id: string
-          organization_id: string
+          email?: string | null
+          organization_id?: string | null
           role_id?: string | null
           status?: "pendente" | "ativo" | "rejeitado" | "desativado"
           created_at?: string
         }
         Update: {
           id?: string
-          organization_id?: string
+          email?: string | null
+          organization_id?: string | null
           role_id?: string | null
           status?: "pendente" | "ativo" | "rejeitado" | "desativado"
           created_at?: string
@@ -199,6 +202,86 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      organization_domains: {
+        Row: {
+          id: string
+          organization_id: string
+          domain: string
+          verified: boolean
+          verification_method: "admin" | "dns_txt" | null
+          verified_at: string | null
+          verified_by: string | null
+          ms_tenant_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          domain: string
+          verified?: boolean
+          verification_method?: "admin" | "dns_txt" | null
+          verified_at?: string | null
+          verified_by?: string | null
+          ms_tenant_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          domain?: string
+          verified?: boolean
+          verification_method?: "admin" | "dns_txt" | null
+          verified_at?: string | null
+          verified_by?: string | null
+          ms_tenant_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_domains_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      public_email_domains: {
+        Row: { domain: string }
+        Insert: { domain: string }
+        Update: { domain?: string }
+        Relationships: []
+      }
+      domain_binding_audit: {
+        Row: {
+          id: string
+          user_id: string | null
+          email_domain: string | null
+          organization_id: string | null
+          signal: string
+          result: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          email_domain?: string | null
+          organization_id?: string | null
+          signal: string
+          result: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          email_domain?: string | null
+          organization_id?: string | null
+          signal?: string
+          result?: string
+          created_at?: string
+        }
+        Relationships: []
       }
       Leads: {
         Row: {

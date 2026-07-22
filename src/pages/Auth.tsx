@@ -92,6 +92,32 @@ const Auth = () => {
     }
   };
 
+  // 2b. Login via SSO corporativo (Google / Microsoft).
+  // O vínculo com a organização é resolvido 100% no servidor a partir do
+  // domínio verificado do e-mail — o cliente não envia nem escolhe org.
+  const handleSSO = async (provider: 'google' | 'azure') => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+          // `hd` (Google) e `tid` (Microsoft) chegam nas claims e são usados
+          // como sinal primário pelo trigger.
+          scopes: provider === 'azure' ? 'email openid profile' : undefined,
+        },
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Erro no login corporativo",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
   // 3. Cadastro de novo integrante em organização existente
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,13 +125,15 @@ const Auth = () => {
     
     setIsLoading(true);
     try {
+      // NÃO enviar `status`: quem decide é o servidor (trigger handle_new_user).
+      // A org aqui é apenas uma candidata — o vínculo definitivo vem do
+      // domínio verificado, e o status nasce sempre 'pendente'.
       const { error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
         options: {
           data: {
             organization_id: foundOrg.id
-            // `status` NÃO é enviado: quem define é o servidor.
           }
         }
       });
@@ -170,7 +198,7 @@ const Auth = () => {
             is_admin_setup: 'true',
             org_name: newOrgName,
             org_share_id: shareId
-            // `status` NÃO é enviado: quem define é o servidor.
+            // `status` removido de propósito: definido no servidor.
           }
         }
       });
@@ -274,6 +302,43 @@ const Auth = () => {
             {/* TAB: ENTRAR EM UMA ORGANIZAÇÃO */}
             <TabsContent value="entrar">
               <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
+                {/* Caminho preferencial: SSO corporativo.
+                    A organização é resolvida pelo domínio verificado. */}
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full bg-background/50"
+                    disabled={isLoading}
+                    onClick={() => handleSSO('google')}
+                  >
+                    <Globe className="mr-2 h-4 w-4" />
+                    Continuar com Google
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full bg-background/50"
+                    disabled={isLoading}
+                    onClick={() => handleSSO('azure')}
+                  >
+                    <Globe className="mr-2 h-4 w-4" />
+                    Continuar com Microsoft
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Use seu e-mail corporativo — sua organização é identificada automaticamente.
+                  </p>
+                </div>
+
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border/30" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">ou com ID da organização</span>
+                  </div>
+                </div>
+
                 {!foundOrg ? (
                   <form onSubmit={handleSearchOrg} className="space-y-4">
                     <div className="space-y-2">

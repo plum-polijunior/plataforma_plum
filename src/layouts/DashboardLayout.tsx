@@ -1,43 +1,40 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
 import { Building2, LogOut, Menu, X, Users, Settings, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrgAccess } from "@/hooks/use-org-access";
+import AccessPending from "@/pages/AccessPending";
 
 export function DashboardLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [session, setSession] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const { state, session, organizationName } = useOrgAccess();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/");
   };
 
-  if (isLoading) {
+  if (state === "carregando") {
     return <div className="min-h-screen bg-background flex items-center justify-center">Carregando...</div>;
   }
 
-  if (!session) {
+  if (state === "anonimo") {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Sem org / pendente / bloqueado não entram no dashboard: nenhum dado é lido.
+  if (state !== "ativo") {
+    return (
+      <AccessPending
+        state={state}
+        email={session?.user.email}
+        organizationName={organizationName}
+      />
+    );
   }
 
   return (
