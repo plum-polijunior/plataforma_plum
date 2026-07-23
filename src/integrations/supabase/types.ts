@@ -77,6 +77,7 @@ export type Database = {
           name: string
           google_sheet_id: string | null
           schema_metadata: Json | null
+          sketch: Json | null
           status: string | null
           created_at: string
         }
@@ -86,6 +87,7 @@ export type Database = {
           name: string
           google_sheet_id?: string | null
           schema_metadata?: Json | null
+          sketch?: Json | null
           status?: string | null
           created_at?: string
         }
@@ -95,6 +97,7 @@ export type Database = {
           name?: string
           google_sheet_id?: string | null
           schema_metadata?: Json | null
+          sketch?: Json | null
           status?: string | null
           created_at?: string
         }

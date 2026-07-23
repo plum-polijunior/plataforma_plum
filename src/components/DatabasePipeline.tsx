@@ -83,8 +83,11 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         let matchedDataset = null;
         if (existingDatasets) {
           matchedDataset = existingDatasets.find(d => {
-            if (d.sketch && d.sketch.originalColumns) {
-              return JSON.stringify(d.sketch.originalColumns) === JSON.stringify(headers);
+            // `sketch` e jsonb, tipado como Json (uniao) -- precisa estreitar
+            // antes de acessar os campos do rascunho.
+            const sketch = d.sketch as { originalColumns?: string[] } | null;
+            if (sketch && sketch.originalColumns) {
+              return JSON.stringify(sketch.originalColumns) === JSON.stringify(headers);
             }
             return false;
           });

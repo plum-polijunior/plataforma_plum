@@ -91,7 +91,7 @@ Este é o passo principal.
 **Vai demorar alguns segundos.** É normal.
 
 **O que deve aparecer:** uma tabela com duas colunas, `item` e `situacao`.
-**Todas as 22 linhas** devem dizer **OK**. Elas vêm numeradas pela parte que
+**Todas as 24 linhas** devem dizer **OK**. Elas vêm numeradas pela parte que
 as criou:
 
 ```
@@ -105,6 +105,8 @@ as criou:
 3. Funcao criar_organizacao criada (S-10)                 OK
 3. Leitura publica de organizations REMOVIDA (S-02)       OK
 3. Tabela profile_changes_audit                           OK
+4. Coluna datasets.sketch existe                          OK
+4. is_org_admin aceita qualquer caixa de Admin            OK
 D-13. Leads NAO foi alterada (esperado)                   OK
 ```
 
