@@ -34,6 +34,8 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       .replace(/^_|_$/g, ""); // remove _ do começo e fim
   };
 
+  const [datasetId, setDatasetId] = useState<string | null>(null);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -44,7 +46,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
     const reader = new FileReader();
 
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: "binary" });
@@ -71,11 +73,62 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           return obj;
         });
 
-        setOriginalColumns(headers);
-        setDataSamples(formattedSamples);
-        setNormalizedColumns(normMap);
+        // 1. Verificar se existe rascunho com a MESMA Matriz de Colunas
+        const { data: existingDatasets } = await supabase
+          .from('datasets')
+          .select('id, sketch, status')
+          .eq('organization_id', organizationId)
+          .eq('status', 'processing');
 
-        setStep(1); // Vai para revisão
+        let matchedDataset = null;
+        if (existingDatasets) {
+          matchedDataset = existingDatasets.find(d => {
+            if (d.sketch && d.sketch.originalColumns) {
+              return JSON.stringify(d.sketch.originalColumns) === JSON.stringify(headers);
+            }
+            return false;
+          });
+        }
+
+        if (matchedDataset) {
+          // Restaurar progresso
+          setDatasetId(matchedDataset.id);
+          setOriginalColumns(matchedDataset.sketch.originalColumns);
+          setNormalizedColumns(matchedDataset.sketch.normalizedColumns);
+          setDataSamples(matchedDataset.sketch.dataSamples);
+          
+          if (matchedDataset.sketch.formattingRules) setFormattingRules(matchedDataset.sketch.formattingRules);
+          if (matchedDataset.sketch.semanticDefinitions) setSemanticDefinitions(matchedDataset.sketch.semanticDefinitions);
+          if (matchedDataset.sketch.formattedDataSamples) setFormattedDataSamples(matchedDataset.sketch.formattedDataSamples);
+          
+          setStep(matchedDataset.sketch.step || 1);
+          toast({ title: "Rascunho Encontrado!", description: "Recuperamos o seu progresso anterior automaticamente." });
+        } else {
+          // Criar novo registro
+          const { data: newDataset, error: dbError } = await supabase
+            .from('datasets')
+            .insert({
+              organization_id: organizationId,
+              name: file.name,
+              status: 'processing',
+              sketch: {
+                step: 1,
+                originalColumns: headers,
+                normalizedColumns: normMap,
+                dataSamples: formattedSamples
+              }
+            })
+            .select('id')
+            .single();
+
+          if (dbError) throw dbError;
+          if (newDataset) setDatasetId(newDataset.id);
+
+          setOriginalColumns(headers);
+          setDataSamples(formattedSamples);
+          setNormalizedColumns(normMap);
+          setStep(1); // Vai para revisão
+        }
       } catch (error: any) {
         console.error(error);
         setUploadError(error.message || "Erro desconhecido ao processar planilha.");
@@ -99,6 +152,28 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const [formatQuery, setFormatQuery] = useState("");
   const [isFormatRefining, setIsFormatRefining] = useState(false);
 
+  const saveSketch = async (currentStep: number, extraData: any = {}) => {
+    if (!datasetId) return;
+    try {
+      await supabase
+        .from('datasets')
+        .update({
+          sketch: {
+            step: currentStep,
+            originalColumns,
+            normalizedColumns,
+            dataSamples,
+            formattingRules: extraData.formattingRules || formattingRules,
+            semanticDefinitions: extraData.semanticDefinitions || semanticDefinitions,
+            formattedDataSamples: extraData.formattedDataSamples || formattedDataSamples
+          }
+        })
+        .eq('id', datasetId);
+    } catch (err) {
+      console.error("Falha ao salvar rascunho", err);
+    }
+  };
+
   const handleRefineFormat = async () => {
     if (!formatQuery.trim()) return;
     setIsFormatRefining(true);
@@ -121,6 +196,13 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         setFormattedDataSamples(formatResult.formattedSamples);
         setFormattingRules(formatResult.formattingRules || {});
         setFormatQuery(""); // Limpa o chat após sucesso
+        
+        // Salva rascunho
+        saveSketch(2, {
+          formattedDataSamples: formatResult.formattedSamples,
+          formattingRules: formatResult.formattingRules || {}
+        });
+
         toast({ title: "Formatação atualizada!", description: "A IA aplicou as suas correções.", variant: "default" });
       }
     } catch (error: any) {
@@ -155,10 +237,17 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       if (formatResult && formatResult.formattedSamples) {
         setFormattedDataSamples(formatResult.formattedSamples);
         setFormattingRules(formatResult.formattingRules || {});
+        
+        saveSketch(2, {
+          formattedDataSamples: formatResult.formattedSamples,
+          formattingRules: formatResult.formattingRules || {}
+        });
+
+        setStep(2); // Vai para Formatação
       } else {
         setFormattedDataSamples(dataSamples);
+        setStep(2);
       }
-      setStep(2); // Vai para Formatação
     } catch (error: any) {
       toast({ title: "Erro na Formatação", description: error.message, variant: "destructive" });
     } finally {
@@ -178,6 +267,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       });
       if (refineRes.error) throw new Error(refineRes.error.message || "Erro no Agente de Refinamento");
       setSemanticDefinitions(refineRes.data.result);
+      saveSketch(3, { semanticDefinitions: refineRes.data.result });
       toast({ title: "Refinamento concluído!" });
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -251,6 +341,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       const definitionsJSON = predictRes.data.result;
       setSemanticDefinitions(definitionsJSON);
+      saveSketch(3, { semanticDefinitions: definitionsJSON });
       setStep(3);
 
     } catch (error: any) {
@@ -261,8 +352,8 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   };
 
   const handleFinalizeAndSave = async () => {
-    if (!organizationId) {
-      toast({ title: "Erro", description: "Organização não identificada", variant: "destructive" });
+    if (!organizationId || !datasetId) {
+      toast({ title: "Erro", description: "Sessão inválida", variant: "destructive" });
       return;
     }
     setIsProcessing(true);
@@ -279,12 +370,13 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       const { error } = await supabase
         .from('datasets')
-        .insert({
-          organization_id: organizationId,
+        .update({
           name: fileName || "Nova Planilha",
-          status: "ativo",
-          schema_metadata: schemaMetadata as any
-        });
+          status: "active",
+          schema_metadata: schemaMetadata as any,
+          sketch: null // Limpa o rascunho
+        })
+        .eq('id', datasetId);
 
       if (error) throw error;
 
