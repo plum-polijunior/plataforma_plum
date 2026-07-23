@@ -77,6 +77,13 @@ export function useOrgAccess(): OrgAccess {
 
     async function resolver(session: Session | null) {
       if (!session) {
+        // Se estamos no meio do callback do SSO (tem access_token na URL),
+        // o Supabase ainda está processando. Não podemos setar "anonimo"
+        // senão o roteador destrói a URL antes de salvar a sessão!
+        if (window.location.hash.includes("access_token=") || window.location.hash.includes("error=")) {
+          return;
+        }
+
         if (!cancelado) {
           setAccess({
             state: "anonimo",

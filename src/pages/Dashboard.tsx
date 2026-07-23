@@ -21,7 +21,8 @@ import {
   Info,
   Sparkles,
   Copy,
-  Globe
+  Globe,
+  Edit2
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -58,6 +59,59 @@ export default function Dashboard() {
 
   // Approval state per user
   const [selectedApprovalRoles, setSelectedApprovalRoles] = useState<{ [userId: string]: string }>({});
+
+  // Join code edit state
+  const [isEditingJoinCode, setIsEditingJoinCode] = useState(false);
+  const [newJoinCode, setNewJoinCode] = useState("");
+
+  const handleUpdateJoinCode = async () => {
+    if (!newJoinCode || newJoinCode.length <= 4) {
+      toast({
+        title: "Código muito curto",
+        description: "O código de convite deve ter mais de 4 caracteres.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Validar apenas letras e números (sem espaços/símbolos)
+    if (!/^[a-zA-Z0-9]+$/.test(newJoinCode)) {
+      toast({
+        title: "Formato inválido",
+        description: "O código deve conter apenas letras e números, sem espaços ou símbolos.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('organizations')
+        .update({ join_code: newJoinCode.toUpperCase() })
+        .eq('id', organization.id);
+        
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error("Este código já está em uso por outra empresa. Escolha outro.");
+        }
+        throw error;
+      }
+      
+      toast({
+        title: "Código atualizado!",
+        description: "O novo código de convite foi salvo com sucesso."
+      });
+      
+      setIsEditingJoinCode(false);
+      fetchData(); // re-fetch to update organization state
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar código",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -446,20 +500,62 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
                   Código de Convite
                 </p>
-                <div className="flex items-center gap-2">
-                  <p className="font-bold text-lg text-primary tracking-widest font-mono">
-                    {organization.join_code ?? organization.share_id}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-primary"
-                    title="Copiar código"
-                    onClick={() => handleCopiarCodigo(organization.join_code ?? organization.share_id)}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
+                {isEditingJoinCode ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input 
+                      value={newJoinCode} 
+                      onChange={(e) => setNewJoinCode(e.target.value)} 
+                      placeholder="Ex: MINHAEMPRESA" 
+                      className="h-8 w-40 font-mono text-sm uppercase"
+                      maxLength={12}
+                    />
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={handleUpdateJoinCode}
+                    >
+                      Salvar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-muted-foreground"
+                      onClick={() => setIsEditingJoinCode(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="font-bold text-lg text-primary tracking-widest font-mono">
+                      {organization.join_code}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-primary"
+                      title="Copiar código"
+                      onClick={() => handleCopiarCodigo(organization.join_code)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        title="Editar código"
+                        onClick={() => {
+                          setNewJoinCode(organization.join_code ?? "");
+                          setIsEditingJoinCode(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

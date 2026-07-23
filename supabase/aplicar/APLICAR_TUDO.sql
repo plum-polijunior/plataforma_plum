@@ -115,12 +115,12 @@ DECLARE
   v_meta     JSONB := COALESCE(new.raw_user_meta_data, '{}'::jsonb);
   v_org_id   UUID;
   v_role_id  UUID;
-  v_share_id TEXT;
+  v_join_code TEXT;
 BEGIN
   -- FLUXO A: criação explícita de organização.
   IF v_meta ->> 'is_admin_setup' = 'true' THEN
-    INSERT INTO public.organizations (name, share_id)
-    VALUES (v_meta ->> 'org_name', upper(v_meta ->> 'org_share_id'))
+    INSERT INTO public.organizations (name, join_code)
+    VALUES (v_meta ->> 'org_name', upper(v_meta ->> 'join_code'))
     RETURNING id INTO v_org_id;
 
     INSERT INTO public.roles (organization_id, name)
@@ -136,10 +136,10 @@ BEGIN
 
   -- FLUXO B: entrada em organização existente.
   -- O identificador vindo do cliente é apenas CANDIDATO e é validado.
-  v_share_id := upper(nullif(v_meta ->> 'org_share_id', ''));
+  v_join_code := upper(nullif(v_meta ->> 'join_code', ''));
 
-  IF v_share_id IS NOT NULL THEN
-    SELECT id INTO v_org_id FROM public.organizations WHERE share_id = v_share_id;
+  IF v_join_code IS NOT NULL THEN
+    SELECT id INTO v_org_id FROM public.organizations WHERE join_code = v_join_code;
   ELSIF nullif(v_meta ->> 'organization_id', '') IS NOT NULL THEN
     BEGIN
       SELECT id INTO v_org_id
@@ -204,7 +204,7 @@ REVOKE ALL ON public.profiles         FROM anon;
 REVOKE ALL ON public.datasets         FROM anon;
 REVOKE ALL ON public.role_permissions FROM anon;
 
--- ...exceto o SELECT em organizations, usado para resolver o share_id
+-- ...exceto o SELECT em organizations, usado para resolver o join_code
 -- na tela de acesso antes do login.
 GRANT SELECT ON public.organizations TO anon;
 
@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS public.domain_binding_audit (
 );
 
 COMMENT ON COLUMN public.domain_binding_audit.signal IS
-  'ms_tid | google_hd | email_domain | share_id | admin_setup';
+  'ms_tid | google_hd | email_domain | join_code | admin_setup';
 COMMENT ON COLUMN public.domain_binding_audit.result IS
   'bound | denylisted | no_match | unverified_domain | no_email | org_created';
 
@@ -472,7 +472,7 @@ $$;
 -- ser lidos do raw_user_meta_data (controlado pelo cliente).
 --   * organização  ⇒ resolvida no servidor pelo domínio verificado;
 --   * status       ⇒ SEMPRE 'pendente', exceto para quem cria a própria org.
--- O fluxo de share_id continua funcionando (não quebra o login atual), mas
+-- O fluxo de join_code continua funcionando (não quebra o login atual), mas
 -- agora só define a org candidata — nunca o status.
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -487,7 +487,7 @@ DECLARE
   v_google_hd   TEXT;
   v_ms_tid      TEXT;
   v_res         RECORD;
-  v_share_id    TEXT;
+  v_join_code    TEXT;
 BEGIN
   v_google_hd := COALESCE(v_meta ->> 'hd',  v_app_meta ->> 'hd');
   v_ms_tid    := COALESCE(v_meta ->> 'tid', v_app_meta ->> 'tid');
@@ -498,8 +498,8 @@ BEGIN
   -- automática a partir de um login qualquer.
   -- ---------------------------------------------------------------------
   IF v_meta ->> 'is_admin_setup' = 'true' THEN
-    INSERT INTO public.organizations (name, share_id)
-    VALUES (v_meta ->> 'org_name', upper(v_meta ->> 'org_share_id'))
+    INSERT INTO public.organizations (name, join_code)
+    VALUES (v_meta ->> 'org_name', upper(v_meta ->> 'org_join_code'))
     RETURNING id INTO v_org_id;
 
     INSERT INTO public.roles (organization_id, name)
@@ -538,15 +538,15 @@ BEGIN
   v_org_id := v_res.o_org_id;
 
   -- ---------------------------------------------------------------------
-  -- FLUXO C: fallback por share_id (fluxo legado da tela de acesso).
+  -- FLUXO C: fallback por join_code (fluxo legado da tela de acesso).
   -- Só é consultado quando o domínio NÃO resolveu. Define apenas a org
   -- candidata; o status permanece 'pendente' e depende de aprovação.
   -- ---------------------------------------------------------------------
   IF v_org_id IS NULL THEN
-    v_share_id := upper(nullif(v_meta ->> 'org_share_id', ''));
+    v_join_code := upper(nullif(v_meta ->> 'org_join_code', ''));
 
-    IF v_share_id IS NOT NULL THEN
-      SELECT id INTO v_org_id FROM public.organizations WHERE share_id = v_share_id;
+    IF v_join_code IS NOT NULL THEN
+      SELECT id INTO v_org_id FROM public.organizations WHERE join_code = v_join_code;
     ELSIF nullif(v_meta ->> 'organization_id', '') IS NOT NULL THEN
       -- Compatibilidade com o front atual, que envia o uuid da org.
       SELECT id INTO v_org_id
@@ -555,7 +555,7 @@ BEGIN
     END IF;
 
     IF v_org_id IS NOT NULL THEN
-      v_res.o_signal := 'share_id';
+
       v_res.o_result := 'bound';
     END IF;
   END IF;
@@ -695,7 +695,7 @@ CREATE POLICY "admin gerencia perfis da org" ON public.profiles
   WITH CHECK (organization_id = public.current_org_id());
 
 -- 8.5 organizations: leitura pública mantida (a tela de acesso precisa
--- resolver o share_id antes do login). Escrita passa a ser exclusiva do
+-- resolver o join_code antes do login). Escrita passa a ser exclusiva do
 -- trigger — remove a policy que permitia INSERT arbitrário.
 DROP POLICY IF EXISTS "Allow authenticated users to insert organizations" ON public.organizations;
 
@@ -764,7 +764,7 @@ REVOKE ALL ON public.profiles         FROM anon;
 REVOKE ALL ON public.datasets         FROM anon;
 REVOKE ALL ON public.role_permissions FROM anon;
 
--- anon só precisa resolver o share_id na tela de acesso.
+-- anon só precisa resolver o join_code na tela de acesso.
 GRANT SELECT ON public.organizations TO anon;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.organization_domains TO authenticated;
@@ -863,7 +863,7 @@ END $$;
 -- 2. join_mode e join_code (D-07 / D-12)
 -- -------------------------------------------------------------------------
 ALTER TABLE public.organizations
-    ADD COLUMN IF NOT EXISTS join_mode TEXT NOT NULL DEFAULT 'share_id',
+    ADD COLUMN IF NOT EXISTS join_mode TEXT NOT NULL DEFAULT 'codigo',
     ADD COLUMN IF NOT EXISTS join_code TEXT;
 
 DO $$
@@ -871,14 +871,14 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'organizations_join_mode_check') THEN
     ALTER TABLE public.organizations
       ADD CONSTRAINT organizations_join_mode_check
-      CHECK (join_mode IN ('share_id', 'dominio'));
+      CHECK (join_mode IN ('codigo', 'dominio'));
   END IF;
 END $$;
 
 COMMENT ON COLUMN public.organizations.join_mode IS
-  'Como novos membros entram: share_id = codigo de convite; dominio = roteamento por dominio verificado. Definido APENAS server-side, por admin da org.';
+  'Como novos membros entram: codigo = codigo de convite; dominio = roteamento por dominio verificado. Definido APENAS server-side, por admin da org.';
 COMMENT ON COLUMN public.organizations.join_code IS
-  'Codigo de convite de 12 caracteres, aleatorio criptografico. Substitui o share_id de 4 chars, que fica preenchido por compatibilidade (D-09).';
+  'Codigo de convite de 12 caracteres, aleatorio criptografico.';
 
 -- Gerador criptográfico. Alfabeto de 32 símbolos sem I/O/0/1 (ambiguidade
 -- visual). 256 % 32 = 0, portanto não há viés de módulo.
@@ -920,11 +920,11 @@ BEGIN
   END IF;
 END $$;
 
--- As 6 organizações existentes ficam em 'share_id'.
+-- As 6 organizações existentes ficam em 'join_code'.
 -- Motivo documentado: polijunior.com.br aparece em 4 organizações distintas
 -- e organization_domains.domain e UNIQUE — colocar qualquer uma em 'dominio'
 -- quebraria as outras tres.
-UPDATE public.organizations SET join_mode = 'share_id' WHERE join_mode IS NULL;
+UPDATE public.organizations SET join_mode = 'codigo' WHERE join_mode IS NULL;
 
 
 -- -------------------------------------------------------------------------
@@ -940,7 +940,7 @@ CREATE POLICY "membro ve a propria org" ON public.organizations
 REVOKE ALL ON public.organizations FROM anon;
 
 -- Substituto do SELECT público: devolve SOMENTE {org_id, org_name}.
--- Aceita o join_code novo e, por compatibilidade, o share_id antigo.
+-- Aceita o join_code novo e, por compatibilidade, o join_code antigo.
 CREATE OR REPLACE FUNCTION public.resolver_codigo_organizacao(p_codigo TEXT)
 RETURNS TABLE (org_id UUID, org_name TEXT)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp
@@ -955,8 +955,8 @@ BEGIN
   RETURN QUERY
   SELECT o.id, o.name
   FROM public.organizations o
-  WHERE o.join_mode = 'share_id'
-    AND (o.join_code = v_codigo OR o.share_id = v_codigo)
+  WHERE o.join_mode = 'codigo'
+    AND o.join_code = v_codigo
   LIMIT 1;
 END;
 $$;
@@ -968,7 +968,7 @@ GRANT  EXECUTE ON FUNCTION public.resolver_codigo_organizacao(TEXT) TO anon, aut
 -- -------------------------------------------------------------------------
 -- 4. S-10 — criação de organização sai do metadata do cliente
 -- -------------------------------------------------------------------------
--- Antes: o cliente enviava is_admin_setup/org_name/org_share_id no signUp e
+-- Antes: o cliente enviava is_admin_setup/org_name/org_join_code no signUp e
 -- o trigger criava a organização. Agora a criação é uma chamada autenticada,
 -- explícita, e só funciona para quem ainda não tem organização.
 
@@ -982,7 +982,6 @@ DECLARE
   v_org_id   UUID;
   v_role_id  UUID;
   v_code     TEXT;
-  v_share    TEXT;
   v_org_atual UUID;
 BEGIN
   IF v_uid IS NULL THEN
@@ -1001,14 +1000,8 @@ BEGIN
 
   v_code := public.gerar_join_code();
 
-  -- share_id de 4 chars continua sendo preenchido (D-09), derivado do code.
-  v_share := substr(v_code, 1, 4);
-  WHILE EXISTS (SELECT 1 FROM public.organizations WHERE share_id = v_share) LOOP
-    v_share := substr(public.gerar_join_code(), 1, 4);
-  END LOOP;
-
-  INSERT INTO public.organizations (name, share_id, join_code, join_mode)
-  VALUES (v_nome, v_share, v_code, 'share_id')
+  INSERT INTO public.organizations (name, join_code, join_mode)
+  VALUES (v_nome, v_code, 'codigo')
   RETURNING id INTO v_org_id;
 
   INSERT INTO public.roles (organization_id, name)
@@ -1058,25 +1051,24 @@ BEGIN
   v_dominio   := nullif(split_part(lower(btrim(COALESCE(new.email, ''))), '@', 2), '');
 
   -- ---------------------------------------------------------------------
-  -- PORTA 1 — código de convite (organizações com join_mode = 'share_id').
+  -- PORTA 1 — código de convite (organizações com join_mode = 'codigo').
   -- O código é um segredo portador digitado pelo usuário, não uma
   -- declaração de identidade: legítimo vir do cliente. `status` e
   -- `join_mode` continuam sendo decisão exclusiva do servidor.
   -- ---------------------------------------------------------------------
   v_codigo := upper(btrim(COALESCE(
-      nullif(v_meta ->> 'join_code', ''),
-      nullif(v_meta ->> 'org_share_id', '')
+      nullif(v_meta ->> 'join_code', '')
   )));
 
   IF v_codigo IS NOT NULL AND v_codigo <> '' THEN
     SELECT id INTO v_org_id
     FROM public.organizations
-    WHERE join_mode = 'share_id'
-      AND (join_code = v_codigo OR share_id = v_codigo)
+    WHERE join_mode = 'codigo'
+      AND (join_code = v_codigo OR join_code = v_codigo)
     LIMIT 1;
 
     IF v_org_id IS NOT NULL THEN
-      v_signal := 'share_id';
+      v_signal := 'join_code';
       v_result := 'bound';
     END IF;
   END IF;
@@ -1226,8 +1218,8 @@ FROM (VALUES
             WHERE table_name='organizations' AND column_name='join_code')),
   ('Todas as orgs com join_code preenchido',
    NOT EXISTS (SELECT 1 FROM public.organizations WHERE join_code IS NULL)),
-  ('Todas as orgs em join_mode = share_id',
-   NOT EXISTS (SELECT 1 FROM public.organizations WHERE join_mode <> 'share_id')),
+  ('Todas as orgs em join_mode = join_code',
+   NOT EXISTS (SELECT 1 FROM public.organizations WHERE join_mode <> 'codigo')),
   ('Leitura publica de organizations REMOVIDA',
    NOT EXISTS (SELECT 1 FROM pg_policies
                 WHERE tablename='organizations'
@@ -1402,8 +1394,8 @@ FROM (
                 WHERE table_name = 'organizations' AND column_name = 'join_code')),
       ('3. Todas as orgs com join_code preenchido',
        NOT EXISTS (SELECT 1 FROM public.organizations WHERE join_code IS NULL)),
-      ('3. Todas as orgs existentes em join_mode = share_id',
-       NOT EXISTS (SELECT 1 FROM public.organizations WHERE join_mode <> 'share_id')),
+      ('3. Todas as orgs existentes em join_mode = join_code',
+       NOT EXISTS (SELECT 1 FROM public.organizations WHERE join_mode <> 'codigo')),
       ('3. Leitura publica de organizations REMOVIDA (S-02)',
        NOT EXISTS (SELECT 1 FROM pg_policies
                     WHERE tablename = 'organizations'

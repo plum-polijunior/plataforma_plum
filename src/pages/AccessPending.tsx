@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Clock, ShieldAlert, Building2, LogOut, Plus } from "lucide-react";
+import { Clock, ShieldAlert, Building2, LogOut, Plus, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,11 +46,41 @@ export default function AccessPending({ state, email, organizationName }: Access
   const [criando, setCriando] = useState(false);
   const [nomeOrg, setNomeOrg] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [sucesso, setSucesso] = useState(false);
+
+  // Leitura síncrona do localStorage para evitar flash de tela e bug do StrictMode
+  const [pendingSSOOrgName, setPendingSSOOrgName] = useState(() => localStorage.getItem("plum_pending_org_name"));
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/";
   };
+
+  useEffect(() => {
+    if (state === "sem-org" && pendingSSOOrgName) {
+      const autoCreate = async () => {
+        // Não removemos o localStorage AQUI, para evitar que o React StrictMode 
+        // destrua a intenção do usuário antes de completar a requisição.
+        try {
+          const { error } = await supabase.rpc("criar_organizacao", { p_nome: pendingSSOOrgName });
+          if (error) throw error;
+    
+          localStorage.removeItem("plum_pending_org_name");
+          setSucesso(true);
+        } catch (err: any) {
+          localStorage.removeItem("plum_pending_org_name");
+          setPendingSSOOrgName(null); // Volta pra tela de erro normal
+          toast({
+            title: "Erro ao criar organização (SSO)",
+            description: err.message,
+            variant: "destructive",
+          });
+        }
+      };
+      
+      autoCreate();
+    }
+  }, [state, pendingSSOOrgName, toast]);
 
   // Quem chega aqui sem organização precisa de uma saída: ou pede o código de
   // convite ao admin, ou cria a própria organização. Sem isto o usuário que
@@ -62,12 +92,7 @@ export default function AccessPending({ state, email, organizationName }: Access
       const { error } = await supabase.rpc("criar_organizacao", { p_nome: nomeOrg });
       if (error) throw error;
 
-      toast({
-        title: "Organização criada!",
-        description: "Redirecionando para o painel...",
-      });
-      // Recarrega para o token ser reemitido com as claims novas.
-      setTimeout(() => window.location.reload(), 1200);
+      setSucesso(true);
     } catch (err: any) {
       toast({
         title: "Erro ao criar organização",
@@ -77,6 +102,68 @@ export default function AccessPending({ state, email, organizationName }: Access
       setEnviando(false);
     }
   };
+
+  const handleEntrarNoPlum = async () => {
+    setEnviando(true);
+    // Limpa o hash do SSO da URL para que o Supabase não use o token antigo
+    window.history.replaceState(null, "", window.location.pathname);
+    // Força o refresh da sessão para obter o JWT com o organization_id
+    await supabase.auth.refreshSession();
+  };
+
+  if (sucesso) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+        </div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass p-8 rounded-2xl border border-border/30 shadow-xl text-center max-w-md w-full space-y-6 z-10"
+        >
+          <div className="h-16 w-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-inner border border-green-500/20">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">Organização criada!</h2>
+            <p className="text-muted-foreground leading-relaxed">
+              Seu ambiente corporativo já está pronto para uso.
+            </p>
+          </div>
+          <Button 
+            className="w-full text-base py-5 font-semibold" 
+            onClick={handleEntrarNoPlum}
+            disabled={enviando}
+          >
+            {enviando ? (
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            ) : null}
+            {enviando ? "Entrando..." : "Entrar no Plum"}
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (state === "sem-org" && pendingSSOOrgName) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+        </div>
+        <div className="glass p-8 rounded-2xl border border-border/30 shadow-xl text-center max-w-sm w-full space-y-5 z-10">
+          <Loader2 className="h-10 w-10 text-primary mx-auto animate-spin" />
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Configurando ambiente</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed mt-2">
+              Criando a organização <strong className="text-foreground">{pendingSSOOrgName}</strong> e vinculando sua conta...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">

@@ -18,25 +18,22 @@ export type Database = {
         Row: {
           id: string
           name: string
-          share_id: string
           join_code: string | null
-          join_mode: "share_id" | "dominio"
+          join_mode: "codigo" | "dominio"
           created_at: string
         }
         Insert: {
           id?: string
           name: string
-          share_id: string
           join_code?: string | null
-          join_mode?: "share_id" | "dominio"
+          join_mode?: "codigo" | "dominio"
           created_at?: string
         }
         Update: {
           id?: string
           name?: string
-          share_id?: string
           join_code?: string | null
-          join_mode?: "share_id" | "dominio"
+          join_mode?: "codigo" | "dominio"
           created_at?: string
         }
         Relationships: []

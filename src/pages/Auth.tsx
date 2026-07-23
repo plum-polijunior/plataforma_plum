@@ -11,31 +11,34 @@ import { useToast } from "@/hooks/use-toast";
 
 const Auth = () => {
   const { toast } = useToast();
-  
+
   // State for active tab (empty initially so no forms show)
   const [activeTab, setActiveTab] = useState<string>("");
+
+  // Sub-state for "Entrar" tab (empty = choice buttons)
+  const [loginMode, setLoginMode] = useState<"" | "returning" | "new">("");
 
   // State for "Entrar em uma organização"
   const [orgId, setOrgId] = useState("");
   const [foundOrg, setFoundOrg] = useState<{ id: string; name: string } | null>(null);
-  
+
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  
+
   // State for "Criar uma organização"
   const [newOrgName, setNewOrgName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
-  
+
   const [isLoading, setIsLoading] = useState(false);
 
   // 1. Procurar organização pelo ID de 4 dígitos
   const handleSearchOrg = async (e: React.FormEvent) => {
     e.preventDefault();
     if (orgId.length < 4) return;
-    
+
     setIsLoading(true);
     try {
       const shareId = orgId.toUpperCase();
@@ -81,9 +84,9 @@ const Auth = () => {
         email: loginEmail,
         password: loginPassword,
       });
-      
+
       if (error) throw error;
-      
+
       window.location.href = '/dashboard';
     } catch (error: any) {
       toast({
@@ -122,11 +125,25 @@ const Auth = () => {
     }
   };
 
+  const handleSSOCreateOrg = (provider: 'google' | 'azure') => {
+    if (!newOrgName.trim()) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Digite o nome da sua empresa antes de continuar com o Google/Microsoft.",
+        variant: "destructive"
+      });
+      return;
+    }
+    // Salva a intenção de criar organização com este nome
+    localStorage.setItem("plum_pending_org_name", newOrgName.trim());
+    handleSSO(provider);
+  };
+
   // 3. Cadastro de novo integrante em organização existente
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!foundOrg) return;
-    
+
     setIsLoading(true);
     try {
       // O que vai no metadata é o CÓDIGO de convite digitado pelo usuário —
@@ -142,19 +159,19 @@ const Auth = () => {
           }
         }
       });
-      
+
       if (error) throw error;
-      
+
       // Enviar webhook ou trigger para o admin via Edge Function
       await supabase.functions.invoke('send-auth-email', {
         body: { type: 'new_request', userEmail: signupEmail, organizationName: foundOrg.name }
       });
-      
+
       toast({
         title: "Conta criada com sucesso!",
         description: "Aguardando autorização do administrador da organização.",
       });
-      
+
       // Limpar form
       setSignupEmail("");
       setSignupPassword("");
@@ -173,7 +190,7 @@ const Auth = () => {
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     try {
       // MUDANÇA DE SEGURANÇA (achado S-10): antes o cliente enviava
       // `is_admin_setup: 'true'` + `org_name` + `org_share_id` no metadata do
@@ -217,16 +234,16 @@ const Auth = () => {
       } catch (e) {
         console.error("Falha ao enviar email de boas vindas:", e);
       }
-      
+
       toast({
         title: "Organização criada!",
         description: "Bem-vindo ao Plum. Redirecionando...",
       });
-      
+
       setTimeout(() => {
         window.location.href = '/dashboard';
       }, 1500);
-      
+
     } catch (error: any) {
       toast({
         title: "Erro ao criar organização",
@@ -245,10 +262,10 @@ const Auth = () => {
         <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute bottom-[-140px] right-[-120px] h-[420px] w-[420px] rounded-full bg-accent/10 blur-3xl" />
       </div>
-      
+
       {/* Botão voltar */}
-      <Button 
-        variant="ghost" 
+      <Button
+        variant="ghost"
         onClick={() => {
           if (activeTab !== "") {
             setActiveTab("");
@@ -262,7 +279,7 @@ const Auth = () => {
         ← {activeTab !== "" ? "Voltar para seleção de acesso" : "Voltar para o site"}
       </Button>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -278,94 +295,150 @@ const Auth = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {activeTab === "" && (
               <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 mb-10 bg-transparent gap-6 p-0 h-auto">
-              <TabsTrigger 
-                value="entrar" 
-                onClick={() => setFoundOrg(null)}
-                className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
-              >
-                <span className="font-bold text-2xl mb-6 text-foreground">Entrar</span>
-                <LogIn className="h-16 w-16 mb-6 text-primary" />
-                <span className="text-base text-muted-foreground whitespace-normal text-center">
-                  Clique aqui se sua empresa já usa o Plum.
-                </span>
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="criar"
-                className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
-              >
-                <span className="font-bold text-2xl mb-6 text-foreground">Nova Organização</span>
-                <Globe className="h-16 w-16 mb-6 text-primary" />
-                <span className="text-base text-muted-foreground whitespace-normal text-center">
-                  Clique aqui para criar um novo ambiente para sua empresa.
-                </span>
-              </TabsTrigger>
+                <TabsTrigger
+                  value="entrar"
+                  onClick={() => setFoundOrg(null)}
+                  className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+                >
+                  <span className="font-bold text-2xl mb-6 text-foreground">Entrar</span>
+                  <LogIn className="h-16 w-16 mb-6 text-primary" />
+                  <span className="text-base text-muted-foreground whitespace-normal text-center">
+                    Clique aqui se sua empresa já usa o Plum.
+                  </span>
+                </TabsTrigger>
+
+                <TabsTrigger
+                  value="criar"
+                  className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+                >
+                  <span className="font-bold text-2xl mb-6 text-foreground">Nova Organização</span>
+                  <Globe className="h-16 w-16 mb-6 text-primary" />
+                  <span className="text-base text-muted-foreground whitespace-normal text-center">
+                    Clique aqui para criar um novo ambiente para sua empresa.
+                  </span>
+                </TabsTrigger>
               </TabsList>
             )}
 
             {/* TAB: ENTRAR EM UMA ORGANIZAÇÃO */}
             <TabsContent value="entrar">
               <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
-                {/* Caminho preferencial: SSO corporativo.
-                    A organização é resolvida pelo domínio verificado. */}
-                <div className="space-y-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full bg-background/50"
-                    disabled={isLoading}
-                    onClick={() => handleSSO('google')}
-                  >
-                    <Globe className="mr-2 h-4 w-4" />
-                    Continuar com Google
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full bg-background/50"
-                    disabled={isLoading}
-                    onClick={() => handleSSO('azure')}
-                  >
-                    <Globe className="mr-2 h-4 w-4" />
-                    Continuar com Microsoft
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Use seu e-mail corporativo — sua organização é identificada automaticamente.
-                  </p>
-                </div>
-
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border/30" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">ou com ID da organização</span>
-                  </div>
-                </div>
-
                 {!foundOrg ? (
-                  <form onSubmit={handleSearchOrg} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="orgId">Código da Organização</Label>
-                      <Input
-                        id="orgId"
-                        placeholder="Ex: K7M2PQR4XW3T"
-                        value={orgId}
-                        onChange={(e) => setOrgId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                        // 12 = join_code novo. O limite antigo era 4 (share_id),
-                        // que continua aceito para não quebrar as orgs existentes.
-                        maxLength={12}
-                        required
-                        className="bg-background/50 uppercase tracking-wider"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        O administrador da sua empresa envia esse código.
-                      </p>
-                    </div>
-                    <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                      {isLoading ? "Buscando..." : "Buscar Organização"}
-                    </Button>
-                  </form>
+                  <>
+                    {loginMode === "" ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Button 
+                          variant="outline" 
+                          className="h-24 flex flex-col items-center justify-center gap-2 border-primary/20 hover:border-primary/50 hover:bg-primary/5"
+                          onClick={() => setLoginMode("returning")}
+                        >
+                          <LogIn className="h-6 w-6 text-primary" />
+                          <span className="font-semibold text-base">Já sou usuário</span>
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="h-24 flex flex-col items-center justify-center gap-2 border-primary/20 hover:border-primary/50 hover:bg-primary/5"
+                          onClick={() => setLoginMode("new")}
+                        >
+                          <Globe className="h-6 w-6 text-primary" />
+                          <span className="font-semibold text-base">Primeiro acesso</span>
+                        </Button>
+                      </div>
+                    ) : loginMode === "returning" ? (
+                      <>
+                        <div className="flex items-center mb-6">
+                          <Button variant="ghost" size="sm" onClick={() => setLoginMode("")} className="mr-2 h-8 px-2">
+                            ← Voltar
+                          </Button>
+                          <h3 className="font-semibold text-foreground">Já sou usuário</h3>
+                        </div>
+
+                        <div className="space-y-3 mb-6">
+                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('google')}>
+                            <Globe className="mr-2 h-4 w-4" />
+                            Continuar com Google
+                          </Button>
+                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('azure')}>
+                            <Globe className="mr-2 h-4 w-4" />
+                            Continuar com Microsoft
+                          </Button>
+                        </div>
+
+                        <div className="relative my-6">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-border/30" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-card px-2 text-muted-foreground">ou entre com email</span>
+                          </div>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="top-login-email">Email corporativo</Label>
+                            <Input id="top-login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required className="bg-background/50" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="top-login-password">Senha</Label>
+                            <Input id="top-login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
+                          </div>
+                          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
+                            {isLoading ? "Entrando..." : "Entrar com Email"}
+                          </Button>
+                        </form>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center mb-6">
+                          <Button variant="ghost" size="sm" onClick={() => setLoginMode("")} className="mr-2 h-8 px-2">
+                            ← Voltar
+                          </Button>
+                          <h3 className="font-semibold text-foreground">Primeiro acesso</h3>
+                        </div>
+
+                        <form onSubmit={handleSearchOrg} className="space-y-4 mb-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="orgId">Código de Convite</Label>
+                            <Input
+                              id="orgId"
+                              placeholder="Ex: MINH4EMPRES4"
+                              value={orgId}
+                              onChange={(e) => setOrgId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                              maxLength={12}
+                              required
+                              className="bg-background/50 uppercase tracking-wider"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Digite o código enviado pela sua empresa para pedir acesso.
+                            </p>
+                          </div>
+                          <Button type="submit" variant="secondary" className="w-full" disabled={isLoading}>
+                            {isLoading ? "Buscando..." : "Buscar Organização"}
+                          </Button>
+                        </form>
+
+                        <div className="relative my-6">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-border/30" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-card px-2 text-muted-foreground">ou continue com email corporativo</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('google')}>
+                            <Globe className="mr-2 h-4 w-4" />
+                            Continuar com Google
+                          </Button>
+                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('azure')}>
+                            <Globe className="mr-2 h-4 w-4" />
+                            Continuar com Microsoft
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </>
                 ) : (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex items-center justify-between mb-4 pb-4 border-b border-border/20">
@@ -381,7 +454,7 @@ const Auth = () => {
                         <TabsTrigger value="login">Login</TabsTrigger>
                         <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
                       </TabsList>
-                      
+
                       <TabsContent value="login">
                         <form onSubmit={handleLogin} className="space-y-4">
                           <div className="space-y-2">
@@ -425,33 +498,75 @@ const Auth = () => {
             {/* TAB: CRIAR UMA ORGANIZAÇÃO */}
             <TabsContent value="criar">
               <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
+                
+                <div className="space-y-4 mb-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-org-name" className="text-primary font-semibold">Nome da sua Empresa <span className="text-destructive">*</span></Label>
+                    <Input 
+                      id="new-org-name" 
+                      placeholder="Ex: Cali Ltda" 
+                      value={newOrgName} 
+                      onChange={(e) => setNewOrgName(e.target.value)} 
+                      required 
+                      className="bg-background/50 border-primary/30 focus-visible:ring-primary/50" 
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Obrigatório. Este será o nome do seu ambiente no Plum.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full bg-background/50"
+                    disabled={isLoading}
+                    onClick={() => handleSSOCreateOrg('google')}
+                  >
+                    <Globe className="mr-2 h-4 w-4" />
+                    Criar com Google
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full bg-background/50"
+                    disabled={isLoading}
+                    onClick={() => handleSSOCreateOrg('azure')}
+                  >
+                    <Globe className="mr-2 h-4 w-4" />
+                    Criar com Microsoft
+                  </Button>
+                </div>
+
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border/30" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">ou crie com email e senha</span>
+                  </div>
+                </div>
+
                 <form onSubmit={handleCreateOrg} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="new-org-name">Nome da Empresa</Label>
-                    <Input id="new-org-name" placeholder="Ex: Cali Ltda" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} required className="bg-background/50" />
+                    <Label htmlFor="admin-email">Seu Email Corporativo</Label>
+                    <Input id="admin-email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required className="bg-background/50" />
                   </div>
-                  
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-password">Crie uma Senha</Label>
+                    <Input id="admin-password" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="bg-background/50" />
+                  </div>
+
                   {/* O código de convite deixou de ser escolhido pelo cliente:
                       agora é gerado pelo servidor com 12 caracteres aleatórios
                       (o antigo, de 4, era enumerável em poucas horas). */}
-                  <div className="rounded-lg border border-border/30 bg-muted/20 p-3">
+                  <div className="rounded-lg border border-border/30 bg-muted/20 p-3 mt-4">
                     <p className="text-xs text-muted-foreground">
                       Um <span className="font-medium text-foreground">código de convite</span> de
                       12 caracteres será gerado automaticamente. Você o encontra no painel,
                       em "Minha Organização", para enviar aos seus colaboradores.
                     </p>
-                  </div>
-
-                  <div className="pt-4 border-t border-border/20 space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground">Sua conta de Administrador</h3>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-email">Seu Email</Label>
-                      <Input id="admin-email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required className="bg-background/50" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin-password">Senha</Label>
-                      <Input id="admin-password" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="bg-background/50" />
-                    </div>
                   </div>
 
                   <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6" disabled={isLoading}>
