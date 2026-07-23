@@ -144,17 +144,31 @@ BEGIN
   -- ==================================================================
   -- (4) S-02: anonimo nao le organizations
   -- ==================================================================
+  -- Duas formas de estar fechado, ambas aceitas:
+  --   a) RLS nega  -> 0 linhas;
+  --   b) GRANT nega -> insufficient_privilege (defesa mais forte, e o que
+  --      acontece hoje por causa do REVOKE ALL ... FROM anon).
   SET LOCAL ROLE anon;
   PERFORM set_config('request.jwt.claims',
     jsonb_build_object('role', 'anon')::text, true);
 
-  SELECT count(*) INTO v_count FROM public.organizations;
+  v_erro  := false;
+  v_count := -1;
+  BEGIN
+    SELECT count(*) INTO v_count FROM public.organizations;
+  EXCEPTION WHEN insufficient_privilege THEN v_erro := true;
+  END;
   RESET ROLE;
 
-  IF v_count <> 0 THEN
+  IF NOT v_erro AND v_count <> 0 THEN
     RAISE EXCEPTION '(4) FALHOU S-02: anon leu % organizacao(oes)', v_count;
   END IF;
-  RAISE NOTICE '(4) OK - leitura publica de organizations fechada';
+
+  IF v_erro THEN
+    RAISE NOTICE '(4) OK - anon barrado no GRANT (permission denied)';
+  ELSE
+    RAISE NOTICE '(4) OK - anon barrado pela RLS (0 linhas)';
+  END IF;
 
   -- ==================================================================
   -- (5) Escrita cross-tenant barrada
@@ -325,9 +339,10 @@ BEGIN
   RAISE NOTICE '=== TODOS OS CENARIOS PASSARAM ===';
 END $$;
 
-ROLLBACK;
-
--- Só alcançada se nenhuma asserção abortou.
+-- Confirmacao DENTRO da transacao: se qualquer assercao abortar, a transacao
+-- fica em estado abortado e este SELECT nao roda. Nao ha falso positivo.
 SELECT
   'TODOS OS 10 CENARIOS DE ENDURECIMENTO PASSARAM' AS resultado,
-  'Nenhum dado foi gravado (ROLLBACK)'             AS observacao;
+  'Nenhum dado sera gravado (ROLLBACK)'            AS observacao;
+
+ROLLBACK;

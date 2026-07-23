@@ -25,3 +25,7 @@ dist-ssr
 
 .env
 .env.example
+
+# Artefatos locais do Supabase CLI (gerados por `supabase start`)
+supabase/.branches
+supabase/.temp

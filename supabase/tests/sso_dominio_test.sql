@@ -29,8 +29,12 @@ BEGIN
   -- ------------------------------------------------------------------
   -- Fixtures
   -- ------------------------------------------------------------------
-  INSERT INTO public.organizations (name, share_id) VALUES ('Empresa A', 'EMPA') RETURNING id INTO org_a;
-  INSERT INTO public.organizations (name, share_id) VALUES ('Empresa B', 'EMPB') RETURNING id INTO org_b;
+  -- join_mode = 'dominio': a partir da migration 20260722130000 o roteamento
+  -- por dominio so vale para organizacoes nesse modo.
+  INSERT INTO public.organizations (name, share_id, join_mode)
+  VALUES ('Empresa A', 'EMPA', 'dominio') RETURNING id INTO org_a;
+  INSERT INTO public.organizations (name, share_id, join_mode)
+  VALUES ('Empresa B', 'EMPB', 'dominio') RETURNING id INTO org_b;
 
   INSERT INTO public.organization_domains (organization_id, domain, verified, verification_method, verified_at)
   VALUES (org_a, 'empresa-a.com', true, 'admin', now());
@@ -290,20 +294,22 @@ BEGIN
     RAISE NOTICE '(j) OK — chaves do hook batem com as lidas pelo RLS';
   END;
 
-  RAISE NOTICE '=====================================';
-  RAISE NOTICE 'TODOS OS CENARIOS PASSARAM';
-  RAISE NOTICE '=====================================';
+  RAISE NOTICE '=== TODOS OS CENARIOS PASSARAM ===';
 END $$;
 
-ROLLBACK;
-
 -- -------------------------------------------------------------------------
--- CONFIRMACAO VISIVEL
+-- CONFIRMACAO VISIVEL — precisa ficar DENTRO da transacao
 -- -------------------------------------------------------------------------
--- O SQL Editor do Supabase nao exibe mensagens RAISE NOTICE. Como qualquer
--- cenario que falha aborta a execucao com RAISE EXCEPTION, esta linha so e
--- alcancada se TODOS tiverem passado.
+-- O SQL Editor do Supabase nao exibe RAISE NOTICE. E um SELECT literal
+-- DEPOIS do ROLLBACK executaria mesmo com os testes falhando, dando falso
+-- positivo (foi o que aconteceu na primeira versao deste arquivo).
+--
+-- Aqui, se qualquer assercao abortar, a transacao inteira fica em estado
+-- abortado e este SELECT nao roda: o Postgres recusa com
+-- "current transaction is aborted". Nao ha como ele mentir.
 SELECT
-  'TODOS OS 10 CENARIOS PASSARAM' AS resultado,
-  'a,b,c,d,e,f,g,h,i,j' AS cenarios,
-  'Nenhum dado foi gravado (ROLLBACK)' AS observacao;
+  'TODOS OS 10 CENARIOS PASSARAM'      AS resultado,
+  'a,b,c,d,e,f,g,h,i,j'                AS cenarios,
+  'Nenhum dado sera gravado (ROLLBACK)' AS observacao;
+
+ROLLBACK;

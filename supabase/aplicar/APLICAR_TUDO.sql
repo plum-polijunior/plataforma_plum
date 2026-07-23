@@ -879,9 +879,12 @@ COMMENT ON COLUMN public.organizations.join_code IS
 
 -- Gerador criptográfico. Alfabeto de 32 símbolos sem I/O/0/1 (ambiguidade
 -- visual). 256 % 32 = 0, portanto não há viés de módulo.
+-- `extensions` precisa entrar no search_path: no Supabase o pgcrypto é
+-- instalado nesse schema, e sem ele `gen_random_bytes` não resolve. pg_temp
+-- continua por último, que é o que importa para segurança.
 CREATE OR REPLACE FUNCTION public.gerar_join_code()
 RETURNS TEXT
-LANGUAGE plpgsql VOLATILE SET search_path = public, pg_temp
+LANGUAGE plpgsql VOLATILE SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
   c_alfabeto CONSTANT TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
