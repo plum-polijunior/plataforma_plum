@@ -26,7 +26,6 @@ const Auth = () => {
   
   // State for "Criar uma organização"
   const [newOrgName, setNewOrgName] = useState("");
-  const [newOrgShareId, setNewOrgShareId] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   
@@ -40,16 +39,21 @@ const Auth = () => {
     setIsLoading(true);
     try {
       const shareId = orgId.toUpperCase();
+
+      // MUDANÇA DE SEGURANÇA (achado S-02): antes esta tela fazia
+      // `.from('organizations').select(...)` como `anon`, o que exigia
+      // leitura pública da tabela inteira — vazava a lista de clientes.
+      // Agora usa uma função SECURITY DEFINER que devolve APENAS
+      // { org_id, org_name } da organização correspondente ao código.
       const { data, error } = await supabase
-        .from('organizations')
-        .select('id, name')
-        .eq('share_id', shareId)
-        .maybeSingle();
-        
+        .rpc('resolver_codigo_organizacao', { p_codigo: shareId });
+
       if (error) throw error;
-      
-      if (data) {
-        setFoundOrg(data);
+
+      const encontrada = Array.isArray(data) ? data[0] : data;
+
+      if (encontrada) {
+        setFoundOrg({ id: encontrada.org_id, name: encontrada.org_name });
       } else {
         toast({
           title: "Organização não encontrada",
@@ -125,15 +129,16 @@ const Auth = () => {
     
     setIsLoading(true);
     try {
-      // NÃO enviar `status`: quem decide é o servidor (trigger handle_new_user).
-      // A org aqui é apenas uma candidata — o vínculo definitivo vem do
-      // domínio verificado, e o status nasce sempre 'pendente'.
+      // O que vai no metadata é o CÓDIGO de convite digitado pelo usuário —
+      // um segredo portador, não uma declaração de identidade. O servidor
+      // resolve a organização a partir dele e define o status.
+      // Nunca enviar `organization_id` nem `status`: o trigger os ignora.
       const { error } = await supabase.auth.signUp({
         email: signupEmail,
         password: signupPassword,
         options: {
           data: {
-            organization_id: foundOrg.id
+            join_code: orgId.toUpperCase()
           }
         }
       });
@@ -170,40 +175,39 @@ const Auth = () => {
     setIsLoading(true);
     
     try {
-      const shareId = newOrgShareId.toUpperCase();
-      
-      // Verifica unicidade
-      const { data: existingOrg } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('share_id', shareId)
-        .maybeSingle();
-        
-      if (existingOrg) {
+      // MUDANÇA DE SEGURANÇA (achado S-10): antes o cliente enviava
+      // `is_admin_setup: 'true'` + `org_name` + `org_share_id` no metadata do
+      // signUp e o trigger criava a organização a partir disso. Metadata é
+      // campo livre do cliente — criar organização por ali é o mesmo padrão
+      // que gerou o S-01.
+      //
+      // Agora são dois passos explícitos:
+      //   1. cria a conta (nasce SEM organização);
+      //   2. chama a RPC `criar_organizacao`, já autenticado.
+      // O código de convite é gerado pelo servidor, não escolhido pelo cliente.
+      const { data: signUpData, error: authError } = await supabase.auth.signUp({
+        email: adminEmail,
+        password: adminPassword,
+      });
+
+      if (authError) throw authError;
+
+      // Sem sessão = confirmação de e-mail está ligada. A organização é
+      // criada no primeiro login, pela tela de "sem organização".
+      if (!signUpData.session) {
         toast({
-          title: "ID Indisponível",
-          description: "Este ID já está em uso por outra organização. Escolha outro.",
-          variant: "destructive",
+          title: "Confirme seu e-mail",
+          description:
+            "Enviamos um link de confirmação. Após confirmar e entrar, você concluirá a criação da organização.",
         });
         setIsLoading(false);
         return;
       }
 
-      // Cria o usuário Admin passando os dados para a Trigger SQL criar tudo atomicamente
-      const { error: authError } = await supabase.auth.signUp({
-        email: adminEmail,
-        password: adminPassword,
-        options: {
-          data: {
-            is_admin_setup: 'true',
-            org_name: newOrgName,
-            org_share_id: shareId
-            // `status` removido de propósito: definido no servidor.
-          }
-        }
-      });
-      
-      if (authError) throw authError;
+      const { error: rpcError } = await supabase
+        .rpc('criar_organizacao', { p_nome: newOrgName });
+
+      if (rpcError) throw rpcError;
 
       // Dispara o email de boas vindas (Edge Function)
       try {
@@ -342,16 +346,21 @@ const Auth = () => {
                 {!foundOrg ? (
                   <form onSubmit={handleSearchOrg} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="orgId">ID da Organização (4 caracteres)</Label>
-                      <Input 
-                        id="orgId" 
-                        placeholder="Ex: CALI" 
+                      <Label htmlFor="orgId">Código da Organização</Label>
+                      <Input
+                        id="orgId"
+                        placeholder="Ex: K7M2PQR4XW3T"
                         value={orgId}
-                        onChange={(e) => setOrgId(e.target.value.toUpperCase())}
-                        maxLength={4}
+                        onChange={(e) => setOrgId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                        // 12 = join_code novo. O limite antigo era 4 (share_id),
+                        // que continua aceito para não quebrar as orgs existentes.
+                        maxLength={12}
                         required
-                        className="bg-background/50 uppercase"
+                        className="bg-background/50 uppercase tracking-wider"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        O administrador da sua empresa envia esse código.
+                      </p>
                     </div>
                     <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
                       {isLoading ? "Buscando..." : "Buscar Organização"}
@@ -422,19 +431,15 @@ const Auth = () => {
                     <Input id="new-org-name" placeholder="Ex: Cali Ltda" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} required className="bg-background/50" />
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="new-org-id">ID Compartilhável (4 caracteres)</Label>
-                    <Input 
-                      id="new-org-id" 
-                      placeholder="Ex: CALI" 
-                      value={newOrgShareId} 
-                      onChange={(e) => setNewOrgShareId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
-                      maxLength={4}
-                      minLength={4}
-                      required 
-                      className="bg-background/50 uppercase" 
-                    />
-                    <p className="text-xs text-muted-foreground">Este ID será enviado aos seus colaboradores para entrarem na plataforma.</p>
+                  {/* O código de convite deixou de ser escolhido pelo cliente:
+                      agora é gerado pelo servidor com 12 caracteres aleatórios
+                      (o antigo, de 4, era enumerável em poucas horas). */}
+                  <div className="rounded-lg border border-border/30 bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Um <span className="font-medium text-foreground">código de convite</span> de
+                      12 caracteres será gerado automaticamente. Você o encontra no painel,
+                      em "Minha Organização", para enviar aos seus colaboradores.
+                    </p>
                   </div>
 
                   <div className="pt-4 border-t border-border/20 space-y-4">

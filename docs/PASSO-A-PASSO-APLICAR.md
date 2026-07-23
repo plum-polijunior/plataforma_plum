@@ -91,21 +91,26 @@ Este é o passo principal.
 **Vai demorar alguns segundos.** É normal.
 
 **O que deve aparecer:** uma tabela com duas colunas, `item` e `situacao`.
-Todas as linhas devem dizer **OK**:
+**Todas as 22 linhas** devem dizer **OK**. Elas vêm numeradas pela parte que
+as criou:
 
 ```
-Denylist preenchida (15 dominios)                        OK
-Funcao custom_access_token_hook criada                   OK
-Funcao handle_new_user atualizada                        OK
-Funcao resolve_org_from_identity criada                  OK
-Policy insegura de INSERT em organizations REMOVIDA      OK
-Policy insegura de UPDATE em profiles REMOVIDA           OK
-profiles.organization_id aceita nulo (estado sem-org)    OK
-Tabela domain_binding_audit                              OK
-Tabela organization_domains                              OK
-Tabela public_email_domains                              OK
-Trigger on_auth_user_created ativo                       OK
+1. Policy insegura de INSERT em organizations REMOVIDA    OK
+1. Policy insegura de UPDATE em profiles REMOVIDA         OK
+1. Trigger on_auth_user_created ativo                     OK
+2. Denylist preenchida (15 dominios)                      OK
+2. Funcao custom_access_token_hook criada                 OK
+...
+3. Coluna organizations.join_code                         OK
+3. Funcao criar_organizacao criada (S-10)                 OK
+3. Leitura publica de organizations REMOVIDA (S-02)       OK
+3. Tabela profile_changes_audit                           OK
+D-13. Leads NAO foi alterada (esperado)                   OK
 ```
+
+> A última linha confirma que `Leads` **não** foi tocada — é o
+> comportamento correto, decidido explicitamente. Ela aparecer como `OK`
+> significa "continua como estava".
 
 ### Se der erro
 
@@ -135,8 +140,18 @@ Sem isso o sistema funciona, mas fica mais lento. Leva 30 segundos.
 
 Confirma que tudo funciona antes de você testar na mão.
 
+São **duas** suítes. Rode as duas, uma de cada vez.
+
 1. **SQL Editor** → **+ New query**.
 2. Abra `supabase/tests/sso_dominio_test.sql`, copie tudo, cole, **Run**.
+3. **+ New query** de novo.
+4. Abra `supabase/tests/endurecimento_rls_test.sql`, copie tudo, cole, **Run**.
+
+A segunda deve terminar com:
+
+```
+TODOS OS 10 CENARIOS DE ENDURECIMENTO PASSARAM
+```
 
 **O que esperar:** uma tabela com uma linha só:
 

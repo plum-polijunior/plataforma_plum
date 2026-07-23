@@ -95,34 +95,63 @@ Registrar junto com o resultado, porque muda o que se pode afirmar:
 
 ---
 
-## Resultado do levantamento
+## Resultado do levantamento — CONCLUÍDO em 22/07/2026
 
-> ⬜ **A PREENCHER** — obrigatório mesmo que o resultado seja "nada encontrado".
+**Conclusão: nenhum indício de exploração externa.**
 
 | Campo | Valor |
 |---|---|
-| Data/hora da execução | |
-| Quem executou | |
-| Consulta 1 — total de linhas | |
-| Consulta 1 — linhas marcadas `>>> INVESTIGAR` | |
-| Consulta 2 — membros ativos de domínio divergente | |
-| Consulta 3 — orgs com múltiplos domínios | |
-| Consulta 4 — ativos com e-mail de provedor público | |
-| Consulta 5 — ativos sem `is_admin_setup` | |
-| Consulta 6 — usuários / perfis / orgs | |
+| Data da conclusão | 22/07/2026 |
+| Total de contas na base | **9** |
+| Organizações | 6, **todas de teste** |
+| Contas `@polijunior.com.br` | 4 |
+| Contas `@gmail.com` | 5 (contas pessoais do time, usadas para testar o login) |
+| Contas `pendente` | 1 |
+| Clientes reais na plataforma | **nenhum** |
+| RLS habilitada | sim, nas 6 tabelas de `public` |
 
-**Conclusão:** ⬜ nenhum indício · ⬜ indícios encontrados (detalhar abaixo)
+**Contas conferidas:**
 
-**Contas conferidas individualmente:**
+| E-mail | Organização | Status | Veredito |
+|---|---|---|---|
+| bernardo.machado@polijunior.com.br | NI | ativo | teste interno |
+| bernardohenriquesgm06a@gmail.com | NI | ativo | teste interno |
+| jose.quental@polijunior.com.br | Los Inovadores | ativo | teste interno |
+| ricardo.moussalli@polijunior.com.br | Caqui | ativo | teste interno |
+| kakamoussalli@gmail.com | Caqui | ativo | teste interno |
+| carlos.jaques@polijunior.com.br | Jaques | ativo | teste interno |
+| carlosrichelieu1@gmail.com | Jaques | pendente | teste interno |
+| alexandredelbim@gmail.com | Babygoat | ativo | teste interno |
+| allekka5454@gmail.com | Babygoat2 | ativo | teste interno |
 
-| E-mail | Organização | Status | Veredito | Ação tomada |
-|---|---|---|---|---|
-| | | | | |
+**Nota metodológica.** A consulta baseada em `raw_user_meta_data ? 'status'` mostrou-se
+inútil como indicador de anomalia: o próprio front enviava esse campo em **todo** cadastro
+(`Auth.tsx:107` e `Auth.tsx:173` na versão anterior ao hotfix). O que fechou a auditoria foi
+a conferência nominal das contas com o time.
 
-**Se houver indícios confirmados, avaliar:**
-- Rebaixar as contas afetadas para `pendente` e reconferir com o admin da org.
-- Notificar os clientes cujos dados possam ter sido acessados.
-- Verificar se houve leitura de `datasets` dessas orgs.
+**Correção de contagem.** O levantamento inicial registrou 8 contas; a consulta ao banco
+retornou **9**. Uma conta ficou fora da conferência nominal original. Como todas as 6
+organizações são de teste e não há cliente real na plataforma, o impacto é nulo — mas o
+número correto é 9.
+
+**Veredito:** a vulnerabilidade S-01 foi identificada e corrigida **antes** de qualquer
+cliente real entrar na plataforma. Janela de exposição curta, sem dado de terceiro atrás
+dela. Nenhuma notificação a titular de dados é necessária.
+
+---
+
+## Achado colateral — `polijunior.com.br` em 4 organizações
+
+`bernardo.machado` (NI), `jose.quental` (Los Inovadores), `ricardo.moussalli` (Caqui) e
+`carlos.jaques` (Jaques) compartilham o mesmo domínio de e-mail.
+
+Como `organization_domains.domain` tem constraint `UNIQUE`, **um domínio mapeia para no
+máximo uma organização**. Verificar `polijunior.com.br` faria apenas uma das quatro receber
+roteamento automático.
+
+Não é defeito: é o modelo de tenant por domínio funcionando. Consequência operacional
+registrada: as 6 organizações existentes recebem `join_mode = 'share_id'` no backfill da
+migration `20260722130000`, nunca `'dominio'`.
 
 ---
 
@@ -130,7 +159,8 @@ Registrar junto com o resultado, porque muda o que se pode afirmar:
 
 | Item | Detalhe |
 |---|---|
-| `share_id` de 4 caracteres | Espaço de busca pequeno (~1,7M combinações alfanuméricas) — varrível. Risco hoje contido: só define org candidata, e o pior caso é virar `pendente` numa org errada. **Requer que aprovar um pendente seja ato de conferência, não formalidade.** Avaliar rate limit na rota de busca. |
-| Sem `updated_at` em `profiles` | Impede forense de mudanças de status. Considerar coluna + trigger. |
+| 🔴 **`Leads` aberta para qualquer autenticado** | Policy `Allow authenticated all on Leads` (`ALL`, `qual: true`) — qualquer conta autenticada, de qualquer organização, **lê, altera e apaga** todo o pipeline comercial da Poli Júnior. Mantida intocada por decisão explícita (D-13). Risco hoje aceito porque só há contas do próprio time na base. **Gatilho: fechar esta policy ANTES da criação do primeiro usuário de cliente real.** A partir desse momento, qualquer conta de cliente tem acesso total aos leads. A policy de `INSERT` anônimo (formulário da landing) é legítima e permanece. |
+| ~~`share_id` de 4 caracteres~~ | ✅ **Resolvido** na `20260722130000`: `join_code` de 12 caracteres com aleatoriedade criptográfica e `UNIQUE`. `share_id` segue preenchido e aceito por compatibilidade com as orgs de teste. |
+| ~~Sem `updated_at` em `profiles`~~ | ✅ **Resolvido** na `20260722130000`: coluna + trigger, mais a tabela append-only `profile_changes_audit` registrando `status`, `role_id` e `organization_id` (quem, de → para, quando). |
 | Edge Functions não versionadas | `send-auth-email` e `ai-agents` têm fonte solta na raiz do repo, fora de `supabase/functions/`. Deploy manual pelo painel, sem rastreabilidade. |
 | RLS sem checagem de status | Corrigido na migration de SSO, mas nasceu junto com o schema — revisar qualquer policy futura pelo mesmo critério. |

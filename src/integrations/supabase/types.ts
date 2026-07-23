@@ -19,18 +19,24 @@ export type Database = {
           id: string
           name: string
           share_id: string
+          join_code: string | null
+          join_mode: "share_id" | "dominio"
           created_at: string
         }
         Insert: {
           id?: string
           name: string
           share_id: string
+          join_code?: string | null
+          join_mode?: "share_id" | "dominio"
           created_at?: string
         }
         Update: {
           id?: string
           name?: string
           share_id?: string
+          join_code?: string | null
+          join_mode?: "share_id" | "dominio"
           created_at?: string
         }
         Relationships: []
@@ -169,6 +175,7 @@ export type Database = {
           role_id: string | null
           status: "pendente" | "ativo" | "rejeitado" | "desativado"
           created_at: string
+          updated_at: string
         }
         Insert: {
           id: string
@@ -283,6 +290,21 @@ export type Database = {
         }
         Relationships: []
       }
+      profile_changes_audit: {
+        Row: {
+          id: string
+          profile_id: string
+          organization_id: string | null
+          changed_by: string | null
+          field: string
+          old_value: string | null
+          new_value: string | null
+          changed_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       Leads: {
         Row: {
           created_at: string
@@ -312,7 +334,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      resolver_codigo_organizacao: {
+        Args: { p_codigo: string }
+        Returns: { org_id: string; org_name: string }[]
+      }
+      criar_organizacao: {
+        Args: { p_nome: string }
+        Returns: { org_id: string; org_join_code: string }[]
+      }
     }
     Enums: {
       user_status: "pendente" | "ativo" | "rejeitado" | "desativado"
