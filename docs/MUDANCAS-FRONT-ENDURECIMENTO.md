@@ -95,15 +95,28 @@ organização, sem código de convite e sem nenhuma ação disponível.
 
 ## Onde encontrar o código de convite
 
-Ele **não** é mais escolhido por quem cria a organização. Para recuperá-lo:
+Ele **não** é mais escolhido por quem cria a organização — é gerado pelo
+servidor. O admin o recupera em **Dashboard → Minha Organização**, no cartão
+do cabeçalho, com botão de copiar ao lado.
+
+O cartão se adapta ao `join_mode` da organização:
+
+| `join_mode` | O que o cartão mostra |
+|---|---|
+| `share_id` | **Código de Convite** + botão de copiar |
+| `dominio` | **Entrada: por domínio verificado** — sem código, porque nesse modo ele não funciona |
+
+Mostrar o código numa organização em modo `dominio` seria enganoso: o
+`handle_new_user` recusa códigos de organizações nesse modo.
+
+Se preferir consultar direto no banco:
 
 ```sql
 select name, join_code, join_mode from public.organizations order by name;
 ```
 
-> **Pendência conhecida:** a tela "Minha Organização" ainda não exibe o
-> `join_code`. O texto do formulário de criação já diz que ele estará lá.
-> Até isso ser feito, o código sai pela query acima.
+> O botão de copiar usa `navigator.clipboard`, que exige contexto seguro
+> (HTTPS ou localhost). Fora disso o toast mostra o código para cópia manual.
 
 ---
 

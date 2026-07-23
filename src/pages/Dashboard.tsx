@@ -17,9 +17,11 @@ import {
   Layers, 
   Lock, 
   Unlock, 
-  Loader2, 
+  Loader2,
   Info,
-  Sparkles
+  Sparkles,
+  Copy,
+  Globe
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -231,6 +233,26 @@ export default function Dashboard() {
   };
 
   // Open permissions edit modal
+  // O código de convite substituiu o antigo `share_id` de 4 caracteres.
+  // Ele não é mais escolhido por quem cria a organização — é gerado pelo
+  // servidor —, então esta tela é o lugar onde o admin o recupera.
+  const handleCopiarCodigo = async (codigo: string) => {
+    try {
+      await navigator.clipboard.writeText(codigo);
+      toast({
+        title: "Código copiado",
+        description: "Envie para quem vai entrar na organização.",
+      });
+    } catch {
+      // clipboard exige contexto seguro (https ou localhost)
+      toast({
+        title: "Não foi possível copiar",
+        description: `Copie manualmente: ${codigo}`,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleOpenPermissionModal = (role: any) => {
     setEditingRole(role);
     const rolePerms = allRolePermissions.filter(rp => rp.role_id === role.id);
@@ -399,16 +421,47 @@ export default function Dashboard() {
         </div>
 
         {organization && (
-          <div className="glass px-6 py-3 rounded-xl border border-primary/20 bg-primary/5 flex items-center gap-4">
+          <div className="glass px-6 py-3 rounded-xl border border-primary/20 bg-primary/5 flex items-center gap-4 flex-wrap">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Sua Empresa</p>
               <p className="font-bold text-lg">{organization.name}</p>
             </div>
-            <div className="h-10 w-px bg-border/50 mx-2"></div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">ID Compartilhável</p>
-              <p className="font-bold text-lg text-primary tracking-widest">{organization.share_id}</p>
-            </div>
+
+            <div className="h-10 w-px bg-border/50 mx-2 hidden sm:block"></div>
+
+            {/* Modo de entrada define o que faz sentido mostrar: em 'dominio'
+                o código de convite não é usado, então exibi-lo seria enganoso. */}
+            {organization.join_mode === 'dominio' ? (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Entrada
+                </p>
+                <p className="font-bold text-lg text-primary flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  Por domínio verificado
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Código de Convite
+                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-lg text-primary tracking-widest font-mono">
+                    {organization.join_code ?? organization.share_id}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-primary"
+                    title="Copiar código"
+                    onClick={() => handleCopiarCodigo(organization.join_code ?? organization.share_id)}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
