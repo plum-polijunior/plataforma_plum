@@ -22,7 +22,7 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // Usa a chave dedicada GEMINI_API_KEY2 se existir (cota própria, separada do
 // playground plum-chat); senão cai na GEMINI_API_KEY compartilhada.
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY2") ??
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY2") ??
   Deno.env.get("GEMINI_API_KEY")!;
 
 serve(async (req) => {
@@ -83,7 +83,7 @@ serve(async (req) => {
       typeof body.conversation_id === "string" ? body.conversation_id : null;
     if (!message.trim()) return json({ error: "empty_message" }, 400);
 
-    const brain = new GeminiBrain(GEMINI_API_KEY);
+    const brain = new GeminiBrain(GEMINI_KEY);
     const connector = new GoogleSheetCsvConnector(admin);
     const result = await handle({
       admin,
