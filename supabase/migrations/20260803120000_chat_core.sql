@@ -90,10 +90,18 @@ COMMENT ON TABLE public.conversations IS
 CREATE INDEX IF NOT EXISTS conversations_owner_idx
   ON public.conversations (profile_id, updated_at DESC);
 
-DROP TRIGGER IF EXISTS trg_conversations_updated_at ON public.conversations;
-CREATE TRIGGER trg_conversations_updated_at
-  BEFORE UPDATE ON public.conversations
-  FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_conversations_updated_at'
+      AND tgrelid = 'public.conversations'::regclass
+  ) THEN
+    CREATE TRIGGER trg_conversations_updated_at
+      BEFORE UPDATE ON public.conversations
+      FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+  END IF;
+END $$;
 
 -- -------------------------------------------------------------------------
 -- 5. messages — fonte da verdade, multicanal desde o dia 1
@@ -129,39 +137,53 @@ ALTER TABLE public.assistants    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages      ENABLE ROW LEVEL SECURITY;
 
--- 6.1. assistants: membros ativos leem os bots da sua org; só admin gerencia.
-DROP POLICY IF EXISTS "assistants_select_org" ON public.assistants;
-CREATE POLICY "assistants_select_org"
-  ON public.assistants FOR SELECT
-  USING (organization_id = public.current_org_id() AND public.is_active_member());
+-- As policies são criadas com guarda IF NOT EXISTS (via pg_policies) para não
+-- usar DROP (que a ferramenta sinaliza como "destrutivo"). Idempotente e sem
+-- tocar em nada pré-existente.
+DO $$
+BEGIN
+  -- 6.1. assistants: membros ativos leem os bots da sua org; só admin gerencia.
+  IF NOT EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='assistants' AND policyname='assistants_select_org') THEN
+    CREATE POLICY "assistants_select_org"
+      ON public.assistants FOR SELECT
+      USING (organization_id = public.current_org_id() AND public.is_active_member());
+  END IF;
 
-DROP POLICY IF EXISTS "assistants_admin_write" ON public.assistants;
-CREATE POLICY "assistants_admin_write"
-  ON public.assistants FOR ALL
-  USING (organization_id = public.current_org_id() AND public.is_org_admin())
-  WITH CHECK (organization_id = public.current_org_id() AND public.is_org_admin());
+  IF NOT EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='assistants' AND policyname='assistants_admin_write') THEN
+    CREATE POLICY "assistants_admin_write"
+      ON public.assistants FOR ALL
+      USING (organization_id = public.current_org_id() AND public.is_org_admin())
+      WITH CHECK (organization_id = public.current_org_id() AND public.is_org_admin());
+  END IF;
 
--- 6.2. conversations: o cliente só LÊ as próprias. Criação/edição via service_role
---      (edge function chat-core). Sem policy de INSERT/UPDATE/DELETE para
---      authenticated => RLS nega; service_role ignora RLS.
-DROP POLICY IF EXISTS "conversations_select_own" ON public.conversations;
-CREATE POLICY "conversations_select_own"
-  ON public.conversations FOR SELECT
-  USING (
-    profile_id = auth.uid()
-    AND organization_id = public.current_org_id()
-    AND public.is_active_member()
-  );
+  -- 6.2. conversations: o cliente só LÊ as próprias. Criação/edição via
+  --      service_role (edge function chat-core). Sem policy de escrita para
+  --      authenticated => RLS nega; service_role ignora RLS.
+  IF NOT EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='conversations' AND policyname='conversations_select_own') THEN
+    CREATE POLICY "conversations_select_own"
+      ON public.conversations FOR SELECT
+      USING (
+        profile_id = auth.uid()
+        AND organization_id = public.current_org_id()
+        AND public.is_active_member()
+      );
+  END IF;
 
--- 6.3. messages: o cliente só LÊ as próprias (in e out). Escrita via service_role.
-DROP POLICY IF EXISTS "messages_select_own" ON public.messages;
-CREATE POLICY "messages_select_own"
-  ON public.messages FOR SELECT
-  USING (
-    profile_id = auth.uid()
-    AND organization_id = public.current_org_id()
-    AND public.is_active_member()
-  );
+  -- 6.3. messages: o cliente só LÊ as próprias (in e out). Escrita via service_role.
+  IF NOT EXISTS (SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='messages' AND policyname='messages_select_own') THEN
+    CREATE POLICY "messages_select_own"
+      ON public.messages FOR SELECT
+      USING (
+        profile_id = auth.uid()
+        AND organization_id = public.current_org_id()
+        AND public.is_active_member()
+      );
+  END IF;
+END $$;
 
 -- -------------------------------------------------------------------------
 -- 7. Grants (RLS continua valendo para anon/authenticated; service_role ignora)
