@@ -87,7 +87,11 @@ Deploy: `supabase functions deploy chat-core` (requer secrets `GEMINI_API_KEY`;
 - Dependência externa: para responder sobre **dados reais** (não só schema), ler as linhas
   (hoje em Google Sheets via `datasets.google_sheet_id`), filtradas às `allowed_columns`.
 
-## Fase 3 — Frontend
+## Fase 3 — Frontend  ·  status: CÓDIGO PRONTO (build OK; testar após aplicar Fases 0/1)
+
+Entregue: `src/pages/Chat.tsx` (thread + input + Realtime), rota `/dashboard/chat`
+em `src/App.tsx`, item "Chat" no `DashboardLayout.tsx`, tipos das tabelas novas
+em `src/integrations/supabase/types.ts`. `npm run build` verde.
 
 - Rota protegida `/dashboard/chat` (`src/App.tsx`) + item no menu (`DashboardLayout.tsx`).
 - `src/pages/Chat.tsx`: thread + input; `supabase.functions.invoke('chat-core')`;

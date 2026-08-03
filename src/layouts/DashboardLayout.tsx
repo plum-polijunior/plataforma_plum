@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
-import { Building2, LogOut, Menu, X, Users, Settings, Layers } from "lucide-react";
+import { Building2, LogOut, Menu, X, Users, Settings, Layers, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
@@ -78,6 +78,13 @@ export function DashboardLayout() {
               <Button variant={location.pathname === "/dashboard/database" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/dashboard/database" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                 <Layers className="mr-2 h-4 w-4" />
                 Minha Base de Dados
+              </Button>
+            </Link>
+
+            <Link to="/dashboard/chat">
+              <Button variant={location.pathname === "/dashboard/chat" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/dashboard/chat" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Chat
               </Button>
             </Link>
             {/* Future items */}

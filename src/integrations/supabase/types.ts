@@ -329,6 +329,102 @@ export type Database = {
         }
         Relationships: []
       }
+      assistants: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          persona: string | null
+          system_prompt: string | null
+          is_default: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          persona?: string | null
+          system_prompt?: string | null
+          is_default?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          persona?: string | null
+          system_prompt?: string | null
+          is_default?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      conversations: {
+        Row: {
+          id: string
+          organization_id: string
+          profile_id: string
+          assistant_id: string | null
+          title: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          profile_id: string
+          assistant_id?: string | null
+          title?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          profile_id?: string
+          assistant_id?: string | null
+          title?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          organization_id: string
+          profile_id: string
+          canal: "web" | "whatsapp" | "email"
+          direcao: "in" | "out"
+          content: string
+          meta: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          organization_id: string
+          profile_id: string
+          canal?: "web" | "whatsapp" | "email"
+          direcao: "in" | "out"
+          content: string
+          meta?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          organization_id?: string
+          profile_id?: string
+          canal?: "web" | "whatsapp" | "email"
+          direcao?: "in" | "out"
+          content?: string
+          meta?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
