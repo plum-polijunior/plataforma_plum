@@ -46,7 +46,9 @@ function renderAllowedSchema(schema: AllowedSchema): string {
     .join("\n");
 }
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+// Modelo configurável por secret GEMINI_MODEL (sem precisar mexer no código).
+// Default: gemini-2.5-flash (mesmo modelo do PLUM legado; costuma ter free tier).
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
 
 export class GeminiBrain implements Brain {
   constructor(private apiKey: string) {}
@@ -109,6 +111,12 @@ Responda seguindo as REGRAS ESTRITAS.`;
 
     if (!resp.ok) {
       const body = await resp.text();
+      if (resp.status === 429) {
+        throw new Error(
+          `Limite de uso da IA atingido (429) para o modelo ${GEMINI_MODEL}. ` +
+            `Verifique a cota/billing da chave do Gemini ou troque o modelo (secret GEMINI_MODEL).`,
+        );
+      }
       throw new Error(`Gemini ${resp.status}: ${body}`);
     }
 
