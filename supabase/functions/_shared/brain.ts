@@ -47,8 +47,8 @@ function renderAllowedSchema(schema: AllowedSchema): string {
 }
 
 // Modelo configurável por secret GEMINI_MODEL (sem precisar mexer no código).
-// Default: gemini-2.5-flash (mesmo modelo do PLUM legado; costuma ter free tier).
-const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
+// Default: gemini-2.0-flash (disponível para usuários novos e com free tier).
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
 
 export class GeminiBrain implements Brain {
   constructor(private apiKey: string) {}
