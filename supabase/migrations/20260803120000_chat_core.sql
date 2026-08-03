@@ -166,7 +166,10 @@ CREATE POLICY "messages_select_own"
 -- -------------------------------------------------------------------------
 -- 7. Grants (RLS continua valendo para anon/authenticated; service_role ignora)
 -- -------------------------------------------------------------------------
-GRANT SELECT ON TABLE public.assistants    TO authenticated;
+-- assistants: admin gerencia pelo client (a RLS assistants_admin_write restringe
+-- a escrita a admin da própria org); membros ativos apenas leem.
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.assistants TO authenticated;
+-- conversations/messages: cliente só LÊ (single-writer = edge function chat-core).
 GRANT SELECT ON TABLE public.conversations TO authenticated;
 GRANT SELECT ON TABLE public.messages      TO authenticated;
 GRANT ALL    ON TABLE public.assistants    TO service_role;

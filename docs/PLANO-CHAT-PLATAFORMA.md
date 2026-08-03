@@ -106,11 +106,19 @@ de telefone (R-09). **Nenhuma mudança de schema.**
 
 ## Segurança (checklist de aceite)
 
-- [ ] Org/role/colunas derivados do JWT no servidor — cliente nunca dita.
-- [ ] Cérebro recebe só `allowed_columns`; guard de saída ativo.
-- [ ] RLS dono-only em `conversations`/`messages` (user A não lê chat do user B).
-- [ ] Isolamento entre orgs (org X não vê dado de org Y).
-- [ ] Pergunta sobre tabela fora do cargo → recusa limpa, sem vazar existência.
+- [x] Org/role/colunas derivados do JWT no servidor — cliente nunca dita. *(chat-core/index.ts)*
+- [x] Cérebro recebe só `allowed_columns`. *(rbac.ts + brain.ts)* — guard de saída: pendente (Fase 2).
+- [x] RLS dono-only em `conversations`/`messages` (user A não lê chat do user B). *(teste cenário 1)*
+- [x] Isolamento entre orgs (org X não vê dado de org Y). *(teste cenário 2)*
+- [x] Cliente não escreve em `conversations`/`messages` (single-writer). *(teste 4 e 5)*
+- [x] Pendente não lê nada (gate `is_active_member`). *(teste cenário 3)*
+- [x] `assistants`: admin gerencia a própria org; cross-tenant/não-admin barrados. *(teste 6)*
+- [ ] Pergunta sobre tabela fora do cargo → recusa limpa, sem vazar existência. *(validar em runtime após deploy)*
+
+**Teste de isolamento:** `supabase/tests/chat_core_isolation_test.sql` — cole no SQL
+Editor e rode (transação com ROLLBACK; não persiste nada). Cobre os 6 cenários acima.
+Requer a correção do GRANT de escrita de `assistants` a `authenticated` (a RLS
+`assistants_admin_write` restringe a admin) — já incluída na migration.
 
 ## Estimativa
 
