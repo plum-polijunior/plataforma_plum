@@ -20,7 +20,10 @@ import type { Principal } from "../_shared/rbac.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
+// Usa a chave dedicada GEMINI_API_KEY2 se existir (cota própria, separada do
+// playground plum-chat); senão cai na GEMINI_API_KEY compartilhada.
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY2") ??
+  Deno.env.get("GEMINI_API_KEY")!;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
