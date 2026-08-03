@@ -79,13 +79,26 @@ Deploy: `supabase functions deploy chat-core` (requer secrets `GEMINI_API_KEY`;
   10. Retorna `{ conversation_id, answer }`.
 - `supabase/functions/chat-core/index.ts` — casca web (recebe JWT, chama `chatCore.handle`).
 
-## Fase 2 — Interface do cérebro
+## Fase 2 — Cérebro sobre dados reais + conector  ·  status: CÓDIGO PRONTO (deploy no Supabase)
 
-- `supabase/functions/_shared/brain.ts` — `interface Brain { answer(i): Promise<{text, meta?}> }`.
-  - Agora: `GeminiBrain` (reaproveita padrão anti-alucinação do `plum-chat`, recebendo só `allowedSchema`).
-  - Depois: `DslBrain` (motor DSL / FastAPI, outro repo) — troca por trás.
-- Dependência externa: para responder sobre **dados reais** (não só schema), ler as linhas
-  (hoje em Google Sheets via `datasets.google_sheet_id`), filtradas às `allowed_columns`.
+- `supabase/functions/_shared/brain.ts` — `interface Brain`; `GeminiBrain` agora
+  calcula sobre as linhas fornecidas (passo a passo, sem inventar), respeita os
+  AVISOS DE CARGA e recusa fora do escopo do cargo. Trocável por `DslBrain` depois.
+- `supabase/functions/_shared/connectors.ts` — `interface DataConnector` +
+  `GoogleSheetCsvConnector`: lê o CSV exportado (`datasets.google_sheet_id`),
+  **projeta às `allowed_columns`** (defesa dupla do RBAC), normaliza cabeçalhos
+  para snake_case, limita linhas e reporta truncagem/colunas ausentes.
+- `chatCore.handle` busca os dados (best-effort por base; falha vira nota, não
+  derruba a resposta), com teto global de linhas (`MAX_TOTAL_ROWS`).
+
+**Premissas / limites honestos:**
+- A planilha precisa estar **acessível por link** (o conector detecta planilha
+  privada — HTML de login — e degrada para resposta só-estrutura, sem inventar).
+- Mandar linhas cruas ao LLM só escala para **bases pequenas**: há teto de linhas
+  e as respostas são sobre a **amostra** quando truncadas. O caminho
+  determinístico/escalável continua sendo o **motor DSL** (R-02) — este conector
+  é a ponte até ele. Alternativas plugáveis: service-account (planilhas privadas),
+  conector SQL, ou o próprio `DslBrain`.
 
 ## Fase 3 — Frontend  ·  status: CÓDIGO PRONTO (build OK; testar após aplicar Fases 0/1)
 

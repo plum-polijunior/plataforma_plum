@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders, json } from "../_shared/cors.ts";
 import { GeminiBrain } from "../_shared/brain.ts";
 import { handle } from "../_shared/chatCore.ts";
+import { GoogleSheetCsvConnector } from "../_shared/connectors.ts";
 import type { Principal } from "../_shared/rbac.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -80,6 +81,7 @@ serve(async (req) => {
     if (!message.trim()) return json({ error: "empty_message" }, 400);
 
     const brain = new GeminiBrain(GEMINI_API_KEY);
+    const connector = new GoogleSheetCsvConnector(admin);
     const result = await handle({
       admin,
       brain,
@@ -87,6 +89,7 @@ serve(async (req) => {
       message,
       canal: "web",
       conversationId,
+      connector,
     });
 
     return json({

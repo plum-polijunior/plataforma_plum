@@ -19,8 +19,10 @@ export interface BrainInput {
   allowedSchema: AllowedSchema;
   history: { direcao: "in" | "out"; content: string }[];
   persona?: string | null;
-  /** Linhas reais por dataset, quando houver conector (futuro). */
+  /** Linhas reais por dataset (já projetadas às colunas permitidas). */
   data?: Record<string, unknown[]> | null;
+  /** Avisos de carga (truncagem, base indisponível, coluna sem dado). */
+  dataNotes?: string[];
 }
 
 export interface BrainResult {
@@ -52,25 +54,33 @@ export class GeminiBrain implements Brain {
   async answer(input: BrainInput): Promise<BrainResult> {
     const schemaText = renderAllowedSchema(input.allowedSchema);
     const temNada = input.allowedSchema.length === 0;
+    const temDados = !!input.data &&
+      Object.values(input.data).some((rows) => Array.isArray(rows) && rows.length > 0);
 
     const systemInstruction = `Você é o assistente do PLUM, um consultor de dados em linguagem natural (PT-BR).
 
 REGRAS ESTRITAS (OBRIGATÓRIAS):
 1. Você SÓ pode falar sobre as bases e colunas listadas em "BASES LIBERADAS". É o escopo do CARGO deste usuário.
 2. Se a pergunta for sobre uma tabela/coluna que NÃO está na lista, responda educadamente que o usuário não tem acesso a esse dado e que isso é definido pelo cargo dele — sem revelar que a base existe.
-3. NÃO invente dados nem valores. NÃO faça suposições.
-4. Seja breve, objetivo e "executivo". Use R$ para valores monetários.
-5. Se a pergunta exigir VALORES reais das linhas (e não apenas o significado das colunas), explique que a consulta aos dados ainda está sendo conectada e peça para o usuário reformular ou aguardar — nunca chute números.
-${temNada ? "6. Este usuário NÃO tem nenhuma base liberada. Oriente-o a pedir acesso ao administrador da organização." : ""}`;
+3. NÃO invente dados nem valores. Use EXCLUSIVAMENTE as linhas fornecidas em "DADOS". Se um valor não está nos dados, diga que não é possível calcular com o que há.
+4. Seja breve, objetivo e "executivo". Use R$ para valores monetários (formato brasileiro).
+5. Ao calcular valores/somatórios, mostre o passo a passo com os números EXATOS dos dados (ex.: item: preço × quantidade = subtotal) e só então o total. Não arredonde antes de somar.
+6. Respeite os AVISOS DE CARGA: se os dados vieram truncados (amostra), deixe claro que o resultado é sobre a amostra, não a base inteira.
+${temNada ? "7. Este usuário NÃO tem nenhuma base liberada. Oriente-o a pedir acesso ao administrador da organização." : ""}
+${!temNada && !temDados ? "7. Não há linhas de dados conectadas agora: descreva o que é possível responder pela ESTRUTURA das colunas e peça para o usuário aguardar a conexão dos dados — nunca invente números." : ""}`;
 
     const historyText = input.history
       .slice(-12)
       .map((m) => `${m.direcao === "in" ? "Usuário" : "PLUM"}: ${m.content}`)
       .join("\n");
 
+    const notesText = (input.dataNotes ?? []).length > 0
+      ? `\nAVISOS DE CARGA:\n${(input.dataNotes ?? []).map((n) => `- ${n}`).join("\n")}\n`
+      : "";
+
     const userPrompt = `${input.persona ? `PERSONA DO ASSISTENTE:\n${input.persona}\n\n` : ""}BASES LIBERADAS (escopo do cargo):
 ${schemaText}
-${input.data ? `\nAMOSTRA DE DADOS (JSON):\n${JSON.stringify(input.data)}\n` : ""}
+${temDados ? `\nDADOS (JSON — use APENAS estes valores):\n${JSON.stringify(input.data)}\n` : ""}${notesText}
 HISTÓRICO RECENTE:
 ${historyText || "(início da conversa)"}
 
@@ -112,6 +122,7 @@ Responda seguindo as REGRAS ESTRITAS.`;
       meta: {
         model: GEMINI_MODEL,
         allowedDatasets: input.allowedSchema.map((d) => d.name),
+        usedData: temDados,
       },
     };
   }

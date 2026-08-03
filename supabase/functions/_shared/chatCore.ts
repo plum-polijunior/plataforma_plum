@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { type Brain } from "./brain.ts";
 import { type Principal, resolveAllowedSchema } from "./rbac.ts";
+import { type DataConnector } from "./connectors.ts";
 
 export interface HandleInput {
   admin: SupabaseClient;
@@ -19,7 +20,12 @@ export interface HandleInput {
   message: string;
   canal: "web" | "whatsapp" | "email";
   conversationId?: string | null;
+  /** Conector opcional; se ausente, o cérebro responde só pela semântica. */
+  connector?: DataConnector | null;
 }
+
+/** Teto total de linhas enviadas ao cérebro numa consulta (custo/latência). */
+const MAX_TOTAL_ROWS = 600;
 
 export interface HandleResult {
   conversationId: string;
@@ -118,16 +124,52 @@ export async function handle(input: HandleInput): Promise<HandleResult> {
   // Enforcement de RBAC: o cérebro só recebe o que o cargo pode ver.
   const allowedSchema = await resolveAllowedSchema(admin, principal);
 
+  // Busca as linhas reais (só das bases/colunas permitidas), se houver conector.
+  // Best-effort: falha de uma base não derruba a resposta — vira nota de diagnóstico.
+  let data: Record<string, unknown[]> | null = null;
+  const dataNotes: string[] = [];
+  if (input.connector && allowedSchema.length > 0) {
+    data = {};
+    let total = 0;
+    for (const ds of allowedSchema) {
+      if (total >= MAX_TOTAL_ROWS) {
+        dataNotes.push(`Base "${ds.name}" não carregada (limite de ${MAX_TOTAL_ROWS} linhas atingido).`);
+        continue;
+      }
+      try {
+        const cols = ds.columns.map((c) => c.name);
+        const res = await input.connector.fetchRows(ds.datasetId, cols);
+        data[ds.name] = res.rows;
+        total += res.rows.length;
+        if (res.rows.length === 0) {
+          dataNotes.push(`Base "${ds.name}" sem dados conectados (respondendo só pela estrutura).`);
+        }
+        if (res.truncated) {
+          dataNotes.push(`Base "${ds.name}" truncada em ${res.rows.length} linhas (amostra).`);
+        }
+        if (res.missingColumns.length > 0) {
+          dataNotes.push(`Base "${ds.name}": colunas sem dados na fonte: ${res.missingColumns.join(", ")}.`);
+        }
+      } catch (e) {
+        const m = e instanceof Error ? e.message : "erro";
+        dataNotes.push(`Base "${ds.name}" indisponível (${m}).`);
+      }
+    }
+  }
+
   const { text, meta } = await brain.answer({
     message,
     allowedSchema,
     // O histórico já inclui a mensagem atual (foi inserida acima); remove-a do contexto.
     history: history.slice(0, -1),
+    data,
+    dataNotes,
   });
 
   await insertMessage(admin, principal, conversationId, canal, "out", text, {
     ...meta,
     canal,
+    dataNotes: dataNotes.length > 0 ? dataNotes : undefined,
   });
 
   // Bump em updated_at para a conversa subir na lista (ordenada por updated_at).
