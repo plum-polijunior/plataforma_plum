@@ -16,55 +16,92 @@ export default function DatabasePage() {
   const [selectedDataset, setSelectedDataset] = useState<any>(null);
   const [showPipeline, setShowPipeline] = useState(false);
 
+  // Hook do React que executa um efeito colateral após a renderização do componente
   useEffect(() => {
+    // Define uma função assíncrona para buscar os dados no Supabase
     const fetchData = async () => {
+      // Inicia um bloco try para capturar eventuais erros durante as requisições
       try {
+        // Busca a sessão atual de autenticação do usuário no Supabase
         const { data: { session } } = await supabase.auth.getSession();
+        // Se não houver uma sessão ativa (usuário não logado), interrompe a execução da função
         if (!session) return;
 
+        // Consulta a tabela 'profiles' no banco de dados do Supabase
         const { data: profileData } = await supabase
+          // Especifica a tabela 'profiles'
           .from('profiles')
+          // Seleciona todas as colunas
           .select('*')
+          // Filtra onde a coluna 'id' seja igual ao ID do usuário autenticado
           .eq('id', session.user.id)
+          // Espera retornar um único registro
           .single();
 
+        // Verifica se o perfil foi encontrado e se o usuário possui uma organização associada
         if (profileData && profileData.organization_id) {
+          // Consulta a tabela 'organizations' para obter os dados da empresa do usuário
           const { data: orgData } = await supabase
+            // Especifica a tabela 'organizations'
             .from('organizations')
+            // Seleciona todas as colunas
             .select('*')
+            // Filtra pelo ID da organização encontrado no perfil do usuário
             .eq('id', profileData.organization_id)
+            // Espera retornar um único registro
             .single();
+          // Salva os dados da organização no estado local 'organization'
           setOrganization(orgData);
 
+          // Verifica se o perfil possui um ID de cargo (role_id) atribuído
           if (profileData.role_id) {
+            // Consulta a tabela 'roles' para obter o nome do cargo do usuário
             const { data: roleData } = await supabase
+              // Especifica a tabela 'roles'
               .from('roles')
+              // Seleciona apenas a coluna 'name'
               .select('name')
+              // Filtra pelo ID do cargo (role_id) do perfil
               .eq('id', profileData.role_id)
+              // Retorna o registro se existir, ou null se não encontrar (sem lançar erro)
               .maybeSingle();
 
+            // Verifica se encontrou o cargo e se o nome dele é 'admin' (convertendo para minúsculas)
             if (roleData && roleData.name.toLowerCase() === 'admin') {
+              // Atualiza o estado 'isAdmin' para true se for um administrador
               setIsAdmin(true);
             }
           }
 
-          // Fetch datasets
+          // Comentário original: Busca as bases de dados (datasets)
+          // Consulta a tabela 'datasets' no Supabase
           const { data: dsets } = await supabase
+            // Especifica a tabela 'datasets'
             .from('datasets')
+            // Seleciona todas as colunas
             .select('*')
+            // Filtra os conjuntos de dados pertencentes à organização do usuário
             .eq('organization_id', profileData.organization_id)
+            // Ordena os registros pela data de criação em ordem decrescente (mais recentes primeiro)
             .order('created_at', { ascending: false });
 
+          // Se encontrar datasets no banco, atualiza o estado local 'datasets' com a lista recebida
           if (dsets) setDatasets(dsets);
         }
+      // Bloco que captura qualquer erro que ocorra dentro do bloco try
       } catch (error) {
+        // Exibe o erro no console do navegador para depuração
         console.error(error);
+      // Bloco que sempre será executado ao final, ocorrendo erro ou não
       } finally {
+        // Define o estado de carregamento como falso para liberar a exibição da interface
         setIsLoading(false);
       }
     };
+    // Executa a função assíncrona criada acima
     fetchData();
-  }, [showPipeline]); // Refetch when going back to dashboard
+  // Array de dependências: recarrega os dados quando o estado 'showPipeline' mudar
+  }, [showPipeline]);
 
   if (isLoading) return <div>Carregando...</div>;
 

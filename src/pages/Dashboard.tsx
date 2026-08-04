@@ -5,18 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  ShieldAlert, 
-  Users as UsersIcon, 
-  BadgeCheck, 
-  XCircle, 
-  Database, 
-  Settings, 
-  Check, 
-  Sliders, 
-  Layers, 
-  Lock, 
-  Unlock, 
+import {
+  ShieldAlert,
+  Users as UsersIcon,
+  BadgeCheck,
+  XCircle,
+  Database,
+  Settings,
+  Check,
+  Sliders,
+  Layers,
+  Lock,
+  Unlock,
   Loader2,
   Info,
   Sparkles,
@@ -73,7 +73,7 @@ export default function Dashboard() {
       });
       return;
     }
-    
+
     // Validar apenas letras e números (sem espaços/símbolos)
     if (!/^[a-zA-Z0-9]+$/.test(newJoinCode)) {
       toast({
@@ -89,19 +89,19 @@ export default function Dashboard() {
         .from('organizations')
         .update({ join_code: newJoinCode.toUpperCase() })
         .eq('id', organization.id);
-        
+
       if (error) {
         if (error.code === '23505') {
-          throw new Error("Este código já está em uso por outra empresa. Escolha outro.");
+          throw new Error("Este código já está em uso.");
         }
         throw error;
       }
-      
+
       toast({
         title: "Código atualizado!",
         description: "O novo código de convite foi salvo com sucesso."
       });
-      
+
       setIsEditingJoinCode(false);
       fetchData(); // re-fetch to update organization state
     } catch (error: any) {
@@ -268,12 +268,12 @@ export default function Dashboard() {
   // Helper to safely extract columns from dataset schema_metadata
   const getDatasetColumns = (dataset: any): { name: string; description: string }[] => {
     if (!dataset || !dataset.schema_metadata) return [];
-    const meta = typeof dataset.schema_metadata === 'string' 
-      ? JSON.parse(dataset.schema_metadata) 
+    const meta = typeof dataset.schema_metadata === 'string'
+      ? JSON.parse(dataset.schema_metadata)
       : dataset.schema_metadata;
 
     if (Array.isArray(meta.columns)) {
-      return meta.columns.map((c: any) => 
+      return meta.columns.map((c: any) =>
         typeof c === 'string' ? { name: c, description: '' } : { name: c.name || String(c), description: c.description || c.semantic_definition || '' }
       );
     }
@@ -418,9 +418,9 @@ export default function Dashboard() {
         if (insError) throw insError;
       }
 
-      toast({ 
-        title: "Permissões salvas com sucesso!", 
-        description: `As regras de acesso para "${editingRole.name}" foram salvas na tabela relacional.` 
+      toast({
+        title: "Permissões salvas com sucesso!",
+        description: `As regras de acesso para "${editingRole.name}" foram salvas na tabela relacional.`
       });
       setEditingRole(null);
       fetchData();
@@ -502,10 +502,10 @@ export default function Dashboard() {
                 </p>
                 {isEditingJoinCode ? (
                   <div className="flex items-center gap-2 mt-1">
-                    <Input 
-                      value={newJoinCode} 
-                      onChange={(e) => setNewJoinCode(e.target.value)} 
-                      placeholder="Ex: MINHAEMPRESA" 
+                    <Input
+                      value={newJoinCode}
+                      onChange={(e) => setNewJoinCode(e.target.value)}
+                      placeholder="Ex: MINHAEMPRESA"
                       className="h-8 w-40 font-mono text-sm uppercase"
                       maxLength={12}
                     />
@@ -697,9 +697,9 @@ export default function Dashboard() {
                               <Sliders className="h-4 w-4 text-primary shrink-0" />
                               <span><strong>Permissões que serão concedidas ({selectedRoleObj.name}):</strong> {getRoleSummaryText(selectedRoleObj)}</span>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="h-7 text-[11px] text-primary hover:text-primary/80 hover:bg-primary/10"
                               onClick={() => handleOpenPermissionModal(selectedRoleObj)}
                             >
@@ -755,9 +755,9 @@ export default function Dashboard() {
                           </div>
 
                           {isAdmin && !isRoleAdmin && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               className="h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
                               onClick={() => handleOpenPermissionModal(role)}
                             >
@@ -797,9 +797,9 @@ export default function Dashboard() {
                         )}
 
                         {isAdmin && !isRoleAdmin && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="text-xs text-muted-foreground hover:text-foreground"
                             onClick={() => handleOpenPermissionModal(role)}
                           >
@@ -906,20 +906,20 @@ export default function Dashboard() {
                                 <div className="flex items-center justify-between bg-muted/40 p-2.5 rounded-lg border border-border/40">
                                   <span className="text-xs font-medium text-foreground/80">Seleção Rápida de Colunas:</span>
                                   <div className="flex gap-2">
-                                    <Button 
-                                      type="button" 
-                                      variant="ghost" 
-                                      size="sm" 
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
                                       className="h-7 text-xs text-primary hover:bg-primary/10"
                                       onClick={() => handleSetAllColumns(ds.id, true)}
                                       disabled={allSelected}
                                     >
                                       Marcar Todas
                                     </Button>
-                                    <Button 
-                                      type="button" 
-                                      variant="ghost" 
-                                      size="sm" 
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
                                       className="h-7 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                       onClick={() => handleSetAllColumns(ds.id, false)}
                                       disabled={allowedCols.length === 0}
@@ -933,14 +933,13 @@ export default function Dashboard() {
                                   {cols.map(col => {
                                     const isColChecked = allowedCols.includes(col.name);
                                     return (
-                                      <div 
-                                        key={col.name} 
+                                      <div
+                                        key={col.name}
                                         onClick={() => handleToggleColumn(ds.id, col.name)}
-                                        className={`flex items-start gap-2.5 p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                                          isColChecked 
-                                            ? 'border-primary/30 bg-primary/5 text-foreground' 
+                                        className={`flex items-start gap-2.5 p-3 rounded-lg border text-left cursor-pointer transition-all ${isColChecked
+                                            ? 'border-primary/30 bg-primary/5 text-foreground'
                                             : 'border-border/40 bg-background/40 text-muted-foreground opacity-60 hover:opacity-100'
-                                        }`}
+                                          }`}
                                       >
                                         <Checkbox
                                           checked={isColChecked}
@@ -972,9 +971,9 @@ export default function Dashboard() {
           </div>
 
           <DialogFooter className="border-t border-border/40 pt-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => setEditingRole(null)}
               disabled={isSavingPermissions}
               className="w-full sm:w-auto"
@@ -982,8 +981,8 @@ export default function Dashboard() {
               Cancelar
             </Button>
             {editingRole?.name?.toLowerCase() !== 'admin' && (
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 onClick={handleSavePermissions}
                 disabled={isSavingPermissions}
                 className="w-full sm:w-auto px-6 font-semibold shadow-md"

@@ -28,7 +28,7 @@ serve(async (req: Request) => {
     if (action === 'guard') {
       systemInstruction = "Você é um agente de segurança estrito do sistema Plum. Sua única função é classificar se a intenção do usuário está relacionada à construção, edição ou análise de bases de dados, colunas de planilhas ou arquitetura de chatbot para a plataforma Plum. Responda EXATAMENTE com a palavra 'PERMITIDO' se estiver dentro do escopo, ou 'BLOQUEADO' se for qualquer outro assunto (como receitas, piadas, código malicioso ou conversas genéricas).";
       userPrompt = `Analise este prompt de usuário: "${prompt}"`;
-    } 
+    }
     // =========================================================================
     // AGENTE 1: PREVISÃO SEMÂNTICA
     // =========================================================================
@@ -54,16 +54,17 @@ serve(async (req: Request) => {
     // AGENTE 3.1: REFINAMENTO DE FORMATAÇÃO
     // =========================================================================
     else if (action === 'refine_format') {
-      systemInstruction = "Você é um Engenheiro de Dados Especialista. O usuário discordou da formatação anterior e enviou um feedback. Sua tarefa é pegar os dados originais, aplicar as regras de formatação antigas COM AS CORREÇÕES PEDIDAS PELO USUÁRIO. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (as regras atualizadas por coluna).";
-      // columns = regras antigas, prompt = feedback do usuário
-      userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nRegras Anteriores: ${JSON.stringify(columns)}\nFeedback/Correção do Usuário: "${prompt}"\nPor favor, aplique a nova formatação e retorne o JSON solicitado.`;
+      systemInstruction = "Você é um Engenheiro de Dados Especialista. O usuário solicitou uma alteração pontual nas regras de formatação. Sua tarefa é analisar as regras de formatação atuais (formattingRules) e a solicitação do usuário, e alterar APENAS a regra referente à coluna ou solicitação mencionada pelo usuário, MANTENDO TODAS AS OUTRAS REGRAS INTACTAS sem modificar o que não foi pedido. Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras de dados originais (dataSamples). Você DEVE retornar ESTRITAMENTE um JSON com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (um objeto contendo todas as regras de formatação por coluna, com apenas a regra solicitada modificada).";
+      // columns = regras de formatação atuais (formattingRules), prompt = solicitação do usuário
+      userPrompt = `Regras de Formatação Atuais (formattingRules): ${JSON.stringify(columns)}\nAmostras de Dados Originais (dataSamples): ${JSON.stringify(dataSamples)}\nSolicitação de Alteração do Usuário: "${prompt}"\nAltere APENAS o que o usuário solicitou nas regras e retorne o JSON com 'formattedSamples' e 'formattingRules'.`;
     }
     // =========================================================================
     // AGENTE DE SUPORTE (COLUNAS)
     // =========================================================================
     else if (action === 'column_support') {
-      systemInstruction = "Você é um assistente de IA educado. O usuário fez o upload de uma planilha e está na etapa de revisão de colunas. Se o usuário perguntar por que uma coluna está faltando ou reclamar sobre as colunas, você DEVE explicar de forma amigável: 'O Plum lê estritamente os nomes das colunas que estão na primeira linha (Linha 1) da sua planilha. Se você tinha dados ou colunas abaixo disso, ou mescladas, elas não serão identificadas. Por favor, crie uma aba nova apenas com as colunas na linha 1 e tente fazer o upload novamente.' Responda apenas isso de forma natural. Se a pergunta for sobre outra coisa, dê uma resposta curta e útil. Retorne apenas texto.";
-      userPrompt = `Mensagem do usuário: "${prompt}"`;
+      systemInstruction = "Você é um Engenheiro de Dados Especialista. O usuário discordou da formatação anterior e enviou um feedback. Sua tarefa é pegar os dados originais, aplicar as regras de formatação antigas COM AS CORREÇÕES PEDIDAS PELO USUÁRIO. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (as regras atualizadas por coluna).";
+      // columns = regras antigas, prompt = feedback do usuário
+      userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nRegras Anteriores: ${JSON.stringify(columns)}\nFeedback/Correção do Usuário: "${prompt}"\nPor favor, aplique a nova formatação e retorne o JSON solicitado.`;
     }
     else {
       throw new Error('Ação inválida.');
@@ -71,8 +72,8 @@ serve(async (req: Request) => {
 
     // Chamada para a API do Gemini
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY?.trim()}`;
-    
-    const isJsonResponse = ['predict_semantics', 'refine_semantics', 'format_data'].includes(action);
+
+    const isJsonResponse = ['predict_semantics', 'refine_semantics', 'format_data', 'refine_format'].includes(action);
 
     const res = await fetch(geminiUrl, {
       method: 'POST',
@@ -81,7 +82,7 @@ serve(async (req: Request) => {
       },
       body: JSON.stringify({
         system_instruction: {
-            parts: [{ text: systemInstruction }]
+          parts: [{ text: systemInstruction }]
         },
         contents: [
           {
@@ -89,8 +90,8 @@ serve(async (req: Request) => {
           }
         ],
         generationConfig: {
-            temperature: 0.2,
-            response_mime_type: isJsonResponse ? 'application/json' : 'text/plain',
+          temperature: 0.2,
+          response_mime_type: isJsonResponse ? 'application/json' : 'text/plain',
         }
       })
     });
@@ -98,17 +99,17 @@ serve(async (req: Request) => {
     const data = await res.json();
 
     if (res.ok) {
-        const generatedText = data.candidates[0].content.parts[0].text;
-        let finalResponse = generatedText;
+      const generatedText = data.candidates[0].content.parts[0].text;
+      let finalResponse = generatedText;
 
-        if (isJsonResponse) {
-            try {
-                // Tenta fazer parse do JSON retornado pelo Gemini para garantir que é válido
-                finalResponse = JSON.parse(generatedText);
-            } catch (e) {
-                console.error("Gemini não retornou um JSON válido:", generatedText);
-            }
+      if (isJsonResponse) {
+        try {
+          // Tenta fazer parse do JSON retornado pelo Gemini para garantir que é válido
+          finalResponse = JSON.parse(generatedText);
+        } catch (e) {
+          console.error("Gemini não retornou um JSON válido:", generatedText);
         }
+      }
 
       return new Response(JSON.stringify({ result: finalResponse }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

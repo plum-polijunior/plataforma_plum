@@ -194,19 +194,33 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       if (formatRes.error) throw new Error(formatRes.error.message || "Erro na IA de Refinamento");
 
-      const formatResult = formatRes.data.result;
-      if (formatResult && formatResult.formattedSamples) {
-        setFormattedDataSamples(formatResult.formattedSamples);
-        setFormattingRules(formatResult.formattingRules || {});
+      let formatResult = formatRes.data?.result;
+      if (typeof formatResult === "string") {
+        try {
+          const cleaned = formatResult.replace(/```json\n?|\n?```/g, "").trim();
+          formatResult = JSON.parse(cleaned);
+        } catch (e) {
+          console.error("Falha ao analisar JSON retornado:", e);
+        }
+      }
+
+      if (formatResult && (formatResult.formattedSamples || formatResult.formattingRules)) {
+        const newFormattedSamples = formatResult.formattedSamples || formattedDataSamples;
+        const newFormattingRules = formatResult.formattingRules || formattingRules;
+
+        setFormattedDataSamples(newFormattedSamples);
+        setFormattingRules(newFormattingRules);
         setFormatQuery(""); // Limpa o chat após sucesso
         
         // Salva rascunho
         saveSketch(2, {
-          formattedDataSamples: formatResult.formattedSamples,
-          formattingRules: formatResult.formattingRules || {}
+          formattedDataSamples: newFormattedSamples,
+          formattingRules: newFormattingRules
         });
 
         toast({ title: "Formatação atualizada!", description: "A IA aplicou as suas correções.", variant: "default" });
+      } else {
+        throw new Error("A IA não retornou um formato válido.");
       }
     } catch (error: any) {
       toast({ title: "Erro no Refinamento", description: error.message, variant: "destructive" });
