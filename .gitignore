@@ -29,3 +29,6 @@ dist-ssr
 # Artefatos locais do Supabase CLI (gerados por `supabase start`)
 supabase/.branches
 supabase/.temp
+
+#python bytecode, commitando a pasta mas não o resto
+__pycache__/* 

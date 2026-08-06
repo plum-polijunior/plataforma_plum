@@ -389,3 +389,54 @@ def _eval_single(df: pd.DataFrame, node: Dict[str, Any]) -> pd.Series:
         return s.isin(right).fillna(False)
 
     raise ValueError(f"Operador where nao suportado: '{op}'")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Execução com Regras de Formatação (Agente 3 & 3.1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def apply_formatting_rules(df: pd.DataFrame, formatting_rules: Dict[str, str]) -> pd.DataFrame:
+    """
+    Aplica as regras de formatação (formattingRules) especificadas pelo Agente 3/3.1
+    sobre as colunas do DataFrame Pandas.
+    """
+    df = df.copy()
+    for col, rule in formatting_rules.items():
+        if col not in df.columns:
+            continue
+
+        rule_lower = str(rule).lower()
+
+        # Se a regra menciona limpar moeda / R$ ou converter para número/float/int
+        if any(keyword in rule_lower for keyword in ["r$", "moeda", "float", "int", "número", "numero", "decimal"]):
+            s = df[col].astype(str)
+            s = s.str.replace(r"[R$\s]", "", regex=True)
+            s = s.str.replace(r"\.", "", regex=True)  # Remove ponto de milhar se houver
+            s = s.str.replace(",", ".", regex=False)   # Troca vírgula por ponto decimal
+            df[col] = pd.to_numeric(s, errors="coerce")
+
+        # Se a regra menciona converter para data
+        elif "data" in rule_lower or "date" in rule_lower:
+            df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+
+    return df
+
+
+def execute_plan_with_formatting(
+    plan: Dict[str, Any],
+    tables: Dict[str, pd.DataFrame],
+    formatting_rules: Dict[str, str] | None = None
+) -> Dict[str, Any]:
+    """
+    Pré-processa as tabelas aplicando as regras de formatação (formattingRules)
+    e executa o plano de consulta determinístico gerado pelo Agente A.
+    """
+    if not formatting_rules:
+        return execute_plan(plan, tables)
+
+    formatted_tables: Dict[str, pd.DataFrame] = {}
+    for table_name, df in tables.items():
+        formatted_tables[table_name] = apply_formatting_rules(df, formatting_rules)
+
+    return execute_plan(plan, formatted_tables)
+
