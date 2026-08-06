@@ -17,6 +17,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [sheetUrl, setSheetUrl] = useState("");
 
   // Data States
   const [originalColumns, setOriginalColumns] = useState<string[]>([]);
@@ -368,7 +369,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     }
   };
 
-  const handleFinalizeAndSave = async () => {
+  const handleFinalizeAndSave = async (sheetUrlToSave: string) => {
     if (!organizationId || !datasetId) {
       toast({ title: "Erro", description: "Sessão inválida", variant: "destructive" });
       return;
@@ -391,6 +392,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           name: fileName || "Nova Planilha",
           status: "active",
           schema_metadata: schemaMetadata as any,
+          google_sheet_url: sheetUrlToSave,
           sketch: null // Limpa o rascunho
         })
         .eq('id', datasetId);
@@ -399,7 +401,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       toast({
         title: "Planilha e Dicionário Salvos com Sucesso!",
-        description: `A base "${fileName || "Nova Planilha"}" foi registrada no Supabase e está pronta para configuração de acessos por cargo.`
+        description: `A base "${fileName || "Nova Planilha"}" foi registrada no Supabase e conectada com sucesso.`
       });
       setStep(0);
       setFileName("");
@@ -408,6 +410,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       setDataSamples([]);
       setSemanticDefinitions({});
       setFormattingRules({});
+      setSheetUrl("");
     } catch (err: any) {
       toast({
         title: "Erro ao salvar no Supabase",
@@ -679,34 +682,52 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         {step === 4 && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-xl font-bold flex items-center gap-2"><CheckCircle className="h-5 w-5 text-primary" /> Destino e Exportação</h3>
+              <h3 className="text-xl font-bold flex items-center gap-2"><CheckCircle className="h-5 w-5 text-primary" /> Integração com o Google Sheets</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Revise o Metadado Final consolidado. É este o dicionário completo que será gravado no banco de dados para a Query Engine entender a sua planilha.
+                Para que a IA consiga consultar sua base de dados, precisamos conectar sua planilha de forma segura.
               </p>
             </div>
 
-            <div className="border border-border/50 rounded-xl bg-background p-4 space-y-2">
-              <h4 className="font-semibold text-sm text-primary uppercase">Esquema Final Consolidado (JSONB)</h4>
-              <div className="bg-primary/5 rounded-lg p-4 max-h-[300px] overflow-auto border border-primary/10">
-                <pre className="text-xs text-foreground/80">
-                  {JSON.stringify({
-                    columns: Object.values(normalizedColumns).reduce((acc: any, col) => {
-                      acc[col] = {
-                        semantic_definition: semanticDefinitions[col] || "",
-                        cleaning_rule: formattingRules[col] || ""
-                      };
-                      return acc;
-                    }, {})
-                  }, null, 2)}
-                </pre>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Instruções */}
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 space-y-4">
+                <h4 className="font-bold text-primary flex items-center gap-2">
+                  <span className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                  No seu Google Sheets
+                </h4>
+                <div className="space-y-3 text-sm text-foreground/80 pl-8">
+                  <p>Abra a planilha oficial que contém esses dados no seu Google Drive.</p>
+                  <p>Clique no botão azul <strong>"Compartilhar"</strong> no canto superior direito.</p>
+                  <p>Cole o e-mail abaixo e mantenha a permissão restrita a <strong>Leitor</strong>:</p>
+                  <div className="bg-background border border-border/50 rounded p-2 font-mono text-xs text-primary font-bold break-all select-all">
+                    reader@plum-ai.iam.gserviceaccount.com
+                  </div>
+                  <p>Clique em <strong>Concluído</strong>. O Plum nunca irá alterar ou apagar seus dados.</p>
+                </div>
+              </div>
+
+              {/* Input */}
+              <div className="bg-background border border-border/50 rounded-xl p-5 space-y-4">
+                <h4 className="font-bold text-foreground flex items-center gap-2">
+                  <span className="bg-muted text-muted-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+                  Link da Planilha
+                </h4>
+                <div className="space-y-3 pl-8">
+                  <p className="text-sm text-muted-foreground">Cole abaixo o link da sua planilha após compartilhar:</p>
+                  <Input 
+                    placeholder="https://docs.google.com/spreadsheets/d/..." 
+                    value={sheetUrl}
+                    onChange={(e) => setSheetUrl(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border/30">
               <Button variant="outline" onClick={() => setStep(3)} disabled={isProcessing}>Voltar</Button>
-              <Button onClick={handleFinalizeAndSave} disabled={isProcessing} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+              <Button onClick={() => handleFinalizeAndSave(sheetUrl)} disabled={isProcessing || !sheetUrl.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Salvar Base e Dicionário no Supabase <ArrowRight className="ml-2 h-4 w-4" />
+                Finalizar e Salvar Base <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           </div>

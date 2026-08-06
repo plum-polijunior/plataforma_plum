@@ -15,6 +15,10 @@ export default function DatabasePage() {
   const [datasets, setDatasets] = useState<any[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<any>(null);
   const [showPipeline, setShowPipeline] = useState(false);
+  const [isEditingSchema, setIsEditingSchema] = useState(false);
+  const [editSheetUrl, setEditSheetUrl] = useState("");
+  const [refinePrompt, setRefinePrompt] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
 
   // Hook do React que executa um efeito colateral após a renderização do componente
   useEffect(() => {
@@ -186,7 +190,11 @@ export default function DatabasePage() {
             <div
               key={dataset.id}
               className={`p-5 rounded-xl border cursor-pointer transition-all hover:border-primary/50 hover:bg-muted/20 ${selectedDataset?.id === dataset.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'border-border/50 bg-background'}`}
-              onClick={() => setSelectedDataset(selectedDataset?.id === dataset.id ? null : dataset)}
+              onClick={() => {
+                setSelectedDataset(selectedDataset?.id === dataset.id ? null : dataset);
+                setIsEditingSchema(false);
+                setEditSheetUrl(dataset.google_sheet_url || "");
+              }}
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -219,13 +227,92 @@ export default function DatabasePage() {
                 {selectedDataset.status === 'active' ? 'Esquema ativo e pronto para consultas do Chatbot.' : 'O processamento desta planilha ainda não foi finalizado.'}
               </p>
             </div>
-            <Button onClick={() => setShowPipeline(true)} variant={selectedDataset.status === 'active' ? 'outline' : 'default'}>
-              {selectedDataset.status === 'active' ? 'Editar Esquema' : 'Continuar Rascunho'} <ArrowRight className="ml-2 h-4 w-4" />
+            <Button 
+              onClick={() => {
+                if (selectedDataset.status === 'active') {
+                  setIsEditingSchema(!isEditingSchema);
+                  setEditSheetUrl(selectedDataset.google_sheet_url || "");
+                } else {
+                  setShowPipeline(true);
+                }
+              }} 
+              variant={selectedDataset.status === 'active' ? (isEditingSchema ? 'secondary' : 'outline') : 'default'}
+            >
+              {selectedDataset.status === 'active' ? (isEditingSchema ? 'Cancelar Edição' : 'Editar Esquema') : 'Continuar Rascunho'} 
+              {!isEditingSchema && <ArrowRight className="ml-2 h-4 w-4" />}
             </Button>
           </div>
 
           <div className="p-6">
-            {selectedDataset.schema_metadata && selectedDataset.schema_metadata.columns ? (
+            {selectedDataset.status === 'active' && isEditingSchema ? (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground">Conexão do Google Sheets</h4>
+                  <p className="text-xs text-muted-foreground">Atualize o link da planilha. Não esqueça de compartilhar com o email do bot como Leitor.</p>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={editSheetUrl} 
+                      onChange={(e) => setEditSheetUrl(e.target.value)} 
+                      placeholder="URL do Google Sheets..."
+                    />
+                    <Button onClick={async () => {
+                      const { error } = await supabase.from('datasets').update({ google_sheet_url: editSheetUrl }).eq('id', selectedDataset.id);
+                      if (!error) {
+                        alert("URL atualizada com sucesso!");
+                        setSelectedDataset({...selectedDataset, google_sheet_url: editSheetUrl});
+                      }
+                    }}>Salvar URL</Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border/50 pt-6">
+                  <h4 className="font-semibold text-foreground">Refinar Formatação (Agente 3.1)</h4>
+                  <p className="text-xs text-muted-foreground">Dê uma ordem em linguagem natural para ajustar as regras das colunas sem precisar reenviar o arquivo.</p>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={refinePrompt} 
+                      onChange={(e) => setRefinePrompt(e.target.value)} 
+                      placeholder="Ex: Formate a coluna data_venda para o padrão PT-BR"
+                    />
+                    <Button disabled={isRefining || !refinePrompt.trim()} onClick={async () => {
+                      setIsRefining(true);
+                      try {
+                        const currentRules = Object.entries(selectedDataset.schema_metadata.columns).reduce((acc: any, [k, v]: [string, any]) => {
+                          acc[k] = v.cleaning_rule;
+                          return acc;
+                        }, {});
+                        
+                        const res = await supabase.functions.invoke('ai-agents', {
+                          body: { action: 'refine_format', prompt: refinePrompt, columns: currentRules, dataSamples: [] }
+                        });
+                        
+                        if (res.error) throw res.error;
+                        
+                        const newRules = res.data.result.formattingRules;
+                        const newSchema = { ...selectedDataset.schema_metadata };
+                        Object.keys(newRules).forEach(col => {
+                          if (newSchema.columns[col]) {
+                            newSchema.columns[col].cleaning_rule = newRules[col];
+                          }
+                        });
+                        
+                        await supabase.from('datasets').update({ schema_metadata: newSchema }).eq('id', selectedDataset.id);
+                        setSelectedDataset({...selectedDataset, schema_metadata: newSchema});
+                        setRefinePrompt("");
+                        alert("Regras refinadas com sucesso!");
+                      } catch (err) {
+                        alert("Erro ao refinar");
+                        console.error(err);
+                      } finally {
+                        setIsRefining(false);
+                      }
+                    }}>
+                      {isRefining ? "Refinando..." : "Aplicar Ordem"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : selectedDataset.schema_metadata && selectedDataset.schema_metadata.columns ? (
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase">Dicionário Semântico Extraído</h4>
                 <div className="grid grid-cols-1 gap-3">

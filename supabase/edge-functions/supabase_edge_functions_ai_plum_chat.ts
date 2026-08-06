@@ -40,7 +40,8 @@ Sua missão é realizar duas verificações estritas:
 
 Sempre retorne ESTRITAMENTE um JSON com as chaves:
 "status": ("PERMITIDO" | "BLOQUEADO" | "INVIAVEL")
-"message": (string com a mensagem amigável para o usuário caso status seja BLOQUEADO ou INVIAVEL, ou null se PERMITIDO)`;
+"message": (string com a mensagem amigável para o usuário caso status seja BLOQUEADO ou INVIAVEL, ou null se PERMITIDO)
+"assunto": (string curta categorizando a pergunta corporativa. Ex: "Faturamento / Receita", "RH", "Vendas", "Comparação", "Estoque", "Outros". Null se bloqueado.)`;
 
       userPrompt = `Pergunta do Usuário: "${prompt}"\nSchema Metadata (JSON de Contexto): ${JSON.stringify(schemaMetadata || {})}`;
     }
@@ -71,7 +72,7 @@ Retorne ESTRITAMENTE o JSON do Query Plan sem markdown.`;
     // =========================================================================
     else if (action === 'synthesize_answer') {
       systemInstruction = `Você é o Agente C, Comunicador e Sintetizador de Respostas da Plataforma Plum.
-Você receberá a pergunta original do usuário, o schema_metadata de contexto e o resultado exato e determinístico calculado pelo Pandas Executor (vetor de resultados).
+Você receberá a pergunta original do usuário, o schema_metadata de contexto e o resultado exato e determinístico calculated pelo Pandas Executor (vetor de resultados).
 
 Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, elegante e precisa.
 - Utilize os valores exatos retornados pelo executor (respeite moedas R$, percentuais e totais).

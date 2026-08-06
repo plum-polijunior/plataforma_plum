@@ -40,7 +40,8 @@ Sua missão é realizar duas verificações estritas:
 
 Sempre retorne ESTRITAMENTE um JSON com as chaves:
 "status": ("PERMITIDO" | "BLOQUEADO" | "INVIAVEL")
-"message": (string com a mensagem amigável para o usuário caso status seja BLOQUEADO ou INVIAVEL, ou null se PERMITIDO)`;
+"message": (string com a mensagem amigável para o usuário caso status seja BLOQUEADO ou INVIAVEL, ou null se PERMITIDO)
+"assunto": (string curta categorizando a pergunta corporativa. Ex: "Faturamento / Receita", "RH", "Vendas", "Comparação", "Estoque", "Outros". Null se bloqueado.)`;
 
       userPrompt = `Pergunta do Usuário: "${prompt}"\nSchema Metadata (JSON de Contexto): ${JSON.stringify(schemaMetadata || {})}`;
     }

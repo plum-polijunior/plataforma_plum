@@ -80,6 +80,13 @@ export function DashboardLayout() {
                 Minhas Bases de Dados
               </Button>
             </Link>
+
+            <Link to="/plum">
+              <Button variant={location.pathname === "/plum" ? "default" : "ghost"} className={`w-full justify-start ${location.pathname === "/plum" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:text-foreground"}`}>
+                <span className="font-extrabold mr-2 text-lg leading-none">P</span>
+                PLUM Chat
+              </Button>
+            </Link>
             {/* Future items */}
             {/* <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground">
               <Users className="mr-2 h-4 w-4" />
