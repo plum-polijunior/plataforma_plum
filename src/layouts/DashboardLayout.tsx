@@ -74,10 +74,10 @@ export function DashboardLayout() {
               </Button>
             </Link>
             
-            <Link to="/dashboard/database">
-              <Button variant={location.pathname === "/dashboard/database" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/dashboard/database" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+            <Link to="/cfgdatabase">
+              <Button variant={location.pathname === "/cfgdatabase" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/cfgdatabase" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                 <Layers className="mr-2 h-4 w-4" />
-                Minha Base de Dados
+                Minhas Bases de Dados
               </Button>
             </Link>
             {/* Future items */}

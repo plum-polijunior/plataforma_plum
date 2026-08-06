@@ -111,7 +111,7 @@ export default function DatabasePage() {
         <ShieldAlert className="h-5 w-5 mt-0.5" />
         <div>
           <h4 className="font-semibold">Acesso Restrito</h4>
-          <p className="text-sm">Você precisa ser um Admin para acessar a Base de Dados.</p>
+          <p className="text-sm">Você precisa ser um Admin para acessar as Bases de Dados.</p>
         </div>
       </div>
     );
@@ -152,7 +152,7 @@ export default function DatabasePage() {
     return (
       <div className="max-w-5xl mx-auto space-y-6">
         <Button variant="ghost" onClick={() => setShowPipeline(false)} className="mb-4">
-          ← Voltar ao Dashboard
+          ← Voltar para Minhas Bases de Dados
         </Button>
         {organization && <DatabasePipeline organizationId={organization.id} />}
       </div>
