@@ -1,3 +1,11 @@
+<<<<<<< HEAD
+# gstack
+
+Use the /browse skill from gstack for all web browsing. NEVER use mcp__claude-in-chrome__* tools.
+
+Available skills:
+/office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /design-review, /setup-browser-cookies, /setup-deploy, /setup-gbrain, /retro, /investigate, /document-release, /document-generate, /codex, /cso, /autoplan, /plan-devex-review, /devex-review, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn
+=======
 # CLAUDE.md — Plataforma Plum
 
 Contexto operacional para agentes de código. Leia isto antes de qualquer alteração.
@@ -310,3 +318,4 @@ Aplica `where` → `formattingRules` → agregações. Proteção embutida: colu
       rodou `supabase/tests/*.sql`.
 - [ ] Nenhuma decisão de autorização depende de dado enviado pelo cliente.
 - [ ] Explique brevemente cada alteração feita (convenção deste projeto).
+>>>>>>> a4baeeeadf72cdd52ecb51df121448e199e50314

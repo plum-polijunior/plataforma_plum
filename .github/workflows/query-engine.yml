@@ -1,0 +1,107 @@
+name: query-engine
+
+# Testa em todo push, e só publica quando entra na branch principal.
+# Nenhum segredo de longa duração vive no GitHub: a autenticação com a AWS é
+# por OIDC, que troca a identidade do workflow por credencial temporária.
+
+on:
+  push:
+    branches: [plataforma]
+    paths:
+      - "query_engine/**"
+      - "supabase/functions/**"
+      - "src/lib/**"
+      - ".github/workflows/query-engine.yml"
+  pull_request:
+    paths:
+      - "query_engine/**"
+      - "supabase/functions/**"
+      - "src/lib/**"
+      - ".github/workflows/query-engine.yml"
+
+permissions:
+  contents: read
+  id-token: write # necessário para o OIDC com a AWS
+
+env:
+  AWS_REGION: sa-east-1 # São Paulo: menor latência para o time e para o cliente
+  ECR_REPOSITORY: plum/query-engine
+  LAMBDA_FUNCTION: plum-query-engine
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r query_engine/requirements.txt pytest
+      - name: Invariantes de privacidade e segurança (Python)
+        working-directory: query_engine
+        run: python -m pytest
+      # Este passo é o que impede a garantia de privacidade de virar só uma
+      # frase de apresentação: se k-anonimato, bloqueio de linha bruta ou
+      # verificação de assinatura quebrarem, o PR não passa.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: RBAC de coluna e impressão digital (TypeScript)
+        run: npm test
+      # A extração recursiva de colunas é a peça que aplica o RBAC. Se ela
+      # deixar passar uma coluna em qualquer posição do plano, um cargo lê
+      # dado que não deveria e nenhuma camada abaixo pega.
+
+  publicar:
+    needs: testes
+    if: github.ref == 'refs/heads/plataforma' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assumir a role da AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+        # AWS_DEPLOY_ROLE_ARN não é uma chave, é o ARN de uma role cuja trust
+        # policy aceita só este repositório e esta branch.
+
+      - name: Login no ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build e push da imagem
+        working-directory: query_engine
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Atualizar a função Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ env.LAMBDA_FUNCTION }}" \
+            --image-uri "$IMAGE"
+          aws lambda wait function-updated \
+            --function-name "${{ env.LAMBDA_FUNCTION }}"
+
+      - name: Conferir que a função responde
+        run: |
+          aws lambda invoke \
+            --function-name "${{ env.LAMBDA_FUNCTION }}" \
+            --payload '{"version":"2.0","rawPath":"/health","requestContext":{"http":{"method":"GET","path":"/health"}},"headers":{}}' \
+            --cli-binary-format raw-in-base64-out \
+            /tmp/resposta.json
+          cat /tmp/resposta.json
+          grep -q '"status"' /tmp/resposta.json

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
 import * as XLSX from "xlsx";
+import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
 
 interface DatabasePipelineProps {
   organizationId: string;
@@ -374,6 +375,19 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       toast({ title: "Erro", description: "Sessão inválida", variant: "destructive" });
       return;
     }
+    // O ID é a fonte da verdade: a API do Google exige o ID, não a URL.
+    // Extrair aqui, na escrita, faz o erro aparecer enquanto a pessoa ainda
+    // está com o link na mão, em vez de semanas depois quando um card quebrar.
+    const sheetId = extrairSheetId(sheetUrlToSave);
+    if (!sheetId) {
+      toast({
+        title: "Link da planilha inválido",
+        description: ERRO_LINK_INVALIDO,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const schemaMetadata = {
@@ -392,7 +406,12 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           name: fileName || "Nova Planilha",
           status: "active",
           schema_metadata: schemaMetadata as any,
+<<<<<<< HEAD
+          google_sheet_id: sheetId,        // fonte da verdade
+          google_sheet_url: sheetUrlToSave, // só para exibir na tela de bases
+=======
           google_sheet_id: sheetUrlToSave,
+>>>>>>> a4baeeeadf72cdd52ecb51df121448e199e50314
           sketch: null // Limpa o rascunho
         })
         .eq('id', datasetId);

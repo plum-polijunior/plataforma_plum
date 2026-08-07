@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Teste de fumaça do executor, contra a AWS de verdade
+# =============================================================================
+# Rode logo depois de provision.sh. Ele responde a três perguntas, nessa ordem:
+#
+#   1. O endpoint está mesmo fechado? (precisa dar 403 sem credencial)
+#   2. A função sobe e responde? (health)
+#   3. Ela lê uma planilha real e devolve um número certo? (opcional)
+#
+# A pergunta 3 é a que importa: é o primeiro momento em que o PLUM calcula um
+# número verdadeiro. Para rodá-la, informe uma planilha e uma coluna:
+#
+#   SHEET_ID=1AbC... COLUNA=faturamento bash infra/aws/smoke-test.sh
+#
+# A planilha precisa estar compartilhada com reader@plum-ai.iam.gserviceaccount.com
+# como Leitor, e ter cabeçalho na primeira linha.
+# =============================================================================
+
+set -euo pipefail
+
+REGIAO="${PLUM_AWS_REGION:-sa-east-1}"
+FUNCAO="${PLUM_LAMBDA_NAME:-plum-query-engine}"
+PARAM_HMAC="/plum/prod/hmac-secret"
+
+SHEET_ID="${SHEET_ID:-}"
+COLUNA="${COLUNA:-}"
+ABA="${ABA:-Sheet1}"
+
+ok()   { printf '  \033[0;32m✓\033[0m %s\n' "$*"; }
+bad()  { printf '  \033[0;31m✗\033[0m %s\n' "$*"; }
+log()  { printf '\n\033[1;35m▸ %s\033[0m\n' "$*"; }
+
+URL="$(aws lambda get-function-url-config --function-name "$FUNCAO" \
+        --region "$REGIAO" --query FunctionUrl --output text)"
+URL="${URL%/}"
+
+# ── 1. O endpoint está fechado? ──────────────────────────────────────────────
+log "1/3 O endpoint recusa quem não tem credencial da AWS?"
+CODIGO="$(curl -s -o /dev/null -w '%{http_code}' "${URL}/health" || echo "000")"
+if [ "$CODIGO" = "403" ]; then
+  ok "403 sem assinatura. O endpoint NÃO é público."
+else
+  bad "esperava 403 e recebi ${CODIGO}."
+  bad "Confira: aws lambda get-function-url-config --function-name ${FUNCAO} --region ${REGIAO}"
+  bad "O campo AuthType TEM que ser AWS_IAM. Se estiver NONE, qualquer pessoa"
+  bad "que descobrir esta URL lê a planilha de todos os clientes."
+  exit 1
+fi
+
+# ── 2. A função responde? ────────────────────────────────────────────────────
+log "2/3 A função sobe e responde?"
+aws lambda invoke --function-name "$FUNCAO" --region "$REGIAO" \
+  --payload '{"version":"2.0","rawPath":"/health","requestContext":{"http":{"method":"GET","path":"/health"}},"headers":{}}' \
+  --cli-binary-format raw-in-base64-out /tmp/plum-health.json >/dev/null
+
+if jq -e '.body | fromjson | .status == "ok"' /tmp/plum-health.json >/dev/null 2>&1; then
+  ok "health respondeu ok"
+else
+  bad "health não respondeu como esperado. Resposta crua:"
+  cat /tmp/plum-health.json
+  bad "Veja o log: aws logs tail /aws/lambda/${FUNCAO} --region ${REGIAO} --since 5m"
+  exit 1
+fi
+
+# ── 3. Um número verdadeiro ──────────────────────────────────────────────────
+if [ -z "$SHEET_ID" ] || [ -z "$COLUNA" ]; then
+  log "3/3 Pulado"
+  printf '  Para o teste que importa, rode de novo com:\n'
+  printf '    SHEET_ID=<id da planilha> COLUNA=<coluna numerica> bash %s\n' "$0"
+  exit 0
+fi
+
+log "3/3 Somando '${COLUNA}' da planilha real"
+
+SEGREDO="$(aws ssm get-parameter --name "$PARAM_HMAC" --with-decryption \
+            --region "$REGIAO" --query Parameter.Value --output text)"
+
+# k_min=0 aqui de propósito: este teste soma a base inteira, sem agrupar, e o
+# objetivo é conferir o número contra a planilha. Nenhum caminho de produção
+# passa k_min=0.
+CORPO="$(jq -nc \
+  --arg sheet "$SHEET_ID" --arg aba "$ABA" --arg col "$COLUNA" \
+  --argjson ts "$(date +%s)" '
+  {
+    sheet_id: $sheet,
+    tab: $aba,
+    plans: [{
+      card_id: "smoke-test",
+      plan: { select: [ { expr: { agg: "sum", col: $col }, as: "total" } ] },
+      resolved_columns: [$col]
+    }],
+    allowed_columns: [$col],
+    column_roles: {},
+    k_min: 0,
+    issued_at: $ts
+  }')"
+
+ASSINATURA="$(printf '%s' "$CORPO" | openssl dgst -sha256 -hmac "$SEGREDO" | awk '{print $NF}')"
+
+RESPOSTA="$(curl -s -X POST "${URL}/execute" \
+  --aws-sigv4 "aws:amz:${REGIAO}:lambda" \
+  --user "${AWS_ACCESS_KEY_ID:-}:${AWS_SECRET_ACCESS_KEY:-}" \
+  -H "Content-Type: application/json" \
+  -H "X-Plum-Signature: ${ASSINATURA}" \
+  -d "$CORPO")"
+
+echo "$RESPOSTA" | jq . 2>/dev/null || echo "$RESPOSTA"
+
+if echo "$RESPOSTA" | jq -e '.results[0].status == "ok"' >/dev/null 2>&1; then
+  VALOR="$(echo "$RESPOSTA" | jq -r '.results[0].rows[0].total')"
+  printf '\n'
+  ok "O executor devolveu: ${VALOR}"
+  printf '\n  \033[1;33mAgora abra a planilha e some a coluna %s à mão.\033[0m\n' "$COLUNA"
+  printf '  Se os dois números baterem, o PLUM calculou um número verdadeiro\n'
+  printf '  pela primeira vez, e a Fase 0 acabou de verdade.\n\n'
+else
+  bad "o executor recusou ou falhou. Diagnóstico pela mensagem:"
+  printf '    401  → assinatura. Confira se o segredo do SSM é o mesmo dos dois lados.\n'
+  printf '    403  → o curl não assinou com SigV4, ou a credencial não tem InvokeFunctionUrl.\n'
+  printf '    erro "Sem acesso a planilha" → compartilhe com reader@plum-ai.iam.gserviceaccount.com\n'
+  printf '    erro "nao tem a(s) coluna(s)" → o nome da coluna não bate com o cabeçalho\n\n'
+  printf '  Log: aws logs tail /aws/lambda/%s --region %s --since 5m\n\n' "$FUNCAO" "$REGIAO"
+  exit 1
+fi

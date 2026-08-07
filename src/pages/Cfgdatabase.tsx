@@ -4,6 +4,7 @@ import DatabasePipeline from "@/components/DatabasePipeline";
 import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
 
 export default function DatabasePage() {
   const [organization, setOrganization] = useState<any>(null);
@@ -261,10 +262,34 @@ export default function DatabasePage() {
                       placeholder="https://docs.google.com/spreadsheets/d/[ID_DA_SUA_PLANILHA]"
                     />
                     <Button onClick={async () => {
+<<<<<<< HEAD
+                      // Mesma regra do onboarding: o ID é a verdade, a URL é
+                      // só para exibir. Recusar aqui evita gravar uma base que
+                      // vai falhar depois, na hora que alguém abrir o card.
+                      const sheetId = extrairSheetId(editSheetUrl);
+                      if (!sheetId) {
+                        alert(ERRO_LINK_INVALIDO);
+                        return;
+                      }
+                      const { error } = await supabase
+                        .from('datasets')
+                        .update({ google_sheet_id: sheetId, google_sheet_url: editSheetUrl })
+                        .eq('id', selectedDataset.id);
+                      if (!error) {
+                        alert("Planilha atualizada com sucesso!");
+                        setSelectedDataset({
+                          ...selectedDataset,
+                          google_sheet_id: sheetId,
+                          google_sheet_url: editSheetUrl,
+                        });
+                      } else {
+                        alert("Não consegui salvar: " + error.message);
+=======
                       const { error } = await supabase.from('datasets').update({ google_sheet_id: editSheetUrl }).eq('id', selectedDataset.id);
                       if (!error) {
                         alert("URL atualizada com sucesso!");
                         setSelectedDataset({...selectedDataset, google_sheet_id: editSheetUrl});
+>>>>>>> a4baeeeadf72cdd52ecb51df121448e199e50314
                       }
                     }}>Salvar URL</Button>
                   </div>
