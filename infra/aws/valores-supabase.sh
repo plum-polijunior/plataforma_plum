@@ -88,17 +88,17 @@ cat <<FIM
   COPIE E COLE ISTO NO TERMINAL DO VS CODE
 ═══════════════════════════════════════════════════════════════════════════
 
-npx supabase secrets set PLUM_EXECUTOR_URL="${URL}"
-npx supabase secrets set PLUM_AWS_REGION="${REGIAO}"
-npx supabase secrets set PLUM_AWS_ACCESS_KEY_ID="${KEY_ID}"
-npx supabase secrets set PLUM_AWS_SECRET_ACCESS_KEY="${KEY_SECRET}"
-npx supabase secrets set PLUM_EXECUTOR_HMAC_SECRET="${HMAC}"
+npx supabase secrets set --project-ref ${PROJETO_SUPABASE} PLUM_EXECUTOR_URL="${URL}"
+npx supabase secrets set --project-ref ${PROJETO_SUPABASE} PLUM_AWS_REGION="${REGIAO}"
+npx supabase secrets set --project-ref ${PROJETO_SUPABASE} PLUM_AWS_ACCESS_KEY_ID="${KEY_ID}"
+npx supabase secrets set --project-ref ${PROJETO_SUPABASE} PLUM_AWS_SECRET_ACCESS_KEY="${KEY_SECRET}"
+npx supabase secrets set --project-ref ${PROJETO_SUPABASE} PLUM_EXECUTOR_HMAC_SECRET="${HMAC}"
 
 ═══════════════════════════════════════════════════════════════════════════
 
   Depois disso:
 
-      npx supabase functions deploy dashboard-execute
+      npx supabase functions deploy dashboard-execute --project-ref ${PROJETO_SUPABASE}
 
   E limpe a tela, porque o que está acima é segredo:
 

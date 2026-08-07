@@ -164,35 +164,45 @@ npx supabase login
 
 Abre o navegador pedindo autorização. Autorize e volte.
 
-```
-npx supabase link --project-ref rjwidarrsykufuifzunu
-```
-
-Pede a senha do banco. Ela está no painel do Supabase em **Project Settings**
-→ **Database** → **Database password**. Se ninguém souber, dá para gerar uma
-nova ali mesmo.
+> **Não use `supabase link`.** Ele pede a senha do banco e não é necessário:
+> todos os comandos abaixo levam `--project-ref`. Menos uma senha para
+> caçar. (O `CLAUDE.md` do projeto registra que migrations neste repositório
+> são aplicadas pelo painel, não por CLI.)
 
 ## 5.3 Criar as tabelas do dashboard
 
-```
-npx supabase db push
-```
+**No navegador**, não no terminal. É o fluxo estabelecido deste projeto.
 
-Lista as migrations e pede confirmação. Digite `Y`.
+1. Abra <https://supabase.com/dashboard/project/rjwidarrsykufuifzunu/sql>
+2. Abra o arquivo `supabase/migrations/20260806230000_dashboard_cards.sql`
+   no VS Code
+3. Copie **tudo** e cole no editor de SQL
+4. Botão **Run**
 
-Pode aparecer um aviso amarelo dizendo que N bases ativas estão sem
-`google_sheet_id`. Isso é esperado, não é erro: são bases antigas que precisam
-ser reconectadas na tela de bases. Anote quantas são.
+**Deu certo se aparecer:** `Success. No rows returned`
+
+Pode aparecer um aviso (`WARNING`) dizendo que N bases ativas estão sem
+`google_sheet_id`. Isso é esperado, não é erro: são bases antigas, cadastradas
+antes desta mudança, que precisam ser reconectadas na tela de bases. Anote
+quantas são.
+
+Se aparecer erro em vermelho, copie e me mande. A migration é idempotente:
+pode rodar de novo depois de corrigir, sem quebrar nada.
 
 ## 5.4 Atualizar os tipos
 
+**Terminal do VS Code:**
+
 ```
-npx supabase gen types typescript --linked > src/integrations/supabase/types.ts
+npx supabase gen types typescript --project-id rjwidarrsykufuifzunu > src/integrations/supabase/types.ts
 npm run build
 ```
 
 O primeiro não imprime nada, é normal. O segundo precisa terminar com
 `✓ built in Xs`.
+
+Se o build reclamar de algum campo, me mande o erro: quer dizer que o banco e
+o código discordam em algum nome, e é ajuste de dois minutos.
 
 ## 5.5 Colar os cinco segredos
 
@@ -202,7 +212,7 @@ Depois limpe a tela com `clear`.
 ## 5.6 Publicar a Edge Function
 
 ```
-npx supabase functions deploy dashboard-execute
+npx supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
 ```
 
 **Deu certo se aparecer:** `Deployed Function dashboard-execute`
@@ -272,7 +282,7 @@ select id, name from public.datasets where status = 'active';
 **Terminal do VS Code:**
 
 ```
-npx supabase functions invoke dashboard-execute --body "{\"dataset_id\":\"<o id>\"}"
+npx supabase functions invoke dashboard-execute --project-ref rjwidarrsykufuifzunu \n  --body "{\"dataset_id\":\"<o id>\"}"
 ```
 
 **Deu certo se voltar algo assim:**
