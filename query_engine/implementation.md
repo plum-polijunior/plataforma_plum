@@ -79,7 +79,7 @@ Isso é o ponto que hoje **não existe** — a função atual não faz nenhuma c
 ela só repassa para o Gemini. Essa é a peça que fecha R-05 para esta rota.
 
 Novos secrets na Edge Function (painel Supabase → Edge Functions → Secrets):
-- `EXECUTOR_URL` (`https://query-engine.<seu-dominio>/v1/execute-plan`)
+- `EXECUTOR_URL` (`https://query-engine.plum-polijunior.com.br/v1/execute-plan`)
 - `EXECUTOR_SHARED_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY` (se ainda não estiver disponível no runtime da função)
 
@@ -124,8 +124,10 @@ E usar `executorResult` (em vez de `mockPythonVetor`) na chamada de `synthesize_
 
   > **Atualizado na §7:** ao usar Cloudflare Tunnel (recomendado), essa regra de entrada some
   > por completo — o Security Group fica sem NENHUMA porta de entrada aberta.
-- Elastic IP fixo + registro DNS (`query-engine.seudominio.com.br`) na Route 53 ou onde o
-  domínio já estiver. (Também não é necessário com Cloudflare Tunnel — ver §7.)
+- Elastic IP fixo + registro DNS (`query-engine.plum-polijunior.com.br`) na Route 53 ou onde o
+  domínio já estiver. (Também não é necessário com Cloudflare Tunnel — ver §7.8, que usa
+  delegação de subdomínio em vez de Route 53, já que o domínio `plum-polijunior.com.br` já
+  existe e provavelmente já tem o app principal apontado para a Vercel.)
 - TLS: Nginx como reverse proxy na porta 443 + Certbot (Let's Encrypt), renovação automática
   via `certbot.timer`. (Substituído por Cloudflare Tunnel na §7 — mais simples e sem porta
   de entrada nenhuma.)
@@ -468,8 +470,36 @@ sudo chmod 600 /opt/plum/app/query_engine/.env
 
 ### 7.8 Criar o túnel no Cloudflare (Zero Trust → Networks → Tunnels)
 
-Pode ser feito pela CLI (`cloudflared`) direto no terminal da instância, sem passar pelo
-dashboard:
+**A plataforma já tem domínio próprio: `plum-polijunior.com.br`.** Isso muda a forma de
+configurar o Cloudflare em relação ao que estava documentado antes (que assumia um domínio
+genérico ainda sem DNS definido). O ponto crítico: pelo `CLAUDE.md`, o app principal já é
+publicado via **Vercel**, o que quase certamente significa que o DNS de
+`plum-polijunior.com.br` (ou de um subdomínio dele) já aponta para os servidores da Vercel
+hoje. Isso decide qual das duas abordagens usar:
+
+- **Opção A — mover a zona inteira para o Cloudflare.** Você troca os nameservers do domínio
+  no registrador (Registro.br, no caso de um `.com.br`) para os nameservers do Cloudflare.
+  O Cloudflare passa a ser autoritativo para **todo** o domínio. **Risco real:** você precisa
+  recriar manualmente, dentro do Cloudflare, os registros que hoje apontam para a Vercel
+  (normalmente um `CNAME` para `cname.vercel-dns.com` ou um `A` para o IP da Vercel) **antes**
+  de trocar os nameservers — e esses registros precisam ficar com o proxy do Cloudflare
+  **desligado** ("DNS only", nuvem cinza, não laranja), porque a Vercel já faz TLS e roteamento
+  próprios; proxiar por cima costuma quebrar o certificado/handshake. Errar esse passo tira o
+  site principal do ar.
+- **Opção B — delegar só o subdomínio do query engine (recomendada).** Você **não mexe** no
+  DNS existente do app principal. No provedor de DNS atual do domínio (onde quer que
+  `plum-polijunior.com.br` esteja hoje — Registro.br ou outro), você cria **um único registro
+  NS** delegando exatamente `query-engine.plum-polijunior.com.br` para dois nameservers que o
+  Cloudflare vai te dar. O Cloudflare passa a ser autoritativo **só para esse subdomínio**; o
+  resto do domínio (incluindo o que aponta para a Vercel) continua exatamente como está, sem
+  qualquer risco de quebrar o app principal.
+
+  > Antes de seguir, confirme onde estão os nameservers de `plum-polijunior.com.br` hoje (
+  > `dig NS plum-polijunior.com.br` ou o painel do Registro.br) — é lá que o registro NS da
+  > Opção B precisa ser criado.
+
+Os passos abaixo seguem a **Opção B**. Pode ser feito pela CLI (`cloudflared`) direto no
+terminal da instância, sem passar pelo dashboard:
 
 ```bash
 # instala o cloudflared no host (só para autenticar/criar o túnel; a operação em produção
@@ -485,9 +515,26 @@ cloudflared tunnel login
 
 # cria o túnel nomeado
 cloudflared tunnel create plum-query-engine
+```
 
-# aponta o subdomínio para o túnel (precisa da zona do domínio já estar no Cloudflare)
-cloudflared tunnel route dns plum-query-engine query-engine.seudominio.com.br
+**Antes de rodar `tunnel route dns`**, é preciso que a zona `query-engine.plum-polijunior.com.br`
+exista dentro da sua conta Cloudflare (senão o comando falha por não achar a zona):
+
+1. No dashboard Cloudflare: **Add a domain** → digite exatamente
+   `query-engine.plum-polijunior.com.br` (não o domínio raiz) → plano Free.
+2. O Cloudflare mostra 2 nameservers próprios dessa sub-zona (ex.:
+   `ana.ns.cloudflare.com`, `walt.ns.cloudflare.com` — os seus serão diferentes).
+3. No provedor de DNS atual de `plum-polijunior.com.br`, crie um registro:
+   - **Tipo:** `NS`
+   - **Nome:** `query-engine`
+   - **Valor:** os dois nameservers do passo 2
+4. Aguarde a propagação (o próprio dashboard do Cloudflare avisa quando a zona fica ativa).
+
+Só então:
+
+```bash
+# aponta o subdomínio para o túnel — agora funciona porque a zona já existe no Cloudflare
+cloudflared tunnel route dns plum-query-engine query-engine.plum-polijunior.com.br
 
 # pega o token do túnel para usar no container (equivalente ao criado pelo dashboard)
 cloudflared tunnel token plum-query-engine
@@ -497,11 +544,12 @@ Cole o token retornado no `.env` do passo 7.7 (`CLOUDFLARE_TUNNEL_TOKEN`).
 
 Depois, na aba **Public Hostname** do túnel (dashboard Cloudflare, `Networks → Tunnels →
 plum-query-engine → Configure`), ou via API, configure:
-- **Hostname:** `query-engine.seudominio.com.br`
+- **Hostname:** `query-engine.plum-polijunior.com.br`
 - **Service:** `http://query-engine:8000`
 
-(O nome `query-engine` resolve porque `cloudflared` está no mesmo `docker-compose`/rede que o
-serviço.)
+(O nome `query-engine` do lado do **Service** resolve porque o container `cloudflared` está
+no mesmo `docker-compose`/rede que o serviço — não confundir com o hostname público, que é o
+subdomínio completo.)
 
 ### 7.9 Subir tudo
 
@@ -522,7 +570,7 @@ SECRET=$(cat /etc/plum/shared-secret.txt)
 # assina "timestamp.body" — precisa bater exatamente com auth.compute_signature()
 SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
 
-curl -X POST "https://query-engine.seudominio.com.br/v1/execute-plan" \
+curl -X POST "https://query-engine.plum-polijunior.com.br/v1/execute-plan" \
   -H "Content-Type: application/json" \
   -H "X-Plum-Timestamp: ${TS}" \
   -H "X-Plum-Signature: sha256=${SIG}" \
