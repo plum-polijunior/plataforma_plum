@@ -393,6 +393,15 @@ formatação de exibição).
   duplicada em intenção com um plano nunca aplicado (`reorganizacao_cargos_e_permissoes`, na
   raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `organizar_tudo.md` §2.1 — o
   plano continua válido, só não é prioridade no momento.
+- Pelo menos uma base em produção tem `datasets.google_sheet_id` guardando a **URL completa**
+  da planilha (`https://docs.google.com/spreadsheets/d/.../edit?gid=...`), não só o ID extraído
+  — apesar de este campo ser documentado como "fonte da verdade" (§3) e de
+  `src/lib/google-sheets.ts` existir exatamente para extrair o ID na escrita
+  (`DatabasePipeline.tsx:handleFinalizeAndSave`). Não confirmado ainda se isso quebra a leitura
+  no `query_engine` (que espera um ID puro) ou se é sintoma do bug em investigação no
+  `TODOS.md` #8. Confira antes de assumir que `google_sheet_id` é sempre só o ID.
+- Chat real (`execute_plan`) tem um 403 `"base nao encontrada"` em investigação — ver
+  `TODOS.md` #8 para o que já foi descartado e o diagnóstico deixado no ar.
 
 ---
 

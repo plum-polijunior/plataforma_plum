@@ -217,3 +217,42 @@ item é o argumento de que ela deveria ser montada a partir das **perguntas**.
 
 **Depende de / bloqueado por:** volume de uso real, que por sua vez depende de T1 (executor real).
 Rodar a consulta agora mesmo assim custa nada e já informa a Fase 1.
+
+---
+
+## 8. Investigar o 403 "base nao encontrada" em `execute_plan` (chat)
+
+**O quê:** no primeiro teste de ponta a ponta do chat (2026-08-07, depois de ligar o executor
+real), toda pergunta chega a `execute_plan` e falha com `{"error": "base nao encontrada"}`,
+HTTP 403, vindo de `supabase/functions/ai-plum-chat/index.ts` (a query que busca o dataset por
+`id` + `organization_id` devolve vazio).
+
+**Testado com:** usuário `bernardo.machado@polijunior.com.br`, cargo Admin, organização
+"Machado Lmtd" (`organization_id = 3bf8596f-7a4d-4b91-8fd5-bdb78a512251`), base
+`demo_riosulense.xlsx` (`id = cdcef2a8-d888-487c-9e7f-c9f87baa3158`).
+
+**Já confirmado, direto no banco, que NÃO é a causa:**
+- O dataset existe, está `status = 'active'`, e pertence exatamente a essa organização.
+- Existe uma linha em `role_permissions` para esse `role_id` + `dataset_id`, com
+  `allowed_columns` preenchido (29 colunas).
+- `profile.organization_id`/`role_id`/`status` do usuário resolvem certo — os 3 checks
+  anteriores no mesmo handler (`perfil sem organizacao`, `perfil nao ativo`, `sem cargo`) não
+  disparam, só a busca do dataset falha.
+- Logout/login (para forçar reemissão das claims do JWT) **não resolveu** — descarta a hipótese
+  óbvia de `current_org_id()` estar usando uma claim `organization_id` desatualizada no token.
+
+**Ainda não verificado:** o valor exato de `datasetId` que o front (`PlumChat.tsx`) está
+mandando no corpo da requisição — pode não ser o UUID esperado (estado React desalinhado de
+testes anteriores com outras contas/organizações no mesmo navegador). Existem 3 organizações de
+teste, cada uma com exatamente uma base (`Babygoat`, `Babygoat2`, "Machado Lmtd"), então um
+`selectedDatasetId` sobrando de outra sessão apontaria para a base errada e bateria exatamente
+nesse erro.
+
+**Diagnóstico deixado no ar:** `handleExecutePlan` agora faz `console.error` com o `datasetId`
+recebido, o `profile.organization_id` resolvido, e o erro do Supabase (se houver) sempre que
+cai em "base nao encontrada" — ver log da Edge Function `ai-plum-chat` no painel do Supabase
+depois de reproduzir.
+
+**Depende de / bloqueado por:** reproduzir de novo com o log novo no ar e olhar o valor real de
+`datasetId` — provável próximo passo é conferir se ele bate com o dataset da organização do
+usuário, e só então decidir se o bug é no front (estado stale) ou ainda na RLS/policy.
