@@ -19,7 +19,7 @@ Regra simples: **se o comando começa com `bash`, é no Git Bash. Se começa com
 No Git Bash você precisa entrar na pasta do projeto primeiro:
 
 ```bash
-cd /c/Users/kakam/OneDrive/Documentos/PROJETOS/plataforma-plum/plataforma_plum
+cd "/c/Bernardo/Computação/Plataforma Plum"
 ```
 
 Para conferir que está no lugar certo, digite `ls`. Precisa listar
@@ -91,7 +91,7 @@ esteja rodando.
 baixou:
 
 ```bash
-GOOGLE_SA_FILE=C:/Users/kakam/Downloads/plataforma-plum-066f1e5ced6e.json \
+GOOGLE_SA_FILE=C:/Users/berna/Downloads/plataforma-plum-066f1e5ced6e.json \
   bash infra/aws/provision.sh
 ```
 
@@ -102,7 +102,7 @@ Depois que terminar, apague o JSON. Ele já está guardado e criptografado na
 AWS:
 
 ```bash
-rm /c/Users/kakam/Downloads/plataforma-plum-066f1e5ced6e.json
+rm /c/Users/berna/Downloads/plataforma-plum-066f1e5ced6e.json
 ```
 
 ---

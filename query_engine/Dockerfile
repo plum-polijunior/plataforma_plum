@@ -11,6 +11,7 @@ RUN python -m pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.txt
 COPY __init__.py           ${LAMBDA_TASK_ROOT}/query_engine/
 COPY config.py             ${LAMBDA_TASK_ROOT}/query_engine/
 COPY security.py           ${LAMBDA_TASK_ROOT}/query_engine/
+COPY cache.py              ${LAMBDA_TASK_ROOT}/query_engine/
 COPY sheets.py             ${LAMBDA_TASK_ROOT}/query_engine/
 COPY pandas_executor.py    ${LAMBDA_TASK_ROOT}/query_engine/
 COPY main.py               ${LAMBDA_TASK_ROOT}/query_engine/
