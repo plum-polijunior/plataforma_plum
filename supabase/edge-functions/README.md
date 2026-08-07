@@ -1,42 +1,59 @@
 # Edge Functions
 
-Duas convenções convivem aqui, e a diferença é deliberada.
+Cada arquivo aqui é o `index.ts` de uma função, para colar no painel do
+Supabase. Arquivo colado não resolve caminho relativo, então todos são
+arquivos únicos, sem import local.
 
-## 1. Funções coladas no painel (`supabase/edge-functions/*.ts`)
+| Arquivo | Função | Origem |
+|---|---|---|
+| `supabase_edge_function_ai_agents.ts` | `ai-agents` | escrito à mão |
+| `supabase_edge_functions_ai_plum_chat.ts` | `ai-plum-chat` | escrito à mão |
+| `supabase_edge_functions_plum_chat.ts` | `plum-chat` | escrito à mão |
+| `supabase_edge_function_send_auth_email.ts` | `send-auth-email` | escrito à mão |
+| `supabase_edge_function_dashboard_execute.ts` | `dashboard-execute` | **gerado** |
 
-Cada arquivo é o `index.ts` de uma função, copiado para o painel do Supabase.
+## O arquivo gerado
 
-| Arquivo | Função |
-|---|---|
-| `supabase_edge_function_ai_agents.ts` | `ai-agents` |
-| `supabase_edge_functions_ai_plum_chat.ts` | `ai-plum-chat` |
-| `supabase_edge_functions_plum_chat.ts` | `plum-chat` |
-| `supabase_edge_function_send_auth_email.ts` | `send-auth-email` |
+`supabase_edge_function_dashboard_execute.ts` **não é editado à mão.** Ele é
+montado a partir de dois fontes:
 
-São arquivos únicos, sem import local, porque colar exige um arquivo só.
+```
+supabase/functions/_shared/query_plan.ts        ┐
+supabase/functions/dashboard-execute/index.ts   ┘ →  npm run gen:edge  →  arquivo colável
+```
 
-## 2. Funções com código compartilhado (`supabase/functions/<nome>/index.ts`)
-
-| Função | Deploy |
-|---|---|
-| `dashboard-execute` | `supabase functions deploy dashboard-execute` |
-
-Esta usa o layout padrão do Supabase CLI porque importa
-`_shared/query_plan.ts`, e esse arquivo é coberto por testes.
-
-**Por que abrir exceção.** `dashboard-execute` é quem aplica o RBAC de coluna:
-ela extrai as colunas que um Query Plan referencia e recusa o card quando o
-cargo não pode ver alguma. Se essa extração deixar passar uma coluna em
-qualquer posição do plano (`select`, `where` aninhado, `group_by`, `order_by`,
-`target_columns`), um cargo lê dado que não deveria, e nenhuma camada abaixo
-pega, porque todas confiam no conjunto que sai dali.
-
-Código assim não pode viver sem teste, e teste precisa de módulo importável.
-Colar num arquivo só significaria duplicar a lógica entre o que é testado e o
-que é executado, que é a forma mais confiável de os dois divergirem.
+Para mudar qualquer coisa, edite os fontes e rode:
 
 ```bash
-npm test    # roda os testes do _shared
+npm run gen:edge
+```
+
+### Por que gerar em vez de escrever direto
+
+`dashboard-execute` é quem aplica o RBAC de coluna: ela percorre o Query Plan
+e recusa o card quando o cargo não pode ver alguma coluna referenciada. Se
+essa extração deixar passar uma coluna em qualquer posição do plano (`select`,
+`where` aninhado, `group_by`, `order_by`, `target_columns`), um cargo lê dado
+que não deveria, e nenhuma camada abaixo pega, porque todas confiam no
+conjunto que sai dali.
+
+Código assim não pode viver sem teste, e teste precisa de módulo importável.
+Escrever o arquivo colável à mão significaria manter duas cópias da mesma
+lógica: a testada e a que roda. Elas divergem, sempre, e a divergência é
+silenciosa.
+
+Gerando, o que você cola é literalmente o mesmo código que os testes
+exercitam. E `npm test` **falha** quando o arquivo gerado está desatualizado
+em relação aos fontes, então esquecer de regenerar não passa batido.
+
+```bash
+npm test    # 40 testes: o interpretador de plano, e a saúde do arquivo gerado
+```
+
+Quem preferir a CLI pode publicar direto do fonte, sem passar pelo gerado:
+
+```bash
+supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
 ```
 
 ## Segredos das funções
