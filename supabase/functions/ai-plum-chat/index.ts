@@ -122,14 +122,20 @@ async function handleExecutePlan(
     return json({ error: "plan obrigatorio" }, 400);
   }
 
-  const { data: dataset } = await supabase
+  const { data: dataset, error: datasetErr } = await supabase
     .from("datasets")
     .select("id, organization_id, google_sheet_id, google_sheet_tab, schema_metadata")
     .eq("id", datasetId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
 
-  if (!dataset) return json({ error: "base nao encontrada" }, 403);
+  if (!dataset) {
+    console.error(
+      "execute_plan: base nao encontrada. datasetId recebido=%s profile.organization_id=%s erro=%s",
+      datasetId, profile.organization_id, JSON.stringify(datasetErr),
+    );
+    return json({ error: "base nao encontrada" }, 403);
+  }
   if (!dataset.google_sheet_id) {
     return json(
       { error: "Esta base precisa ser reconectada: falta o link da planilha." },
@@ -232,6 +238,27 @@ async function handleExecutePlan(
 // Agentes Z / A / C — proxy para o Gemini
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Mesmo com response_mime_type "application/json", o Gemini já devolveu
+// texto com uma chave de fechamento sobrando no final (ex: objeto válido
+// seguido de "}" e quebras de linha soltas). JSON.parse é estrito e rejeita
+// o texto inteiro por causa do lixo à direita, mesmo com o objeto em si
+// correto. Em vez de exigir que a resposta inteira seja JSON puro, isola só
+// o primeiro objeto balanceado (da primeira "{" até a "}" que fecha ela) e
+// ignora qualquer coisa depois.
+function extractJsonObject(text: string): string {
+  const inicio = text.indexOf("{");
+  if (inicio === -1) return text.trim();
+  let profundidade = 0;
+  for (let i = inicio; i < text.length; i++) {
+    if (text[i] === "{") profundidade++;
+    else if (text[i] === "}") {
+      profundidade--;
+      if (profundidade === 0) return text.slice(inicio, i + 1);
+    }
+  }
+  return text.slice(inicio).trim();
+}
+
 async function handleAgente(
   action: "guard" | "plan_query" | "synthesize_answer",
   prompt: string,
@@ -328,9 +355,10 @@ Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, e
   if (action === "guard" || action === "plan_query") {
     try {
       const cleaned = generatedText.replace(/```json\n?|\n?```/g, "").trim();
-      finalResponse = JSON.parse(cleaned);
+      finalResponse = JSON.parse(extractJsonObject(cleaned));
     } catch {
       console.error("Falha ao parsear JSON retornado pelo Gemini:", generatedText);
+      return json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502);
     }
   }
 

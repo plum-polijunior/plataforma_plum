@@ -28,6 +28,14 @@ CREATE POLICY "Usuários podem inserir próprias mensagens"
     FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+-- Política de RLS: o usuário só pode atualizar a própria mensagem (usada
+-- para gravar o "assunto" em segundo plano depois do Agente Z classificar)
+CREATE POLICY "Usuários podem atualizar próprias mensagens"
+    ON public.plum_chat
+    FOR UPDATE
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
 -- Sem este GRANT, o Postgres nega o acesso antes de avaliar as policies
 -- acima (erro 42501), mesmo com RLS e policy corretos.
-GRANT SELECT, INSERT ON TABLE public.plum_chat TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.plum_chat TO authenticated;
