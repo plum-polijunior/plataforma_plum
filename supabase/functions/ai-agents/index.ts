@@ -7,6 +7,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Enum fechado de `type` de formatação — espelha _FORMATTERS/TYPE_TO_ROLE em
+// query_engine/pandas_executor.py. Mudar um lado sem o outro quebra o
+// dispatcher em silêncio, então trate os dois como uma unidade.
+const FORMATTING_TYPES = [
+  'moeda_brl', 'numero_decimal', 'numero_inteiro', 'percentual', 'data',
+  'texto_trim_maiusculas', 'texto_trim_minusculas', 'documento_cpf_cnpj',
+  'booleano_sim_nao', 'nenhuma',
+];
+
+// Segunda barreira contra o Gemini inventar um `type` fora do enum: não dá
+// para confiar só no prompt (não há responseSchema estruturado aqui, porque
+// as chaves do objeto são dinâmicas — nome de coluna). Qualquer `type` que
+// não bata exatamente no enum é reescrito para 'nenhuma', nunca descartado
+// em silêncio — a explicação registra o que a IA tentou originalmente.
+function sanitizeFormattingRules(formattingRules: unknown): Record<string, unknown> {
+  if (typeof formattingRules !== 'object' || formattingRules === null) return {};
+  const saneado: Record<string, unknown> = {};
+  for (const [coluna, regra] of Object.entries(formattingRules as Record<string, { type?: string }>)) {
+    const tipo = regra?.type;
+    if (tipo !== undefined && FORMATTING_TYPES.includes(tipo)) {
+      saneado[coluna] = regra;
+      continue;
+    }
+    saneado[coluna] = {
+      type: 'nenhuma',
+      params: {},
+      explicacao: `Nao transformada: a IA sugeriu um type invalido ('${String(tipo)}'). Revise manualmente.`,
+    };
+  }
+  return saneado;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -47,15 +79,35 @@ serve(async (req: Request) => {
     // AGENTE 3: FORMATAÇÃO DE DADOS
     // =========================================================================
     else if (action === 'format_data') {
-      systemInstruction = "Você é um Engenheiro de Dados Especialista. Sua tarefa é analisar amostras de dados (5 linhas) de uma planilha e formatá-las corretamente para um banco de dados relacional. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas, mantendo a estrutura de objetos originais) e 'formattingRules' (um objeto JSON onde a chave é o nome da coluna e o valor é a explicação exata de como os dados daquela coluna foram ou devem ser formatados). Exemplo de regra: 'Retirar os R$, converter para string(), e deixar com 3 casas decimais'.";
+      systemInstruction = `Você é um Engenheiro de Dados Especialista. Sua tarefa é analisar amostras de dados (5 linhas) de uma planilha e formatá-las corretamente para um banco de dados relacional. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas, mantendo a estrutura de objetos originais) e 'formattingRules' (um objeto JSON onde a chave é o nome da coluna e o valor é OUTRO OBJETO com exatamente três campos: 'type', 'params' e 'explicacao'.
+
+'type' DEVE ser EXATAMENTE um destes valores, e NUNCA outro: ${FORMATTING_TYPES.join(', ')}.
+- moeda_brl: valor monetário escrito como "R$ 1.234,56".
+- numero_decimal: número com vírgula decimal, sem moeda (ex.: "8,5").
+- numero_inteiro: contagem/quantidade inteira (ex.: "1.000").
+- percentual: percentual escrito como texto com "%" (ex.: "15%"). Não use este type se a coluna já for um número puro representando fração.
+- data: qualquer data escrita como texto.
+- texto_trim_maiusculas / texto_trim_minusculas: texto que precisa só de padronização de caixa e espaços.
+- documento_cpf_cnpj: CPF ou CNPJ com pontuação.
+- booleano_sim_nao: valores como "Sim"/"Não", "Verdadeiro"/"Falso", "1"/"0".
+- nenhuma: nada da lista se aplica. Use isto sempre que tiver dúvida — NUNCA invente um type fora desta lista.
+
+'params' é um objeto com parâmetros específicos do type (ex.: {"dayfirst": true} para 'data'; a maioria dos types usa {} vazio).
+'explicacao' é uma frase curta em português explicando a regra para um humano revisor — é o único campo que ele vai ler.
+
+Exemplo de valor para uma coluna: {"type": "moeda_brl", "params": {}, "explicacao": "Remove 'R$', separador de milhar e converte vírgula decimal para número."}`;
       userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nPor favor, formate os dados e retorne o JSON com as amostras e as regras aplicadas.`;
     }
     // =========================================================================
     // AGENTE 3.1: REFINAMENTO DE FORMATAÇÃO
     // =========================================================================
     else if (action === 'refine_format') {
-      systemInstruction = "Você é um Engenheiro de Dados Especialista. O usuário solicitou uma alteração pontual nas regras de formatação. Sua tarefa é analisar as regras de formatação atuais (formattingRules) e a solicitação do usuário, e alterar APENAS a regra referente à coluna ou solicitação mencionada pelo usuário, MANTENDO TODAS AS OUTRAS REGRAS INTACTAS sem modificar o que não foi pedido. Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras de dados originais (dataSamples). Você DEVE retornar ESTRITAMENTE um JSON com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (um objeto contendo todas as regras de formatação por coluna, com apenas a regra solicitada modificada).";
-      // columns = regras de formatação atuais (formattingRules), prompt = solicitação do usuário
+      systemInstruction = `Você é um Engenheiro de Dados Especialista. O usuário solicitou uma alteração pontual nas regras de formatação. As regras atuais (formattingRules) já vêm no formato estruturado {type, params, explicacao} por coluna. Sua tarefa é alterar APENAS o objeto {type, params, explicacao} da coluna ou solicitação mencionada pelo usuário, MANTENDO TODOS OS OUTROS OBJETOS INTACTOS, sem modificar o que não foi pedido.
+
+'type' DEVE continuar sendo EXATAMENTE um destes valores, e NUNCA outro: ${FORMATTING_TYPES.join(', ')}. Se a alteração pedida não se encaixar em nenhum deles, use 'nenhuma' e explique o motivo em 'explicacao'.
+
+Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras de dados originais (dataSamples). Você DEVE retornar ESTRITAMENTE um JSON com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (o objeto completo, mesmo formato estruturado, com apenas a coluna solicitada modificada).`;
+      // columns = regras de formatação atuais (formattingRules, formato estruturado), prompt = solicitação do usuário
       userPrompt = `Regras de Formatação Atuais (formattingRules): ${JSON.stringify(columns)}\nAmostras de Dados Originais (dataSamples): ${JSON.stringify(dataSamples)}\nSolicitação de Alteração do Usuário: "${prompt}"\nAltere APENAS o que o usuário solicitou nas regras e retorne o JSON com 'formattedSamples' e 'formattingRules'.`;
     }
     // =========================================================================
@@ -109,6 +161,16 @@ serve(async (req: Request) => {
         } catch (e) {
           console.error("Gemini não retornou um JSON válido:", generatedText);
         }
+      }
+
+      // Segunda barreira contra `type` fora do enum fechado: o prompt pede,
+      // mas não força — sanitiza antes de devolver ao front, nunca deixa um
+      // type inventado chegar até o schema_metadata persistido.
+      if (
+        (action === 'format_data' || action === 'refine_format') &&
+        finalResponse && typeof finalResponse === 'object' && finalResponse.formattingRules
+      ) {
+        finalResponse.formattingRules = sanitizeFormattingRules(finalResponse.formattingRules);
       }
 
       return new Response(JSON.stringify({ result: finalResponse }), {

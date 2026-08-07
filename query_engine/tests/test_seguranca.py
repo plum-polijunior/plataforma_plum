@@ -48,7 +48,7 @@ def _payload(**over):
             }
         ],
         "allowed_columns": ["faturamento", "regiao", "data_venda"],
-        "column_roles": {},
+        "formatting_rules": {},
         "k_min": 5,
         "issued_at": int(time.time()),
     }

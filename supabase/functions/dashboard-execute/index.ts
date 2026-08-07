@@ -41,7 +41,7 @@ import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 import {
   authorizePlan,
-  columnRolesFromSchema,
+  formattingRulesFromSchema,
   permissionsFingerprint,
   signPayload,
 } from "../_shared/query_plan.ts";
@@ -231,7 +231,7 @@ Deno.serve(async (req: Request) => {
       resolved_columns: required,
     })),
     allowed_columns: allowedColumns,
-    column_roles: columnRolesFromSchema(dataset.schema_metadata, requiredColumns),
+    formatting_rules: formattingRulesFromSchema(dataset.schema_metadata, requiredColumns),
     k_min: org?.dashboard_k_min ?? 5,
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),

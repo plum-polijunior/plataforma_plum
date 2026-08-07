@@ -242,16 +242,18 @@ def test_sem_papel_declarado_a_soma_continua_soma(vendas):
 def test_papeis_derivados_das_regras_de_formatacao():
     roles = roles_from_formatting_rules(
         {
-            "margem": "Converter para percentual com 2 casas",
-            "data_venda": "Converter para data no formato dd/mm/aaaa",
-            "faturamento": "Retirar o R$ e converter para float",
-            "cliente": "Manter como texto",
+            "margem": {"type": "percentual", "params": {}},
+            "data_venda": {"type": "data", "params": {"dayfirst": True}},
+            "faturamento": {"type": "moeda_brl", "params": {}},
+            "cliente": {"type": "texto_trim_maiusculas", "params": {}},
+            "observacoes": {"type": "nenhuma", "params": {}},
         }
     )
     assert roles["margem"] == "percent"
     assert roles["data_venda"] == "date"
     assert roles["faturamento"] == "number"
     assert roles["cliente"] == "text"
+    assert roles["observacoes"] == "text"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

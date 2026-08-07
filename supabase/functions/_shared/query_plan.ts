@@ -192,43 +192,54 @@ export async function permissionsFingerprint(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Papéis de coluna (percent/date/number/text) a partir do schema_metadata
+// Regras de formatação estruturadas a partir do schema_metadata
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface FormattingRule {
+  type: string;
+  params: Record<string, unknown>;
+}
+
 /**
- * Deriva o papel de cada coluna a partir da `cleaning_rule` que o Agente 3
- * escreveu no onboarding (`schema_metadata.columns[nome].cleaning_rule`).
+ * Extrai a regra de formatação estruturada que o Agente 3/3.1 gravou em
+ * `schema_metadata.columns[nome].formatting_rule` (`{type, params, explicacao}`
+ * — só `type`/`params` seguem para o executor, `explicacao` é só para o painel
+ * humano). Coluna sem `formatting_rule` (schema antigo, em texto livre, ou
+ * nunca reprocessado pelo Agente 3.1) cai no fallback seguro `"nenhuma"`.
  *
  * Movido para cá em 2026-08-07: antes vivia só dentro de `dashboard-execute`,
  * mas o chat (`ai-plum-chat`) precisa exatamente do mesmo cálculo — sem isto o
  * executor não sabe que não deve somar uma coluna de percentual. Mesma regra
  * de "um interpretador, dois pontos de aplicação" que já vale para
- * `extractColumns`/`authorizePlan`: se o chat e o dashboard calculassem os
- * papéis de coluna de jeitos levemente diferentes, uma pergunta no chat e um
- * card no dashboard sobre a mesma coluna poderiam tratar o percentual de
- * formas diferentes, e ninguém notaria a divergência.
+ * `extractColumns`/`authorizePlan`.
  *
- * Continua sendo keyword-match sobre texto livre escrito por um LLM — dívida
- * conhecida e registrada em `query_engine/urgent.md`, não resolvida aqui.
+ * O `type` vem de um enum fechado (ver `query_engine/pandas_executor.py`,
+ * `_FORMATTERS`/`TYPE_TO_ROLE`) — este arquivo não decide papel (percent/date/
+ * number/text) nem interpreta o `type`, isso é responsabilidade única do
+ * Python (`roles_from_formatting_rules`), para não duplicar a mesma heurística
+ * em duas linguagens (a dívida que existia aqui antes desta mudança).
  */
-export function columnRolesFromSchema(
+export function formattingRulesFromSchema(
   schemaMetadata: unknown,
   apenas: ReadonlySet<string>,
-): Record<string, string> {
-  const roles: Record<string, string> = {};
-  const cols = (schemaMetadata as { columns?: Record<string, { cleaning_rule?: string }> })
-    ?.columns;
-  if (!cols) return roles;
+): Record<string, FormattingRule> {
+  const regras: Record<string, FormattingRule> = {};
+  const cols = (
+    schemaMetadata as {
+      columns?: Record<string, { formatting_rule?: FormattingRule }>;
+    }
+  )?.columns;
+  if (!cols) return regras;
 
   for (const [nome, def] of Object.entries(cols)) {
     if (!apenas.has(nome)) continue;
-    const r = (def?.cleaning_rule ?? "").toLowerCase();
-    if (/percent|porcent|%|taxa/.test(r)) roles[nome] = "percent";
-    else if (/data|date/.test(r)) roles[nome] = "date";
-    else if (/r\$|moeda|float|int|numero|número|decimal/.test(r)) roles[nome] = "number";
-    else roles[nome] = "text";
+    const regra = def?.formatting_rule;
+    regras[nome] = {
+      type: regra?.type ?? "nenhuma",
+      params: regra?.params ?? {},
+    };
   }
-  return roles;
+  return regras;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

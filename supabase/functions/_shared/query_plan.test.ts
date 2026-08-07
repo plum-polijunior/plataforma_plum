@@ -14,8 +14,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   authorizePlan,
-  columnRolesFromSchema,
   extractColumns,
+  formattingRulesFromSchema,
   permissionsFingerprint,
   signPayload,
   stripTable,
@@ -275,44 +275,53 @@ describe("signPayload", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// columnRolesFromSchema — usado por dashboard-execute E ai-plum-chat (2026-08-07)
+// formattingRulesFromSchema — usado por dashboard-execute E ai-plum-chat
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("columnRolesFromSchema", () => {
+describe("formattingRulesFromSchema", () => {
   const schema = {
     columns: {
-      margem_lucro: { cleaning_rule: "Converter para percentual (%)" },
-      data_venda: { cleaning_rule: "Converter para data" },
-      faturamento: { cleaning_rule: "Remover R$ e converter para número" },
-      regiao: { cleaning_rule: "Nenhuma" },
+      margem_lucro: {
+        formatting_rule: { type: "percentual", params: {}, explicacao: "..." },
+      },
+      data_venda: {
+        formatting_rule: { type: "data", params: { dayfirst: true }, explicacao: "..." },
+      },
+      faturamento: {
+        formatting_rule: { type: "moeda_brl", params: {}, explicacao: "..." },
+      },
+      regiao: {
+        formatting_rule: { type: "nenhuma", params: {}, explicacao: "..." },
+      },
+      cliente_antigo: { cleaning_rule: "Manter como texto" },
     },
   };
 
-  it("classifica percent, date e number pela cleaning_rule", () => {
-    const roles = columnRolesFromSchema(
+  it("extrai type e params de cada coluna pedida", () => {
+    const regras = formattingRulesFromSchema(
       schema,
       new Set(["margem_lucro", "data_venda", "faturamento"]),
     );
-    expect(roles).toEqual({
-      margem_lucro: "percent",
-      data_venda: "date",
-      faturamento: "number",
+    expect(regras).toEqual({
+      margem_lucro: { type: "percentual", params: {} },
+      data_venda: { type: "data", params: { dayfirst: true } },
+      faturamento: { type: "moeda_brl", params: {} },
     });
   });
 
-  it("cai em 'text' quando a regra não bate em nenhum padrão conhecido", () => {
-    const roles = columnRolesFromSchema(schema, new Set(["regiao"]));
-    expect(roles).toEqual({ regiao: "text" });
+  it("só devolve regra para as colunas pedidas, mesmo com mais no schema", () => {
+    const regras = formattingRulesFromSchema(schema, new Set(["margem_lucro"]));
+    expect(Object.keys(regras)).toEqual(["margem_lucro"]);
   });
 
-  it("só devolve papel para as colunas pedidas, mesmo com mais no schema", () => {
-    const roles = columnRolesFromSchema(schema, new Set(["margem_lucro"]));
-    expect(Object.keys(roles)).toEqual(["margem_lucro"]);
+  it("cai em 'nenhuma' quando a coluna ainda está no formato antigo (cleaning_rule)", () => {
+    const regras = formattingRulesFromSchema(schema, new Set(["cliente_antigo"]));
+    expect(regras).toEqual({ cliente_antigo: { type: "nenhuma", params: {} } });
   });
 
   it("não quebra com schema_metadata sem 'columns' (base ainda não finalizada)", () => {
-    expect(columnRolesFromSchema({}, new Set(["x"]))).toEqual({});
-    expect(columnRolesFromSchema(null, new Set(["x"]))).toEqual({});
-    expect(columnRolesFromSchema(undefined, new Set(["x"]))).toEqual({});
+    expect(formattingRulesFromSchema({}, new Set(["x"]))).toEqual({});
+    expect(formattingRulesFromSchema(null, new Set(["x"]))).toEqual({});
+    expect(formattingRulesFromSchema(undefined, new Set(["x"]))).toEqual({});
   });
 });

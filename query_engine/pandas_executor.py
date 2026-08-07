@@ -19,7 +19,7 @@ cliente nomeia as colunas do jeito dele.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Callable, Dict, Optional, Set
 
 import re
 import pandas as pd
@@ -510,37 +510,149 @@ def _eval_single(
 # Execução com Regras de Formatação (Agente 3 & 3.1)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def apply_formatting_rules(df: pd.DataFrame, formatting_rules: Dict[str, str]) -> pd.DataFrame:
+def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Series:
     """
-    Aplica as regras de formatação (formattingRules) especificadas pelo Agente 3/3.1
-    sobre as colunas do DataFrame Pandas.
+    Limpa um número em formato PT-BR: remove 'R$', espaços, opcionalmente '%',
+    o ponto de milhar, e troca a vírgula decimal por ponto.
+    """
+    text = s.astype(str)
+    text = text.str.replace("R$", "", regex=False)
+    if strip_percent:
+        text = text.str.replace("%", "", regex=False)
+    text = text.str.replace(r"\s", "", regex=True)
+    text = text.str.replace(".", "", regex=False)
+    text = text.str.replace(",", ".", regex=False)
+    return pd.to_numeric(text, errors="coerce")
+
+
+def _fmt_moeda_brl(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return _parse_ptbr_number(s)
+
+
+def _fmt_numero_decimal(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return _parse_ptbr_number(s)
+
+
+def _fmt_numero_inteiro(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return _parse_ptbr_number(s).astype("Int64")
+
+
+def _fmt_percentual(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return _parse_ptbr_number(s, strip_percent=True)
+
+
+def _fmt_data(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return pd.to_datetime(s, dayfirst=bool(params.get("dayfirst", True)), errors="coerce")
+
+
+def _fmt_texto_trim_maiusculas(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return s.astype(str).str.strip().str.upper()
+
+
+def _fmt_texto_trim_minusculas(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return s.astype(str).str.strip().str.lower()
+
+
+def _fmt_documento_cpf_cnpj(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return s.astype(str).str.replace(r"[^\d]", "", regex=True)
+
+
+_BOOLEANOS_VERDADEIROS = {"sim", "verdadeiro", "true", "1", "s", "v", "yes"}
+_BOOLEANOS_FALSOS = {"nao", "não", "falso", "false", "0", "n", "f", "no"}
+
+
+def _fmt_booleano_sim_nao(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    normalizado = s.astype(str).str.strip().str.lower()
+
+    def _mapear(v: str):
+        if v in _BOOLEANOS_VERDADEIROS:
+            return True
+        if v in _BOOLEANOS_FALSOS:
+            return False
+        return pd.NA
+
+    return normalizado.map(_mapear)
+
+
+def _fmt_nenhuma(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    return s
+
+
+# Enum fechado de `type` de formatação (query_engine/urgent.md). Expandir só
+# com decisão explícita — nunca em silêncio.
+_FORMATTERS: Dict[str, Callable[[pd.Series, Dict[str, Any]], pd.Series]] = {
+    "moeda_brl": _fmt_moeda_brl,
+    "numero_decimal": _fmt_numero_decimal,
+    "numero_inteiro": _fmt_numero_inteiro,
+    "percentual": _fmt_percentual,
+    "data": _fmt_data,
+    "texto_trim_maiusculas": _fmt_texto_trim_maiusculas,
+    "texto_trim_minusculas": _fmt_texto_trim_minusculas,
+    "documento_cpf_cnpj": _fmt_documento_cpf_cnpj,
+    "booleano_sim_nao": _fmt_booleano_sim_nao,
+    "nenhuma": _fmt_nenhuma,
+}
+
+# Papel (percent/date/number/text) de cada `type` do enum. Substitui o antigo
+# keyword-match em texto livre: agora é lookup direto, sem heurística.
+TYPE_TO_ROLE: Dict[str, str] = {
+    "moeda_brl": "number",
+    "numero_decimal": "number",
+    "numero_inteiro": "number",
+    "percentual": "percent",
+    "data": "date",
+    "texto_trim_maiusculas": "text",
+    "texto_trim_minusculas": "text",
+    "documento_cpf_cnpj": "text",
+    "booleano_sim_nao": "text",
+    "nenhuma": "text",
+}
+
+
+def apply_formatting_rules(
+    df: pd.DataFrame, formatting_rules: Dict[str, Dict[str, Any]]
+) -> pd.DataFrame:
+    """
+    Aplica as regras de formatação estruturadas (Agente 3/3.1) sobre as
+    colunas do DataFrame. Cada regra é `{"type": <enum fechado>, "params": {}}`.
+
+    `type` fora do enum ou `"nenhuma"` não transforma a coluna, mas loga um
+    warning — a falha de tipagem precisa ficar visível para alguém, nunca
+    sumir em silêncio (era o problema central do `query_engine/urgent.md`).
     """
     df = df.copy()
-    for col, rule in formatting_rules.items():
+    for col, rule in (formatting_rules or {}).items():
         if col not in df.columns:
             continue
 
-        rule_lower = str(rule).lower()
+        tipo = str((rule or {}).get("type", "nenhuma"))
+        params = (rule or {}).get("params") or {}
+        formatter = _FORMATTERS.get(tipo)
 
-        # Se a regra menciona limpar moeda / R$ ou converter para número/float/int
-        if any(keyword in rule_lower for keyword in ["r$", "moeda", "float", "int", "número", "numero", "decimal"]):
-            s = df[col].astype(str)
-            s = s.str.replace(r"[R$\s]", "", regex=True)
-            s = s.str.replace(r"\.", "", regex=True)  # Remove ponto de milhar se houver
-            s = s.str.replace(",", ".", regex=False)   # Troca vírgula por ponto decimal
-            df[col] = pd.to_numeric(s, errors="coerce")
+        if formatter is None:
+            logger.warning(
+                "Coluna '%s': type de formatacao '%s' desconhecido. "
+                "Coluna nao transformada.", col, tipo,
+            )
+            continue
+        if tipo == "nenhuma":
+            logger.warning(
+                "Coluna '%s': sem regra de formatacao (type='nenhuma'). "
+                "Dados permanecem como vieram da planilha.", col,
+            )
+            continue
 
-        # Se a regra menciona converter para data
-        elif "data" in rule_lower or "date" in rule_lower:
-            df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+        df[col] = formatter(df[col], params)
 
     return df
 
 
-def roles_from_formatting_rules(formatting_rules: Dict[str, str]) -> Dict[str, str]:
+def roles_from_formatting_rules(
+    formatting_rules: Dict[str, Dict[str, Any]]
+) -> Dict[str, str]:
     """
-    Deriva o papel de cada coluna a partir da `cleaning_rule` que o Agente 3
-    escreveu no onboarding e que já vive em `schema_metadata`.
+    Deriva o papel de cada coluna (percent/date/number/text) a partir do
+    `type` estruturado que o Agente 3 gravou em `schema_metadata`.
 
     É daqui que sai o `column_roles` do executor. A alternativa antiga era uma
     constante global no módulo, que não funciona em multitenant: a coluna de
@@ -548,23 +660,15 @@ def roles_from_formatting_rules(formatting_rules: Dict[str, str]) -> Dict[str, s
     """
     roles: Dict[str, str] = {}
     for col, rule in (formatting_rules or {}).items():
-        r = str(rule).lower()
-        if any(k in r for k in ("percent", "porcent", "%", "taxa")):
-            roles[col] = "percent"
-        elif "data" in r or "date" in r:
-            roles[col] = "date"
-        elif any(k in r for k in ("r$", "moeda", "float", "int", "numero",
-                                  "número", "decimal")):
-            roles[col] = "number"
-        else:
-            roles[col] = "text"
+        tipo = str((rule or {}).get("type", "nenhuma"))
+        roles[col] = TYPE_TO_ROLE.get(tipo, "text")
     return roles
 
 
 def execute_plan_with_formatting(
     plan: Dict[str, Any],
     tables: Dict[str, pd.DataFrame],
-    formatting_rules: Dict[str, str] | None = None,
+    formatting_rules: Dict[str, Dict[str, Any]] | None = None,
     *,
     column_roles: Optional[Dict[str, str]] = None,
     k_min: int = DEFAULT_K_MIN,

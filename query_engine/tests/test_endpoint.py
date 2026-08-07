@@ -93,7 +93,7 @@ def _corpo(**over):
             }
         ],
         "allowed_columns": ["faturamento", "regiao"],
-        "column_roles": {},
+        "formatting_rules": {},
         "k_min": 5,
         "issued_at": int(time.time()),
     }

@@ -12,6 +12,14 @@ interface DatabasePipelineProps {
   organizationId: string;
 }
 
+interface FormattingRule {
+  type: string;
+  params: Record<string, unknown>;
+  explicacao: string;
+}
+
+const REGRA_SEM_FORMATACAO: FormattingRule = { type: "nenhuma", params: {}, explicacao: "" };
+
 export default function DatabasePipeline({ organizationId }: DatabasePipelineProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(0); // 0: Upload, 1: Review Cols, 2: Semantic, 3: Refine, 4: Format
@@ -152,7 +160,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
   const [semanticDefinitions, setSemanticDefinitions] = useState<Record<string, string>>({});
   const [formattedDataSamples, setFormattedDataSamples] = useState<any[]>([]);
-  const [formattingRules, setFormattingRules] = useState<Record<string, string>>({});
+  const [formattingRules, setFormattingRules] = useState<Record<string, FormattingRule>>({});
 
   const [formatQuery, setFormatQuery] = useState("");
   const [isFormatRefining, setIsFormatRefining] = useState(false);
@@ -394,7 +402,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         columns: Object.values(normalizedColumns).reduce((acc: any, col) => {
           acc[col] = {
             semantic_definition: semanticDefinitions[col] || "",
-            cleaning_rule: formattingRules[col] || ""
+            formatting_rule: formattingRules[col] || REGRA_SEM_FORMATACAO
           };
           return acc;
         }, {})
@@ -609,8 +617,11 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {Object.entries(formattingRules).map(([colName, rule], idx) => (
                       <div key={idx} className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
-                        <span className="font-bold text-primary font-mono block mb-1">{colName}</span>
-                        <span className="text-muted-foreground leading-relaxed">{rule}</span>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-primary font-mono">{colName}</span>
+                          <span className="text-[10px] font-mono uppercase text-primary/70 bg-primary/10 rounded px-1.5 py-0.5">{rule?.type || "nenhuma"}</span>
+                        </div>
+                        <span className="text-muted-foreground leading-relaxed">{rule?.explicacao || "Sem regra"}</span>
                       </div>
                     ))}
                   </div>

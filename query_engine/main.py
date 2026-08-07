@@ -35,7 +35,9 @@ from query_engine.pandas_executor import (
     MissingColumnError,
     RawRowsBlocked,
     RowLimitExceeded,
+    apply_formatting_rules,
     execute_plan,
+    roles_from_formatting_rules,
 )
 from query_engine.security import (
     BadSignature,
@@ -144,6 +146,14 @@ async def execute(
             )
         return {"results": resultados}
 
+    # Regras estruturadas do Agente 3/3.1: limpa/tipa colunas que a planilha
+    # guarda como texto (moeda escrita como string, CPF pontuado, Sim/Não...).
+    # Colunas já nativamente numéricas/data no Sheets chegam corretas de
+    # `sheets.load_columns` (valueRenderOption=UNFORMATTED_VALUE) e passam
+    # incólumes por aqui.
+    df = apply_formatting_rules(df, payload.formatting_rules)
+    column_roles = roles_from_formatting_rules(payload.formatting_rules)
+
     tabelas = {"producao": df}
 
     for pedido in aprovados:
@@ -154,7 +164,7 @@ async def execute(
             saida = execute_plan(
                 plano,
                 tabelas,
-                column_roles=payload.column_roles,
+                column_roles=column_roles,
                 k_min=k_min,
                 max_rows=None,  # já barrado em sheets.load_columns
             )

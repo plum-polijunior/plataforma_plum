@@ -378,39 +378,46 @@ export default function DatabasePage() {
                     {Object.entries(editedSchema.columns).map(([colName, colData]: [string, any]) => (
                       <div key={colName} className="flex gap-4 p-2 bg-muted/10 rounded-md border border-border/30">
                         <span className="text-xs font-bold font-mono text-primary w-1/4 truncate">{colName}</span>
-                        <span className="text-xs text-muted-foreground flex-1 break-words">{colData.cleaning_rule || 'Sem regra'}</span>
+                        <span className="text-xs text-muted-foreground flex-1 break-words">{colData.formatting_rule?.explicacao || 'Sem regra'}</span>
                       </div>
                     ))}
                   </div>
 
                   <div className="flex gap-2">
-                    <Input 
-                      value={refinePrompt} 
-                      onChange={(e) => setRefinePrompt(e.target.value)} 
+                    <Input
+                      value={refinePrompt}
+                      onChange={(e) => setRefinePrompt(e.target.value)}
                       placeholder="Ex: Formate a coluna data_venda para o padrão PT-BR"
                     />
                     <Button disabled={isRefining || !refinePrompt.trim()} onClick={async () => {
                       setIsRefining(true);
                       try {
                         const currentRules = Object.entries(selectedDataset.schema_metadata.columns).reduce((acc: any, [k, v]: [string, any]) => {
-                          acc[k] = v.cleaning_rule;
+                          acc[k] = v.formatting_rule;
                           return acc;
                         }, {});
-                        
+
                         const res = await supabase.functions.invoke('ai-agents', {
                           body: { action: 'refine_format', prompt: refinePrompt, columns: currentRules, dataSamples: [] }
                         });
-                        
+
                         if (res.error) throw res.error;
-                        
-                        const newRules = res.data.result.formattingRules;
+
+                        let resultado = res.data?.result;
+                        if (typeof resultado === "string") {
+                          const limpo = resultado.replace(/```json\n?|\n?```/g, "").trim();
+                          resultado = JSON.parse(limpo);
+                        }
+
+                        const newRules = resultado?.formattingRules;
+                        if (!newRules) throw new Error("A IA nao retornou um formato valido.");
                         const newSchema = { ...selectedDataset.schema_metadata };
                         Object.keys(newRules).forEach(col => {
                           if (newSchema.columns[col]) {
-                            newSchema.columns[col].cleaning_rule = newRules[col];
+                            newSchema.columns[col].formatting_rule = newRules[col];
                           }
                         });
-                        
+
                         await supabase.from('datasets').update({ schema_metadata: newSchema }).eq('id', selectedDataset.id);
                         setSelectedDataset({...selectedDataset, schema_metadata: newSchema});
                         setEditedSchema(newSchema);
@@ -444,7 +451,7 @@ export default function DatabasePage() {
                         </div>
                         <div>
                           <span className="text-xs text-muted-foreground font-semibold uppercase block mb-1">Regra de Formatação (Agente 3)</span>
-                          <span className="text-foreground/70">{colData.cleaning_rule || 'Não definida'}</span>
+                          <span className="text-foreground/70">{colData.formatting_rule?.explicacao || 'Não definida'}</span>
                         </div>
                       </div>
                     </div>

@@ -32,7 +32,7 @@ import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 import {
   authorizePlan,
-  columnRolesFromSchema,
+  formattingRulesFromSchema,
   signPayload,
   type QueryPlan,
 } from "../_shared/query_plan.ts";
@@ -185,7 +185,7 @@ async function handleExecutePlan(
     // Lambda trata cada item de `plans` de forma independente de qualquer forma.
     plans: [{ card_id: "chat", plan, resolved_columns: veredito.required }],
     allowed_columns: allowedColumns,
-    column_roles: columnRolesFromSchema(dataset.schema_metadata, new Set(veredito.required)),
+    formatting_rules: formattingRulesFromSchema(dataset.schema_metadata, new Set(veredito.required)),
     k_min: org?.dashboard_k_min ?? 5,
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
