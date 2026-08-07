@@ -13,6 +13,14 @@
 
 set -euo pipefail
 
+# Git Bash no Windows converte argumentos que parecem caminho Unix em caminho
+# Windows: `/plum/prod/hmac-secret` chegaria na AWS como
+# `C:/Program Files/Git/plum/prod/hmac-secret`, e o SSM recusa com
+# "Parameter name must be a fully qualified name". Desligar a conversao e a
+# unica forma de o mesmo script servir no Windows, no Mac e no Linux.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 REGIAO="${PLUM_AWS_REGION:-sa-east-1}"
 FUNCAO="${PLUM_LAMBDA_NAME:-plum-query-engine}"
 USUARIO_EDGE="plum-edge-invoker"
