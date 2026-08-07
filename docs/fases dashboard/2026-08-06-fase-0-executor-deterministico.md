@@ -215,7 +215,7 @@ Aqui está o fato que muda a postura de segurança do produto inteiro. Em
 cliente compartilhe a planilha com:
 
 ```
-reader@plum-ai.iam.gserviceaccount.com
+plum-polijunior@plataforma-plum.iam.gserviceaccount.com
 ```
 
 É **uma única identidade, global, que tem leitura na planilha de todos os
@@ -605,7 +605,7 @@ parâmetros novos no SSM: `/plum/prod/google-sa-json` e `/plum/prod/hmac-secret`
 
 **4. Safeguard**
 N/A — é código novo, não correção. Mas ele fecha um risco que estava aberto no
-desenho: a service account `reader@plum-ai.iam.gserviceaccount.com` tem leitura
+desenho: a service account `plum-polijunior@plataforma-plum.iam.gserviceaccount.com` tem leitura
 na planilha de todos os clientes, e o design original não dizia como o serviço
 autenticaria quem o chama.
 

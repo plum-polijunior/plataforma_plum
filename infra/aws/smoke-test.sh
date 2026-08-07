@@ -13,7 +13,7 @@
 #
 #   SHEET_ID=1AbC... COLUNA=faturamento bash infra/aws/smoke-test.sh
 #
-# A planilha precisa estar compartilhada com reader@plum-ai.iam.gserviceaccount.com
+# A planilha precisa estar compartilhada com plum-polijunior@plataforma-plum.iam.gserviceaccount.com
 # como Leitor, e ter cabeçalho na primeira linha.
 # =============================================================================
 
@@ -139,7 +139,7 @@ else
   bad "o executor recusou ou falhou. Diagnóstico pela mensagem:"
   printf '    401  → assinatura. Confira se o segredo do SSM é o mesmo dos dois lados.\n'
   printf '    403  → o curl não assinou com SigV4, ou a credencial não tem InvokeFunctionUrl.\n'
-  printf '    erro "Sem acesso a planilha" → compartilhe com reader@plum-ai.iam.gserviceaccount.com\n'
+  printf '    erro "Sem acesso a planilha" → compartilhe com plum-polijunior@plataforma-plum.iam.gserviceaccount.com\n'
   printf '    erro "nao tem a(s) coluna(s)" → o nome da coluna não bate com o cabeçalho\n\n'
   printf '  Log: aws logs tail /aws/lambda/%s --region %s --since 5m\n\n' "$FUNCAO" "$REGIAO"
   exit 1

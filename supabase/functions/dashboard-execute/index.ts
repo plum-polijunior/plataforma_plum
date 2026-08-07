@@ -7,7 +7,7 @@
  * assinado e nunca consulta o Supabase.
  *
  * Isso importa por um motivo concreto: a service account que lê as planilhas
- * (`reader@plum-ai.iam.gserviceaccount.com`) tem acesso de leitura à planilha
+ * (`plum-polijunior@plataforma-plum.iam.gserviceaccount.com`) tem acesso de leitura à planilha
  * de TODOS os clientes. O isolamento entre empresas neste caminho não é
  * garantido pelo banco, porque este caminho nunca toca o banco do lado do
  * executor. Ele é garantido por este arquivo.

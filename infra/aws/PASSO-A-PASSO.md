@@ -68,17 +68,17 @@ em `Account` é o da conta do PLUM.
 
 **No navegador.**
 
-O executor lê as planilhas com a identidade `reader@plum-ai.iam.gserviceaccount.com`.
+O executor lê as planilhas com a identidade `plum-polijunior@plataforma-plum.iam.gserviceaccount.com`.
 Ele precisa da chave dela.
 
 1. Abra <https://console.cloud.google.com>
-2. No seletor de projeto, no topo, escolha **plum-ai**
+2. No seletor de projeto, no topo, escolha **plataforma-plum**
 3. Menu ☰ → **IAM e administrador** → **Contas de serviço**
-4. Clique em `reader@plum-ai.iam.gserviceaccount.com`
+4. Clique em `plum-polijunior@plataforma-plum.iam.gserviceaccount.com`
 5. Aba **Chaves**
 6. **Adicionar chave** → **Criar nova chave** → **JSON** → **Criar**
 
-Baixa um arquivo tipo `plum-ai-4f2a91b3c8d7.json`, normalmente em Downloads.
+Baixa um arquivo tipo `plataforma-plum-066f1e5ced6e.json`, normalmente em Downloads.
 
 Criar uma chave nova **não invalida as antigas** e não quebra nada que já
 esteja rodando.
@@ -91,7 +91,7 @@ esteja rodando.
 baixou:
 
 ```bash
-GOOGLE_SA_FILE=/c/Users/kakam/Downloads/plum-ai-4f2a91b3c8d7.json \
+GOOGLE_SA_FILE=C:/Users/kakam/Downloads/plataforma-plum-066f1e5ced6e.json \
   bash infra/aws/provision.sh
 ```
 
@@ -102,7 +102,7 @@ Depois que terminar, apague o JSON. Ele já está guardado e criptografado na
 AWS:
 
 ```bash
-rm /c/Users/kakam/Downloads/plum-ai-4f2a91b3c8d7.json
+rm /c/Users/kakam/Downloads/plataforma-plum-066f1e5ced6e.json
 ```
 
 ---
@@ -231,7 +231,7 @@ Use uma planilha **sua**, não de cliente.
 1. Crie uma no Google Sheets com cabeçalho na primeira linha, por exemplo
    `regiao` e `valor`, e **pelo menos 15 linhas** de dados inventados,
    distribuídas em 2 ou 3 regiões
-2. **Compartilhar** → cole `reader@plum-ai.iam.gserviceaccount.com` →
+2. **Compartilhar** → cole `plum-polijunior@plataforma-plum.iam.gserviceaccount.com` →
    permissão **Leitor** → **Enviar**
 3. Copie o link da barra do navegador
 

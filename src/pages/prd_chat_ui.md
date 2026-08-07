@@ -85,7 +85,7 @@ Por decisão arquitetural e de segurança focada no mercado corporativo, o Plum 
 
 **Como funcionará a Etapa 5 (Conexão do Sheets):**
 1. O usuário cola no input da Plataforma Plum a URL da sua planilha atual de trabalho.
-2. O Plum exibe o e-mail oficial do robô (ex: `reader@plum-ai.iam.gserviceaccount.com`).
+2. O Plum exibe o e-mail oficial do robô (ex: `plum-polijunior@plataforma-plum.iam.gserviceaccount.com`).
 3. O sistema exibe um mini-tutorial instruindo claramente o usuário a fazer o seguinte fluxo no Google Sheets:
    - Clicar no botão **"Compartilhar"** no topo direito da planilha.
    - Copiar e colar o e-mail fornecido pelo Plum no campo de pessoas.

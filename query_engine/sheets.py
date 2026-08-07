@@ -29,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
+# A identidade que o cliente autoriza como Leitor na planilha dele. Precisa ser
+# EXATAMENTE a mesma que aparece na tela de conexão de base
+# (src/components/DatabasePipeline.tsx). Se as duas divergirem, o serviço
+# autentica no Google normalmente e mesmo assim toda planilha responde "sem
+# acesso", porque foi compartilhada com outro endereço. Parece falha de rede e
+# é falha de identidade.
+SERVICE_ACCOUNT_EMAIL = "plum-polijunior@plataforma-plum.iam.gserviceaccount.com"
+
 # Cache de cabeçalho e tamanho por planilha, vivo enquanto o container vive.
 # Guarda só nome de coluna e contagem de linhas: nenhum dado de cliente.
 _META_TTL_SECONDS = 900
@@ -98,9 +106,12 @@ def _translate(exc: Exception, sheet_id: str) -> SheetError:
             "Nao encontrei essa planilha. Confira se ela nao foi apagada ou movida."
         )
     if status == 403:
+        # Mantido numa linha so de proposito: quebrado em duas, o endereco
+        # escapa de qualquer busca por texto e fica desatualizado sem ninguem
+        # perceber. Foi o que aconteceu quando a conta de servico mudou.
         return SheetError(
-            "Sem acesso a planilha. Compartilhe com reader@plum-ai.iam."
-            "gserviceaccount.com como Leitor."
+            "Sem acesso a planilha. Compartilhe com "
+            f"{SERVICE_ACCOUNT_EMAIL} como Leitor."
         )
     if status == 429:
         return SheetError(

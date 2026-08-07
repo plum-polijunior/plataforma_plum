@@ -2,7 +2,7 @@
 As quatro barreiras da camada de segurança do executor.
 
 Cada teste corresponde a uma forma concreta de alguém ler a planilha de outra
-empresa. A service account `reader@plum-ai.iam.gserviceaccount.com` tem leitura
+empresa. A service account `plum-polijunior@plataforma-plum.iam.gserviceaccount.com` tem leitura
 em TODA planilha de TODO tenant: se estas barreiras caem, cai o isolamento
 entre clientes inteiro, porque este caminho nunca toca o Postgres e portanto
 nunca é protegido pelo RLS.
