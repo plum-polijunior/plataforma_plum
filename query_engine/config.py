@@ -102,7 +102,7 @@ def hmac_secret() -> str:
 
 def google_service_account_info() -> dict:
     """
-    JSON da service account `reader@plum-ai.iam.gserviceaccount.com`.
+    JSON da service account `plum-polijunior@plataforma-plum.iam.gserviceaccount.com`.
 
     Ela tem leitura em TODA planilha de TODO tenant, então é o segredo de maior
     valor do sistema. Nunca é escrita em disco: sai do Parameter Store direto

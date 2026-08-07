@@ -48,7 +48,11 @@ jobs:
       - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
-          pip install -r query_engine/requirements.txt pytest
+          # requirements-dev.txt inclui o requirements.txt e acrescenta pytest
+          # e httpx. O httpx precisa estar declarado: sem ele o TestClient do
+          # FastAPI levanta RuntimeError na importação e o pytest quebra na
+          # coleta, derrubando a suite inteira.
+          pip install -r query_engine/requirements-dev.txt
       - name: Invariantes de privacidade e segurança (Python)
         working-directory: query_engine
         run: python -m pytest
@@ -156,7 +160,7 @@ jobs:
         run: |
           aws lambda invoke \
             --function-name "${{ env.LAMBDA_FUNCTION }}" \
-            --payload '{"version":"2.0","rawPath":"/health","requestContext":{"http":{"method":"GET","path":"/health"}},"headers":{}}' \
+            --payload '{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"host":"smoke.local"},"requestContext":{"accountId":"anonymous","apiId":"smoke","domainName":"smoke.local","domainPrefix":"smoke","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"plum-smoke-test"},"requestId":"smoke","routeKey":"$default","stage":"$default","time":"01/Jan/2026:00:00:00 +0000","timeEpoch":1767225600},"isBase64Encoded":false}' \
             --cli-binary-format raw-in-base64-out /tmp/resposta.json
           cat /tmp/resposta.json
           grep -q '"status"' /tmp/resposta.json

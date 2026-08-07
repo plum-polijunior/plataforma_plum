@@ -25,6 +25,14 @@
 
 set -euo pipefail
 
+# Git Bash no Windows converte argumentos que parecem caminho Unix em caminho
+# Windows: `/plum/prod/hmac-secret` chegaria na AWS como
+# `C:/Program Files/Git/plum/prod/hmac-secret`, e o SSM recusa com
+# "Parameter name must be a fully qualified name". Desligar a conversao e a
+# unica forma de o mesmo script servir no Windows, no Mac e no Linux.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 REGIAO="${PLUM_AWS_REGION:-sa-east-1}"
 REPO_ECR="${PLUM_ECR_REPO:-plum/query-engine}"
 FUNCAO="${PLUM_LAMBDA_NAME:-plum-query-engine}"
@@ -132,9 +140,22 @@ else
   ok "provedor OIDC criado"
 fi
 
-# A condição `sub` limita a role a ESTE repositório e ESTA branch. Sem ela,
-# qualquer repositório do GitHub poderia assumi-la.
-aws iam create-role --role-name "$ROLE_DEPLOY" --assume-role-policy-document "{
+# A condição `sub` limita a role a ESTE repositório. Sem ela, qualquer
+# repositório do GitHub poderia assumi-la.
+#
+# São DUAS formas aceitas porque o GitHub mudou o formato do claim. O antigo é
+#   repo:owner/repo:ref:refs/heads/branch
+# e o novo inclui os IDs numéricos imutáveis do owner e do repositório:
+#   repo:owner@267385093/repo@1297566282:ref:refs/heads/branch
+# A mudança é boa: o acesso deixa de seguir o NOME, então renomear o
+# repositório não transfere permissão para quem registrar o nome antigo. Mas
+# um padrão escrito só para a forma antiga para de casar, e o erro que aparece
+# é um "Not authorized to perform sts:AssumeRoleWithWebIdentity" seco, sem
+# dizer qual claim não bateu. Foi assim que a primeira execução falhou.
+#
+# O `@*` é seguro: nome de organização no GitHub não pode conter `@`, então
+# ninguém registra algo que case com `plum-polijunior@*` sem ser a org real.
+TRUST_POLICY="{
   \"Version\":\"2012-10-17\",
   \"Statement\":[{
     \"Effect\":\"Allow\",
@@ -142,8 +163,23 @@ aws iam create-role --role-name "$ROLE_DEPLOY" --assume-role-policy-document "{
     \"Action\":\"sts:AssumeRoleWithWebIdentity\",
     \"Condition\":{
       \"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\"},
-      \"StringLike\":{\"token.actions.githubusercontent.com:sub\":\"repo:${GITHUB_REPO}:*\"}
-    }}]}" >/dev/null 2>&1 && ok "criada: $ROLE_DEPLOY" || ok "já existe: $ROLE_DEPLOY"
+      \"StringLike\":{\"token.actions.githubusercontent.com:sub\":[
+        \"repo:${GITHUB_REPO}:*\",
+        \"repo:${GITHUB_REPO%%/*}@*/${GITHUB_REPO##*/}@*:*\"
+      ]}
+    }}]}"
+
+if aws iam get-role --role-name "$ROLE_DEPLOY" >/dev/null 2>&1; then
+  # Idempotência de verdade: só criar não basta, porque uma role criada por uma
+  # versão anterior deste script ficaria com a política velha para sempre.
+  aws iam update-assume-role-policy --role-name "$ROLE_DEPLOY" \
+    --policy-document "$TRUST_POLICY" >/dev/null
+  ok "já existe: $ROLE_DEPLOY (política de confiança atualizada)"
+else
+  aws iam create-role --role-name "$ROLE_DEPLOY" \
+    --assume-role-policy-document "$TRUST_POLICY" >/dev/null
+  ok "criada: $ROLE_DEPLOY"
+fi
 
 # Esta role é mais ampla que a versão anterior porque agora é ela que CRIA a
 # função, não só atualiza. Continua presa a uma função e uma role específicas.

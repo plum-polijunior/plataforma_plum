@@ -1,0 +1,4 @@
+
+# Arquivo gerado para colar no painel do Supabase: sempre LF, para a
+# comparacao do "npm run gen:edge -- --check" ser estavel em qualquer sistema.
+supabase/edge-functions/supabase_edge_function_dashboard_execute.ts text eol=lf
