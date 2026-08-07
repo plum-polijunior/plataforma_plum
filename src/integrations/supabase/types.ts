@@ -72,7 +72,12 @@ export type Database = {
           id: string
           organization_id: string
           name: string
+          // `google_sheet_id` é a fonte da verdade (a API do Google exige o ID).
+          // `google_sheet_url` existe só para exibição na tela de bases.
+          // Ver migration 20260806230000_dashboard_cards.sql, bloco 4.
           google_sheet_id: string | null
+          google_sheet_url: string | null
+          google_sheet_tab: string
           schema_metadata: Json | null
           sketch: Json | null
           status: string | null
@@ -83,6 +88,8 @@ export type Database = {
           organization_id: string
           name: string
           google_sheet_id?: string | null
+          google_sheet_url?: string | null
+          google_sheet_tab?: string
           schema_metadata?: Json | null
           sketch?: Json | null
           status?: string | null
@@ -93,6 +100,8 @@ export type Database = {
           organization_id?: string
           name?: string
           google_sheet_id?: string | null
+          google_sheet_url?: string | null
+          google_sheet_tab?: string
           schema_metadata?: Json | null
           sketch?: Json | null
           status?: string | null

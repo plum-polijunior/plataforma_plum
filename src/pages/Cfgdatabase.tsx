@@ -4,6 +4,7 @@ import DatabasePipeline from "@/components/DatabasePipeline";
 import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
 
 export default function DatabasePage() {
   const [organization, setOrganization] = useState<any>(null);
@@ -256,10 +257,27 @@ export default function DatabasePage() {
                       placeholder="URL do Google Sheets..."
                     />
                     <Button onClick={async () => {
-                      const { error } = await supabase.from('datasets').update({ google_sheet_url: editSheetUrl }).eq('id', selectedDataset.id);
+                      // Mesma regra do onboarding: o ID é a verdade, a URL é
+                      // só para exibir. Recusar aqui evita gravar uma base que
+                      // vai falhar depois, na hora que alguém abrir o card.
+                      const sheetId = extrairSheetId(editSheetUrl);
+                      if (!sheetId) {
+                        alert(ERRO_LINK_INVALIDO);
+                        return;
+                      }
+                      const { error } = await supabase
+                        .from('datasets')
+                        .update({ google_sheet_id: sheetId, google_sheet_url: editSheetUrl })
+                        .eq('id', selectedDataset.id);
                       if (!error) {
-                        alert("URL atualizada com sucesso!");
-                        setSelectedDataset({...selectedDataset, google_sheet_url: editSheetUrl});
+                        alert("Planilha atualizada com sucesso!");
+                        setSelectedDataset({
+                          ...selectedDataset,
+                          google_sheet_id: sheetId,
+                          google_sheet_url: editSheetUrl,
+                        });
+                      } else {
+                        alert("Não consegui salvar: " + error.message);
                       }
                     }}>Salvar URL</Button>
                   </div>

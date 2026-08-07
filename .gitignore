@@ -31,4 +31,10 @@ supabase/.branches
 supabase/.temp
 
 #python bytecode, commitando a pasta mas não o resto
-__pycache__/* 
+__pycache__/*
+.gstack/
+
+# Bytecode e cache de teste em qualquer nivel (query_engine/ e subpastas)
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
