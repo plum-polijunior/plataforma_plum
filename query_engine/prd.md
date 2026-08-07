@@ -155,3 +155,21 @@ Para garantir segregação inquebrável de dados entre diferentes empresas na pl
 | **Pandas Executor** | Python (`query_engine`) | Executa filtros, agrupamentos e matemática exata com Pandas (Motorista Cego). |
 | **Agente C** | LLM Prompt (Agente 2) | Transforma o resultado numérico do Pandas em resposta natural fluida. |
 | **Supabase Postgres** | Banco Multitenant | Validação de RLS por `organization_id` e armazenamento do `schema_metadata`. |
+
+---
+
+## 8. Variáveis de Ambiente
+
+| Variável | Onde vive | Conteúdo |
+| :--- | :--- | :--- |
+| `GOOGLE_CLOUD_CREDENTIALS` | `.env` do `query_engine` (host que roda o Pandas Executor) | JSON completo da chave de **Service Account** do projeto Google Cloud **"Plataforma Plum"**, com as APIs **Google Sheets** e **Google Drive** habilitadas. É a credencial usada pelo Motorista Cego para o Column-Range GET nas planilhas dos clientes — cada organização compartilha sua planilha com o e-mail dessa Service Account como **Leitor**. |
+
+Regras:
+- Escopos **somente leitura**: `https://www.googleapis.com/auth/spreadsheets.readonly` e
+  `https://www.googleapis.com/auth/drive.readonly` — nunca escopo de escrita (reforça **R-01**).
+- Nunca commitar o valor no repositório nem em `.env.example` (só a *chave* documentada, sem valor).
+- Em produção (EC2), o JSON não fica em arquivo `.env` na instância: é buscado do **AWS Secrets
+  Manager** no boot e materializado em `/etc/plum/` com permissão `600`; a env var
+  `GOOGLE_CLOUD_CREDENTIALS` recebe o conteúdo (ou o caminho do arquivo) só em runtime.
+- Em desenvolvimento local, cada dev usa sua própria chave de teste (Service Account separada,
+  sem acesso às planilhas de clientes reais).
