@@ -29,11 +29,10 @@
  * de idade em vez de um erro. Um dashboard que às vezes mostra erro é pior que
  * uma planilha, porque planilha sempre abre.
  *
- * DEPLOY: `supabase functions deploy dashboard-execute` (ou pipeline
- * automático — ver `supabase/functions/README.md`). A convenção antiga de
- * colar um arquivo único gerado no painel foi aposentada em 2026-08-07: com
- * deploy automático pela CLI, a Edge Function pode importar
- * `_shared/query_plan.ts` normalmente, sem precisar embutir o módulo
+ * DEPLOY: automático, via integração GitHub↔Supabase (branch `plataforma`) —
+ * ver `supabase/functions/README.md`. A convenção antiga de colar um arquivo
+ * único gerado no painel foi aposentada em 2026-08-07: a Edge Function pode
+ * importar `_shared/query_plan.ts` normalmente, sem precisar embutir o módulo
  * compartilhado num arquivo só. Este é o único fonte que existe agora.
  */
 

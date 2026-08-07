@@ -23,8 +23,8 @@
  *     Falha aqui vira uma mensagem de erro amigável para o usuário, não um
  *     número desatualizado.
  *
- * DEPLOY: `supabase functions deploy ai-plum-chat` (ou pipeline automático —
- * ver `supabase/functions/README.md`).
+ * DEPLOY: automático, via integração GitHub↔Supabase (branch `plataforma`) —
+ * ver `supabase/functions/README.md`.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
