@@ -414,6 +414,34 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       if (error) throw error;
 
+      // Permissão é sempre explícita (ver CLAUDE.md §3): sem esta linha, nem
+      // o Admin que acabou de conectar a base consegue vê-la no chat. O
+      // cargo Admin nunca aparece no formulário de permissões (Dashboard.tsx
+      // assume que ele já tem acesso irrestrito), então essa concessão
+      // precisa acontecer aqui, na hora em que a base fica "active".
+      const { data: adminRole } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .ilike('name', 'admin')
+        .maybeSingle();
+
+      if (adminRole) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const allColumns = Object.keys(schemaMetadata.columns);
+        const { error: permError } = await supabase
+          .from('role_permissions')
+          .upsert({
+            organization_id: organizationId,
+            role_id: adminRole.id,
+            dataset_id: datasetId,
+            allowed_columns: allColumns,
+            created_by: user?.id ?? null,
+          }, { onConflict: 'role_id,dataset_id' });
+
+        if (permError) console.error("Falha ao liberar colunas para o Admin:", permError);
+      }
+
       toast({
         title: "Planilha e Dicionário Salvos com Sucesso!",
         description: `A base "${fileName || "Nova Planilha"}" foi registrada no Supabase e conectada com sucesso.`
