@@ -187,7 +187,7 @@ export default function DatabasePage() {
               onClick={() => {
                 setSelectedDataset(selectedDataset?.id === dataset.id ? null : dataset);
                 setIsEditingSchema(false);
-                setEditSheetUrl(dataset.google_sheet_id || "");
+                setEditSheetUrl(dataset.google_sheet_url || dataset.google_sheet_id || "");
                 setEditedSchema(dataset.schema_metadata ? JSON.parse(JSON.stringify(dataset.schema_metadata)) : null);
               }}
             >
@@ -226,7 +226,7 @@ export default function DatabasePage() {
               onClick={() => {
                 if (selectedDataset.status === 'active') {
                   setIsEditingSchema(!isEditingSchema);
-                  setEditSheetUrl(selectedDataset.google_sheet_id || "");
+                  setEditSheetUrl(selectedDataset.google_sheet_url || selectedDataset.google_sheet_id || "");
                   setEditedSchema(selectedDataset.schema_metadata ? JSON.parse(JSON.stringify(selectedDataset.schema_metadata)) : null);
                 } else {
                   setShowPipeline(true);
