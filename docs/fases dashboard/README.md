@@ -44,6 +44,7 @@ não está escrita não existe**, e três meses depois vira retrabalho ou bug.
 |---|---|---|
 | 2026-08-06 | [Fase 0 — Executor determinístico](2026-08-06-fase-0-executor-deterministico.md) | Serviço completo e testado; deploy e Edge Function pendentes |
 | 2026-08-07 | [Fase 0b — Ligando as pontas](2026-08-07-fase-0b-ligando-as-pontas.md) | Migration, Edge Function, `google_sheet_id`, vitest e script da AWS. Falta executar o provisionamento e aplicar a migration |
+| 2026-08-07 | [Fase 0c — Contrato de formatação](2026-08-07-fase-0c-contrato-de-formatacao.md) | Papel de coluna deixa de ser adivinhado por grep e passa a vir de enum fechado. Chat ligado ao executor. **Nada executado** — falta rodar build/testes, aplicar migration e fazer os deploys |
 
 ## Documentos relacionados
 

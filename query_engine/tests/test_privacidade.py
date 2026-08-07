@@ -23,7 +23,6 @@ from query_engine.pandas_executor import (  # noqa: E402
     RawRowsBlocked,
     RowLimitExceeded,
     execute_plan,
-    roles_from_formatting_rules,
 )
 
 
@@ -239,19 +238,10 @@ def test_sem_papel_declarado_a_soma_continua_soma(vendas):
     assert r["rows"][0]["margem"] == pytest.approx(120.0)
 
 
-def test_papeis_derivados_das_regras_de_formatacao():
-    roles = roles_from_formatting_rules(
-        {
-            "margem": "Converter para percentual com 2 casas",
-            "data_venda": "Converter para data no formato dd/mm/aaaa",
-            "faturamento": "Retirar o R$ e converter para float",
-            "cliente": "Manter como texto",
-        }
-    )
-    assert roles["margem"] == "percent"
-    assert roles["data_venda"] == "date"
-    assert roles["faturamento"] == "number"
-    assert roles["cliente"] == "text"
+# A derivação de papéis saiu do Python: agora acontece uma vez só, na Edge
+# Function, a partir do contrato de formatação do dataset. A cobertura mudou de
+# endereço junto — ver `papeisDeColuna` em supabase/functions/_shared/query_plan.ts
+# e os testes em query_plan.test.ts.
 
 
 # ─────────────────────────────────────────────────────────────────────────────

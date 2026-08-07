@@ -1,0 +1,37 @@
+# Normalização de fim de linha e detecção de tipo.
+#
+# Existe por um caso concreto: `supabase/functions/_shared/query_plan.ts` tinha
+# um byte NUL cru no meio (o separador de `permissionsFingerprint`), e o git
+# passou a tratá-lo como binário. O arquivo que aplica o RBAC de coluna ficou
+# sem diff em PR e sem `git blame`. O NUL virou escape `\u0000`; isto evita a
+# volta do problema por qualquer outro caminho.
+
+# Detecção automática para o que não estiver listado abaixo.
+* text=auto eol=lf
+
+# Código e configuração: sempre texto, sempre LF, mesmo no Windows.
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.json  text eol=lf
+*.py    text eol=lf
+*.sql   text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.toml  text eol=lf
+
+# Scripts de shell quebram com CRLF: o shebang deixa de ser reconhecido.
+*.sh    text eol=lf
+
+# Binários de verdade — não normalizar, não tentar diff.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.svg   text eol=lf
+*.xlsx  binary
+*.lockb binary

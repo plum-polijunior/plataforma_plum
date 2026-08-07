@@ -40,6 +40,7 @@ import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 import {
   authorizePlan,
+  papeisDeColuna,
   permissionsFingerprint,
   signPayload,
 } from "../_shared/query_plan.ts";
@@ -121,7 +122,9 @@ Deno.serve(async (req: Request) => {
   // ── 2. O dataset é desta organização? ────────────────────────────────────
   const { data: dataset } = await supabase
     .from("datasets")
-    .select("id, organization_id, google_sheet_id, google_sheet_tab, schema_metadata")
+    .select(
+      "id, organization_id, google_sheet_id, google_sheet_tab, schema_metadata, formatting_contract",
+    )
     .eq("id", body.dataset_id)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
@@ -220,6 +223,23 @@ Deno.serve(async (req: Request) => {
     .eq("id", profile.organization_id)
     .maybeSingle();
 
+  // O papel da coluna decide se `sum` vira `avg` (percentual) e como o texto é
+  // coagido. Sai do contrato de formatação; só cai no grep antigo para base
+  // importada antes do contrato existir — e nesse caso avisa.
+  const { roles: columnRoles, legado } = papeisDeColuna(
+    dataset.schema_metadata,
+    dataset.formatting_contract,
+    requiredColumns,
+  );
+
+  if (legado.length) {
+    console.warn(
+      `[dashboard-execute] dataset ${dataset.id}: ${legado.length} coluna(s) sem contrato de ` +
+        `formatacao, papel adivinhado por palavra-chave: ${legado.join(", ")}. ` +
+        `Reprocesse a formatacao desta base em /cfgdatabase.`,
+    );
+  }
+
   const payload = {
     sheet_id: dataset.google_sheet_id,
     tab: dataset.google_sheet_tab ?? "Sheet1",
@@ -229,7 +249,7 @@ Deno.serve(async (req: Request) => {
       resolved_columns: required,
     })),
     allowed_columns: allowedColumns,
-    column_roles: papeisDeColuna(dataset.schema_metadata, requiredColumns),
+    column_roles: columnRoles,
     k_min: org?.dashboard_k_min ?? 5,
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
@@ -329,30 +349,6 @@ Deno.serve(async (req: Request) => {
   return json({ results });
 });
 
-/**
- * Papéis das colunas, derivados da `cleaning_rule` que o Agente 3 escreveu no
- * onboarding e que já vive em `schema_metadata`.
- *
- * O executor precisa disto para não somar coluna de percentual. A informação
- * não pode ser constante global no Python: a coluna de percentual da Poli
- * Júnior tem um nome e a do laticínio tem outro.
- */
-function papeisDeColuna(
-  schemaMetadata: unknown,
-  apenas: Set<string>,
-): Record<string, string> {
-  const roles: Record<string, string> = {};
-  const cols = (schemaMetadata as { columns?: Record<string, { cleaning_rule?: string }> })
-    ?.columns;
-  if (!cols) return roles;
-
-  for (const [nome, def] of Object.entries(cols)) {
-    if (!apenas.has(nome)) continue;
-    const r = (def?.cleaning_rule ?? "").toLowerCase();
-    if (/percent|porcent|%|taxa/.test(r)) roles[nome] = "percent";
-    else if (/data|date/.test(r)) roles[nome] = "date";
-    else if (/r\$|moeda|float|int|numero|número|decimal/.test(r)) roles[nome] = "number";
-    else roles[nome] = "text";
-  }
-  return roles;
-}
+// `papeisDeColuna` mudou de endereço: vive em `_shared/query_plan.ts`, junto
+// das outras peças que decidem segurança e cálculo — e que, por isso, têm
+// cobertura de vitest. Aqui era código sem teste.

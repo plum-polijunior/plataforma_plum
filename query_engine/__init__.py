@@ -1,6 +1,15 @@
-from .pandas_executor import execute_plan, execute_plan_with_formatting
+from .pandas_executor import (
+    ExecutorError,
+    MissingColumnError,
+    RawRowsBlocked,
+    RowLimitExceeded,
+    execute_plan,
+)
 
 __all__ = [
+    "ExecutorError",
+    "MissingColumnError",
+    "RawRowsBlocked",
+    "RowLimitExceeded",
     "execute_plan",
-    "execute_plan_with_formatting",
 ]

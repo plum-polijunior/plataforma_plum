@@ -507,90 +507,24 @@ def _eval_single(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Execução com Regras de Formatação (Agente 3 & 3.1)
+# Sobre formatação de valores e papéis de coluna
 # ─────────────────────────────────────────────────────────────────────────────
-
-def apply_formatting_rules(df: pd.DataFrame, formatting_rules: Dict[str, str]) -> pd.DataFrame:
-    """
-    Aplica as regras de formatação (formattingRules) especificadas pelo Agente 3/3.1
-    sobre as colunas do DataFrame Pandas.
-    """
-    df = df.copy()
-    for col, rule in formatting_rules.items():
-        if col not in df.columns:
-            continue
-
-        rule_lower = str(rule).lower()
-
-        # Se a regra menciona limpar moeda / R$ ou converter para número/float/int
-        if any(keyword in rule_lower for keyword in ["r$", "moeda", "float", "int", "número", "numero", "decimal"]):
-            s = df[col].astype(str)
-            s = s.str.replace(r"[R$\s]", "", regex=True)
-            s = s.str.replace(r"\.", "", regex=True)  # Remove ponto de milhar se houver
-            s = s.str.replace(",", ".", regex=False)   # Troca vírgula por ponto decimal
-            df[col] = pd.to_numeric(s, errors="coerce")
-
-        # Se a regra menciona converter para data
-        elif "data" in rule_lower or "date" in rule_lower:
-            df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
-
-    return df
-
-
-def roles_from_formatting_rules(formatting_rules: Dict[str, str]) -> Dict[str, str]:
-    """
-    Deriva o papel de cada coluna a partir da `cleaning_rule` que o Agente 3
-    escreveu no onboarding e que já vive em `schema_metadata`.
-
-    É daqui que sai o `column_roles` do executor. A alternativa antiga era uma
-    constante global no módulo, que não funciona em multitenant: a coluna de
-    percentual da Poli Júnior tem um nome e a do laticínio tem outro.
-    """
-    roles: Dict[str, str] = {}
-    for col, rule in (formatting_rules or {}).items():
-        r = str(rule).lower()
-        if any(k in r for k in ("percent", "porcent", "%", "taxa")):
-            roles[col] = "percent"
-        elif "data" in r or "date" in r:
-            roles[col] = "date"
-        elif any(k in r for k in ("r$", "moeda", "float", "int", "numero",
-                                  "número", "decimal")):
-            roles[col] = "number"
-        else:
-            roles[col] = "text"
-    return roles
-
-
-def execute_plan_with_formatting(
-    plan: Dict[str, Any],
-    tables: Dict[str, pd.DataFrame],
-    formatting_rules: Dict[str, str] | None = None,
-    *,
-    column_roles: Optional[Dict[str, str]] = None,
-    k_min: int = DEFAULT_K_MIN,
-    max_rows: Optional[int] = None,
-) -> Dict[str, Any]:
-    """
-    Pré-processa as tabelas aplicando as regras de formatação (formattingRules)
-    e executa o plano de consulta determinístico gerado pelo Agente A.
-
-    Quando `column_roles` não é passado, deriva os papéis das próprias regras
-    de formatação.
-    """
-    roles = column_roles
-    if roles is None and formatting_rules:
-        roles = roles_from_formatting_rules(formatting_rules)
-
-    if not formatting_rules:
-        return execute_plan(
-            plan, tables, column_roles=roles, k_min=k_min, max_rows=max_rows
-        )
-
-    formatted_tables: Dict[str, pd.DataFrame] = {}
-    for table_name, df in tables.items():
-        formatted_tables[table_name] = apply_formatting_rules(df, formatting_rules)
-
-    return execute_plan(
-        plan, formatted_tables, column_roles=roles, k_min=k_min, max_rows=max_rows
-    )
+#
+# Este módulo já teve `apply_formatting_rules`, `roles_from_formatting_rules` e
+# `execute_plan_with_formatting`. Foram removidos, e vale registrar por quê:
+#
+#   - Os papéis de coluna (`column_roles`) agora chegam prontos no payload
+#     assinado, derivados na Edge Function a partir do contrato de formatação
+#     do dataset. Deriva-se uma vez, no lugar que tem o schema_metadata em
+#     mãos, em vez de duas vezes em duas linguagens — que foi o problema que
+#     `query_engine/urgent.md` documentou.
+#
+#   - A conversão de valores não é mais necessária aqui: `sheets.py` lê com
+#     `valueRenderOption="UNFORMATTED_VALUE"`, então uma célula de moeda no
+#     Google Sheets chega como número (lá "R$" é formato de exibição sobre um
+#     valor numérico, não texto).
+#
+# Se um dia entrar uma fonte de dados que devolva texto de verdade (CSV, upload
+# direto), a conversão volta — mas guiada pelo `tipo` do contrato, com um
+# dicionário de funções, nunca por grep de palavra-chave em frase livre.
 

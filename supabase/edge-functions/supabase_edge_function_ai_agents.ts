@@ -7,6 +7,100 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// =========================================================================
+// CONTRATO DE FORMATAÇÃO
+// =========================================================================
+// Enum FECHADO. O Agente 3 escolhe daqui; ele não inventa vocabulário.
+//
+// Por que fechado: antes, o agente escrevia a regra como frase livre em
+// português e quem consumia fazia grep de palavra-chave. Uma regra como
+// "converter Sim/Não para booleano" não casava com nenhuma palavra e a coluna
+// virava `text` em silêncio — o que faz o executor somar com
+// `to_numeric(errors="coerce").fillna(0)` e transformar valor não convertido
+// em ZERO dentro da conta. Ver query_engine/urgent.md.
+//
+// Esta lista precisa bater com PAPEL_POR_TIPO em
+// supabase/functions/_shared/query_plan.ts, que é onde o tipo vira o
+// `column_roles` do executor. Os dois arquivos são deployados separadamente
+// (este é colado no painel; aquele vai por CLI), então não dá para importar.
+// Mudou aqui, muda lá.
+const TIPOS_FORMATACAO = [
+  'moeda_brl',
+  'numero_decimal',
+  'numero_inteiro',
+  'percentual',
+  'data',
+  'texto_trim_maiusculas',
+  'texto_trim_minusculas',
+  'documento_cpf_cnpj',
+  'booleano_sim_nao',
+  'nenhuma',
+] as const;
+
+const DESCRICAO_DOS_TIPOS = `
+- "moeda_brl": valor em dinheiro. params: { "casas_decimais": number }
+- "numero_decimal": número com casas decimais. params: { "casas_decimais": number }
+- "numero_inteiro": número sem casas decimais. params: {}
+- "percentual": porcentagem. params: { "casas_decimais": number }
+- "data": data ou data/hora. params: { "dayfirst": boolean }
+- "texto_trim_maiusculas": texto, sem espaços nas bordas, em MAIÚSCULAS. params: {}
+- "texto_trim_minusculas": texto, sem espaços nas bordas, em minúsculas. params: {}
+- "documento_cpf_cnpj": CPF/CNPJ, só os dígitos. params: {}
+- "booleano_sim_nao": Sim/Não, Verdadeiro/Falso, 1/0 -> booleano. params: {}
+- "nenhuma": texto livre, sem transformação. params: {}`.trim();
+
+const REGRA_DO_CONTRATO = `
+Para CADA coluna você deve devolver um objeto com exatamente três chaves:
+  "tipo"       - OBRIGATORIAMENTE um destes valores: ${TIPOS_FORMATACAO.join(', ')}
+  "params"     - objeto com os parâmetros do tipo (use {} quando não houver)
+  "explicacao" - uma frase curta em português explicando a regra para um humano revisar
+
+O campo "tipo" NUNCA pode ser um valor fora da lista. Se a coluna não se
+encaixar em nenhum tipo, use "nenhuma" e diga o porquê em "explicacao" — é
+melhor declarar que não soube formatar do que inventar um tipo.`.trim();
+
+type ItemContrato = { tipo: string; params: Record<string, unknown>; explicacao: string };
+
+/**
+ * Nunca confiar no LLM para respeitar o enum. O Gemini roda com
+ * response_mime_type JSON, o que garante a FORMA da resposta, não o
+ * VOCABULÁRIO dela. Tipo fora da lista vira "nenhuma" e gera aviso visível, em
+ * vez de virar um comportamento silencioso lá na frente.
+ */
+function normalizarContrato(
+  bruto: unknown,
+): { contrato: Record<string, ItemContrato>; avisos: string[] } {
+  const contrato: Record<string, ItemContrato> = {};
+  const avisos: string[] = [];
+
+  if (!bruto || typeof bruto !== 'object') return { contrato, avisos };
+
+  for (const [coluna, valor] of Object.entries(bruto as Record<string, unknown>)) {
+    // O modelo às vezes recai no formato antigo e manda a frase direto.
+    if (typeof valor === 'string') {
+      avisos.push(`Coluna "${coluna}": o modelo devolveu texto livre em vez de {tipo, params}. Tratada como "nenhuma".`);
+      contrato[coluna] = { tipo: 'nenhuma', params: {}, explicacao: valor };
+      continue;
+    }
+
+    const v = (valor ?? {}) as Record<string, unknown>;
+    let tipo = String(v.tipo ?? 'nenhuma');
+
+    if (!(TIPOS_FORMATACAO as readonly string[]).includes(tipo)) {
+      avisos.push(`Coluna "${coluna}": tipo "${tipo}" está fora da lista permitida. Trocado por "nenhuma".`);
+      tipo = 'nenhuma';
+    }
+
+    contrato[coluna] = {
+      tipo,
+      params: v.params && typeof v.params === 'object' ? (v.params as Record<string, unknown>) : {},
+      explicacao: String(v.explicacao ?? ''),
+    };
+  }
+
+  return { contrato, avisos };
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -47,16 +141,49 @@ serve(async (req: Request) => {
     // AGENTE 3: FORMATAÇÃO DE DADOS
     // =========================================================================
     else if (action === 'format_data') {
-      systemInstruction = "Você é um Engenheiro de Dados Especialista. Sua tarefa é analisar amostras de dados (5 linhas) de uma planilha e formatá-las corretamente para um banco de dados relacional. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas, mantendo a estrutura de objetos originais) e 'formattingRules' (um objeto JSON onde a chave é o nome da coluna e o valor é a explicação exata de como os dados daquela coluna foram ou devem ser formatados). Exemplo de regra: 'Retirar os R$, converter para string(), e deixar com 3 casas decimais'.";
-      userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nPor favor, formate os dados e retorne o JSON com as amostras e as regras aplicadas.`;
+      systemInstruction = `Você é um Engenheiro de Dados Especialista. Analise as amostras de dados (5 linhas) de uma planilha e classifique CADA coluna.
+
+Retorne um JSON ESTRITO com exatamente duas chaves:
+
+1. "formattedSamples": array com as 5 linhas já transformadas, mantendo a estrutura de objetos original.
+2. "formattingContract": objeto onde a chave é o nome da coluna.
+
+${REGRA_DO_CONTRATO}
+
+Tipos disponíveis:
+${DESCRICAO_DOS_TIPOS}
+
+Exemplo de uma entrada de "formattingContract":
+{
+  "faturamento": {
+    "tipo": "moeda_brl",
+    "params": { "casas_decimais": 2 },
+    "explicacao": "Remove o R$, o separador de milhar, e converte a vírgula decimal para número."
+  }
+}`;
+      userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nClassifique cada coluna e retorne o JSON com 'formattedSamples' e 'formattingContract'.`;
     }
     // =========================================================================
     // AGENTE 3.1: REFINAMENTO DE FORMATAÇÃO
     // =========================================================================
     else if (action === 'refine_format') {
-      systemInstruction = "Você é um Engenheiro de Dados Especialista. O usuário solicitou uma alteração pontual nas regras de formatação. Sua tarefa é analisar as regras de formatação atuais (formattingRules) e a solicitação do usuário, e alterar APENAS a regra referente à coluna ou solicitação mencionada pelo usuário, MANTENDO TODAS AS OUTRAS REGRAS INTACTAS sem modificar o que não foi pedido. Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras de dados originais (dataSamples). Você DEVE retornar ESTRITAMENTE um JSON com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (um objeto contendo todas as regras de formatação por coluna, com apenas a regra solicitada modificada).";
-      // columns = regras de formatação atuais (formattingRules), prompt = solicitação do usuário
-      userPrompt = `Regras de Formatação Atuais (formattingRules): ${JSON.stringify(columns)}\nAmostras de Dados Originais (dataSamples): ${JSON.stringify(dataSamples)}\nSolicitação de Alteração do Usuário: "${prompt}"\nAltere APENAS o que o usuário solicitou nas regras e retorne o JSON com 'formattedSamples' e 'formattingRules'.`;
+      systemInstruction = `Você é um Engenheiro de Dados Especialista. O usuário pediu uma alteração pontual no contrato de formatação.
+
+Altere APENAS a coluna mencionada pelo usuário. Todas as outras colunas devem voltar EXATAMENTE como estavam — mesmo "tipo", mesmos "params", mesma "explicacao". Não reescreva, não melhore, não reordene o que não foi pedido.
+
+Depois aplique o contrato completo às 5 amostras originais.
+
+Retorne um JSON ESTRITO com exatamente duas chaves:
+
+1. "formattedSamples": array com as 5 linhas transformadas.
+2. "formattingContract": o contrato COMPLETO (todas as colunas), com só a coluna pedida alterada.
+
+${REGRA_DO_CONTRATO}
+
+Tipos disponíveis:
+${DESCRICAO_DOS_TIPOS}`;
+      // columns = contrato de formatação atual, prompt = solicitação do usuário
+      userPrompt = `Contrato de Formatação Atual: ${JSON.stringify(columns)}\nAmostras de Dados Originais (dataSamples): ${JSON.stringify(dataSamples)}\nSolicitação de Alteração do Usuário: "${prompt}"\nAltere APENAS o que o usuário pediu e retorne o JSON com 'formattedSamples' e 'formattingContract'.`;
     }
     // =========================================================================
     // AGENTE DE SUPORTE (COLUNAS)
@@ -109,6 +236,27 @@ serve(async (req: Request) => {
         } catch (e) {
           console.error("Gemini não retornou um JSON válido:", generatedText);
         }
+      }
+
+      // Contrato de formatação: valida o enum ANTES de a resposta sair daqui.
+      if (action === 'format_data' || action === 'refine_format') {
+        const { contrato, avisos } = normalizarContrato(finalResponse?.formattingContract);
+
+        if (avisos.length) {
+          console.warn(`[${action}] contrato ajustado:`, avisos);
+        }
+
+        finalResponse = {
+          ...finalResponse,
+          formattingContract: contrato,
+          // Compatibilidade: a tela lê `formattingRules` como {coluna: frase}.
+          // A frase agora é derivada do contrato, nunca o contrário — o que a
+          // pessoa lê e o que a máquina executa saem da mesma fonte.
+          formattingRules: Object.fromEntries(
+            Object.entries(contrato).map(([coluna, item]) => [coluna, item.explicacao]),
+          ),
+          avisosContrato: avisos,
+        };
       }
 
       return new Response(JSON.stringify({ result: finalResponse }), {

@@ -16,6 +16,3 @@ numpy==2.2.1
 
 google-api-python-client==2.157.0
 google-auth==2.37.0
-
-# Usado por query_engine/cache.py (TTLCache).
-cachetools==5.5.0

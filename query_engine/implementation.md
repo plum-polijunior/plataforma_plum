@@ -1,554 +1,332 @@
-# Plano de Implementação — `query_engine` em EC2 (AWS)
+# `query_engine` — estado da implementação
 
-Confirmado no código: `query_engine/pandas_executor.py` é uma biblioteca de cálculo pura, sem
-wrapper HTTP, sem busca no Google Sheets e sem cache — e `PlumChat.tsx:143-144` hoje usa um
-**mock hardcoded** (`mockPythonVetor`) em vez de chamá-la. Também não existe `Dockerfile`/
-`requirements.txt` ainda. Este plano fecha essa lacuna de ponta a ponta.
+> Atualizado em 2026-08-07, contra o commit `5cb86c8`. Este arquivo deixou de ser um plano
+> futuro: o serviço existe, é testado e é publicado por CI. O que segue é o estado real, o que
+> ainda falta e o que divergiu do desenho original.
 
-## 0. O que muda no repo existente (resumo)
+**O que mudou desde `ad08c60`:** os conflitos de merge commitados foram resolvidos (`a2e35d9`),
+e as duas implementações paralelas viraram uma só (`e677b38` — `app.py`, `auth.py` e
+`sheets_client.py` foram deletados). Ficou o caminho do dashboard, que é o que tem RBAC de
+coluna, k-anonimato, leitura em lote e testes.
 
-| Arquivo | Mudança |
+---
+
+## 1. O serviço, hoje
+
+Um processo FastAPI empacotado como imagem de container e publicado em **AWS Lambda**.
+
+| Arquivo | Papel |
 |---|---|
-| `query_engine/` | + `app.py` (FastAPI), `sheets_client.py`, `cache.py`, `auth.py`, `Dockerfile`, `requirements.txt` |
-| `supabase/edge-functions/supabase_edge_functions_ai_plum_chat.ts` | + nova `action: "execute_plan"` que valida tenant e faz proxy assinado para a EC2 |
-| `src/pages/PlumChat.tsx` | remove `mockPythonVetor` (linhas 143-144), chama a nova action antes do Agente C |
-| Supabase secrets | + `EXECUTOR_URL`, `EXECUTOR_SHARED_SECRET` |
-| AWS Secrets Manager | Google Service Account JSON, Supabase `service_role` key |
+| `main.py` | app FastAPI: `GET /health`, `POST /execute` |
+| `lambda_handler.py` | Mangum traduz o evento do Function URL para ASGI |
+| `security.py` | HMAC, frescor do payload, RBAC de coluna por conjunto |
+| `config.py` | leitura de segredos do SSM Parameter Store |
+| `sheets.py` | Google Sheets: metadados + `batchGet` só das colunas pedidas |
+| `pandas_executor.py` | o Motorista Cego: `execute_plan` |
+| `tests/` | 4 arquivos — privacidade, segurança, endpoint, sheets |
 
-Isso preserva o padrão do projeto: **o browser nunca fala com a EC2 diretamente** — só com a
-Edge Function, que já é o ponto de confiança (R-05).
+`POST /execute` recebe **N planos (cards) de um dataset numa requisição só** e devolve
+resultado **por card**: um card com coluna proibida volta `forbidden` e os outros cinco
+continuam funcionando. Um card ruim não derruba o dashboard.
 
----
+A leitura do Google é **uma só para todos os cards aprovados** — a união das colunas vira um
+`batchGet`. A cota do Sheets é de 60 requisições por minuto; uma chamada por card estourava com
+dez pessoas abrindo o dashboard às 8h.
 
-## 1. Desenho do serviço Python (o que vai rodar na EC2)
+### As quatro barreiras de segurança
 
-Novo processo FastAPI (`query_engine/app.py`) expondo `POST /v1/execute-plan`:
+Documentadas em `security.py`, definem onde cada decisão mora:
 
-1. Autentica a requisição por **assinatura HMAC** (não JWT do usuário — a EC2 não deve
-   reimplementar auth de usuário final). Header `X-Plum-Signature: sha256=<hmac(timestamp +
-   "." + body, EXECUTOR_SHARED_SECRET)>` + `X-Plum-Timestamp` com janela de 60s (anti-replay).
-   O timestamp entra **dentro** da mensagem assinada — se só o corpo fosse assinado, um par
-   (corpo, assinatura) capturado poderia ser reenviado para sempre trocando só o header de
-   timestamp para "agora" (implementado em `query_engine/auth.py`). Segredo só existe em dois
-   lugares: Supabase Edge Function secrets e AWS Secrets Manager.
-2. Recebe `{ organization_id, dataset_id, google_sheet_id, target_columns, plan,
-   formatting_rules }`. **Não recebe a pergunta em linguagem natural** — mantém o "motorista
-   cego" do PRD.
-3. Confere no cache em memória (dict + TTL 15 min, chave `(dataset_id, tuple(target_columns))`).
-   Cache miss → busca no Google Sheets via **Service Account** (Column-Range GET, ex.
-   `Sheet1!B:B,E:E`), só `GET`, nunca escreve (R-01).
-4. Chama `apply_formatting_rules` → `execute_plan` (já existem em `pandas_executor.py`, sem
-   alterar a lógica de cálculo).
-5. Retorna o vetor de resultados serializado. Qualquer erro → JSON `{"error": "..."}` com HTTP
-   4xx/5xx, nunca 200 com dado inventado.
+1. **SigV4 da AWS**, no Function URL com auth `AWS_IAM`. Resolvida pela infraestrutura, antes de
+   qualquer código rodar. Sem credencial IAM a requisição não chega.
+2. **HMAC-SHA256 sobre o corpo cru**, com segredo *diferente* da credencial IAM. Quem tiver a
+   chave da AWS ainda não consegue forjar payload.
+3. **Expiração curta** (`issued_at` + `PLUM_SIGNATURE_MAX_AGE`, default 120s), nos dois sentidos
+   — relógio adiantado na Edge Function não vira payload eternamente válido.
+4. **`resolved_columns ⊆ allowed_columns`**, comparação de conjunto. Recusa em vez de filtrar em
+   silêncio: tirar uma coluna do `where` muda o significado do resultado.
 
-Arquivos novos:
-- `query_engine/sheets_client.py` — autentica com a Service Account (`google-auth` +
-  `googleapiclient`), busca só as colunas do `target_columns` do Agente A.
-- `query_engine/cache.py` — TTLCache simples (`cachetools.TTLCache(maxsize=..., ttl=900)`),
-  thread-safe.
-- `query_engine/auth.py` — valida HMAC + timestamp.
-- `query_engine/requirements.txt` — `fastapi`, `uvicorn[standard]`, `pandas`, `numpy`,
-  `google-auth`, `google-api-python-client`, `cachetools`.
+E uma quinta que sai de graça: só as colunas assinadas são carregadas da planilha, então um
+plano que alcance qualquer outra morre em `MissingColumnError`. A checagem de conjunto é
+confirmada pela própria execução, sem ninguém reimplementar o parser.
 
-**Importante — quem valida o tenant:** a EC2 confia no `organization_id`/`dataset_id` que a
-Edge Function envia, porque é a Edge Function quem já validou contra `profiles`/`datasets`
-com o JWT do usuário (passo 2 abaixo). A EC2 é só o motorista cego + acesso à planilha; ela
-não tem lógica de RLS.
+O `sheet_id` entra **dentro** do payload assinado, de propósito: trocar a planilha alvo exige o
+segredo do HMAC, não apenas alcançar o endpoint.
 
 ---
 
-## 2. Mudança na Edge Function `ai-plum-chat`
+## 2. Segredos
 
-Adicionar terceiro passo entre `plan_query` e `synthesize_answer`:
+- **SSM Parameter Store**, não Secrets Manager (o plano antigo dizia Secrets Manager).
+- As variáveis de ambiente guardam o **caminho** do parâmetro, nunca o valor:
+  `GOOGLE_SA_PARAM=/plum/prod/google-sa-json`, `HMAC_SECRET_PARAM=/plum/prod/hmac-secret`.
+- **Nada é escrito em disco.** O JSON da service account sai do Parameter Store direto para a
+  memória do processo e morre com o container.
+- Três caminhos de leitura, em ordem: extensão AWS Parameters and Secrets (`localhost:2773`,
+  cache local por cold start) → boto3 → env `*_VALUE`. O terceiro é **só para teste local** e
+  emite warning quando é usado.
 
-```ts
-else if (action === 'execute_plan') {
-  // 1. Extrai o JWT do usuário do header Authorization (o gateway do Supabase já verificou a assinatura)
-  // 2. Usa um client Supabase com SERVICE_ROLE_KEY para buscar o dataset:
-  //    SELECT google_sheet_id, organization_id, schema_metadata
-  //    FROM datasets WHERE id = :dataset_id AND status = 'active'
-  // 3. Confere organization_id === claim do JWT do usuário E is_active_member()
-  //    -> senão, 403 (nunca confia no dataset_id "cru" do body sem essa checagem)
-  // 4. Monta o payload assinado (HMAC com EXECUTOR_SHARED_SECRET) e faz fetch no EXECUTOR_URL
-  // 5. Repassa a resposta (ou erro) para o frontend
-}
+A service account (`reader@plum-ai.iam.gserviceaccount.com`) lê a planilha de **todos** os
+tenants. É o segredo de maior valor do sistema — daí o endpoint nunca poder ficar público (§3).
+
+---
+
+## 3. Deploy — Lambda via CI
+
+O desenho de EC2 + Docker Compose + Nginx/Certbot + Cloudflare Tunnel das versões anteriores
+deste documento foi abandonado. O que existe e roda:
+
+```
+push na branch `plataforma`  (ou botão "Run workflow")
+  → .github/workflows/query-engine.yml
+      job `testes`:   pytest (query_engine/) + npm test (vitest)
+      job `publicar`: OIDC → ECR build/push → cria-ou-atualiza a Lambda
+  → Lambda `plum-query-engine`, sa-east-1, imagem de container
+      base: public.ecr.aws/lambda/python:3.12
+      handler: query_engine.lambda_handler.handler
+  → Function URL com auth AWS_IAM
 ```
 
-Isso é o ponto que hoje **não existe** — a função atual não faz nenhuma checagem de tenant,
-ela só repassa para o Gemini. Essa é a peça que fecha R-05 para esta rota.
+Três detalhes do workflow que valem conhecer:
 
-Novos secrets na Edge Function (painel Supabase → Edge Functions → Secrets):
-- `EXECUTOR_URL` (`https://query-engine.<seu-dominio>/v1/execute-plan`)
-- `EXECUTOR_SHARED_SECRET`
-- `SUPABASE_SERVICE_ROLE_KEY` (se ainda não estiver disponível no runtime da função)
+- **`docker build --platform linux/amd64` explícito.** O Lambda roda x86_64; sem isso um runner
+  arm publicaria uma imagem que sobe e morre com `exec format error`.
+- **O deploy falha se o endpoint ficar público.** Depois de garantir `--auth-type AWS_IAM`, o
+  workflow relê o `AuthType` e roda `test "$AUTH" = "AWS_IAM"`. Não é comentário pedindo
+  cuidado: é uma trava que quebra o build.
+- **Ninguém precisa de Docker na própria máquina.** A imagem é construída no runner do GitHub.
+
+Sem chave de longa duração no GitHub: a autenticação com a AWS é por **OIDC**
+(`secrets.AWS_DEPLOY_ROLE_ARN` é o ARN de uma role cuja trust policy aceita só este repositório,
+não uma credencial).
+
+O provisionamento saiu deste arquivo e foi para `infra/aws/`:
+
+| Arquivo | O que é |
+|---|---|
+| `infra/aws/README.md` | ponto de entrada |
+| `infra/aws/PASSO-A-PASSO.md` | roteiro de provisionamento |
+| `infra/aws/provision.sh` | cria os recursos na AWS, idempotente |
+| `infra/aws/valores-supabase.sh` | extrai os valores que viram secrets do Supabase |
+| `infra/aws/smoke-test.sh` | confere que o endpoint **não** é público e que responde |
 
 ---
 
-## 3. Mudança no `PlumChat.tsx`
+## 4. O que o `pandas_executor.py` garante
 
-Substituir linhas 143-144:
+A reescrita corrigiu três falhas silenciosas reais — o tipo de bug que o produto vende que não
+tem:
+
+- **Filtro sobre coluna inexistente não devolve mais `True` para tudo.** Antes, um `where` sobre
+  coluna ausente era ignorado e a conta rodava sobre a base inteira, devolvendo o total
+  histórico com o rótulo do recorte pedido. Agora levanta `MissingColumnError`.
+- **`group_by` sobre coluna inexistente não é mais descartado em silêncio.** Mesma lógica:
+  agrupar por `[regiao, fantasma]` e devolver só por região é um resultado diferente do pedido,
+  com o rótulo do pedido.
+- **`_PCT_COLS` / `_STRING_COLS` deixaram de ser constantes globais vazias** (a dívida do
+  `CLAUDE.md` §8). Viraram `column_roles: {coluna: 'percent'|'text'|'date'|'number'}`, passado
+  por requisição — o único jeito que funciona em multitenant, já que cada cliente nomeia as
+  colunas do jeito dele.
+
+Ganhou também:
+
+- **`k_min`** — k-anonimato por grupo. Grupos com menos de `k_min` linhas de origem são
+  suprimidos antes de o vetor sair, e `suppressed_groups` volta no retorno para a interface
+  poder explicar o buraco. `SUM(salario) GROUP BY funcionario` numa base com uma linha por
+  pessoa é a folha de pagamento vestida de agregado.
+- **`RawRowsBlocked`** — plano sem agregação é recusado (P1.3: só sai daqui vetor agregado).
+- **`RowLimitExceeded`** — teto de linhas checado antes do processamento, e em `sheets.py`
+  checado antes de qualquer MB entrar em memória, a partir dos metadados da planilha.
+
+---
+
+## 5. Pendências
+
+> **Estado em 2026-08-07 (não commitado).** Os itens 5.1 a 5.4 abaixo foram
+> implementados; o texto de cada um fica como registro do problema e da decisão.
+> O que **falta** é verificação em ambiente real — ver §7. Nada disso foi
+> rodado: a máquina onde o trabalho foi feito não tem Python nem Node
+> instalados, então `pytest`, `npm run build` e `npm test` não puderam ser
+> executados. O CI é a primeira validação real.
+
+### 5.1 O papel da coluna ainda sai de grep sobre texto livre
+
+Este é o resto vivo do `query_engine/urgent.md`. O diagnóstico de lá continua válido, e o status
+segue `⬜ diagnosticado`.
+
+Com a consolidação, o `column_roles` deixou de ser derivado no Python e passou a vir pronto no
+payload assinado. Quem o produz agora é **`papeisDeColuna()` em
+`supabase/functions/dashboard-execute/index.ts:340-358`** — e o que ela faz é o mesmo grep de
+palavra-chave, só que em TypeScript:
 
 ```ts
-// 4. Executa Python Pandas (MOCK)
+const r = (def?.cleaning_rule ?? "").toLowerCase();
+if (/percent|porcent|%|taxa/.test(r)) roles[nome] = "percent";
+else if (/data|date/.test(r)) roles[nome] = "date";
+else if (/r\$|moeda|float|int|numero|número|decimal/.test(r)) roles[nome] = "number";
+else roles[nome] = "text";
+```
+
+A entrada é a `cleaning_rule`: uma frase em português que o Agente 3 escreveu livremente. O
+prompt do Agente 3 não conhece esse vocabulário de ~12 palavras, então uma regra como *"converter
+Sim/Não para booleano"* ou *"normalizar CPF removendo pontos"* cai no `else` e vira `text` — sem
+log, sem aviso, sem erro.
+
+Consequência concreta: `role = text` faz `_scalar_agg` rodar
+`pd.to_numeric(..., errors="coerce").fillna(0)` em `sum`/`avg`. Valor que não converte vira `0` e
+entra na soma. E uma coluna percentual cuja regra não contenha `percent|porcent|%|taxa` perde a
+proteção de "nunca somar" — `10% + 20%` volta a virar `30`.
+
+A correção proposta no `urgent.md` (coluna `datasets.formatting_contract` com `{tipo, params}`
+de um enum fechado) resolve isso na raiz: `column_roles` passa a ser derivado do `tipo`, não
+adivinhado da frase. Agora com uma vantagem: como só existe **um** consumidor
+(`papeisDeColuna`), a mudança é menor do que era quando havia duas funções fazendo o mesmo grep.
+
+### 5.2 Código morto em `query_engine/`
+
+Sobras da consolidação, que hoje não são importadas por ninguém:
+
+| O quê | Situação |
+|---|---|
+| `cache.py` | último consumidor era `sheets_client.py`, deletado. Não é copiado pelo `Dockerfile`. |
+| `cachetools==5.5.0` no `requirements.txt` | instalado só para o `cache.py` morto |
+| `apply_formatting_rules`, `execute_plan_with_formatting`, `roles_from_formatting_rules` | **nenhum chamador de produção.** `main.py` chama `execute_plan` direto com o `column_roles` do payload. Só `__init__.py` exporta e um teste usa. |
+
+Decidir: apagar, ou manter porque o caminho do chat (§5.4) vai precisar. Se ficar, vale um
+comentário dizendo isso — hoje parecem vivos.
+
+> Nota sobre a formatação de valores: como `sheets.py` lê com
+> `valueRenderOption="UNFORMATTED_VALUE"`, uma célula de moeda no Google Sheets chega como
+> número, porque lá "R$" é formato de exibição sobre um valor numérico. O problema de parsing de
+> `"R$ 1.234,56"` só aparece quando a célula é **texto de verdade**. Isso reduz o alcance
+> prático do §5.1 para o dashboard, mas não o elimina — e não vale para a decisão de `role`,
+> que continua errada independentemente do tipo da célula.
+
+### 5.3 `supabase/functions/_shared/query_plan.ts` está como binário no git
+
+Continua com **1 byte NUL** no meio, então o git o trata como binário: não aparece em diff de
+PR, não dá para revisar linha a linha, `git blame` não funciona.
+
+É justamente o arquivo que `security.py` chama de *"único parser do sistema"* — a extração
+recursiva de colunas que aplica o RBAC (decisão 8A: dois parsers em duas linguagens divergiriam
+em algum aninhamento, e quando duas travas discordam quem passa é a mais frouxa). Um arquivo
+crítico de segurança que ninguém consegue revisar em PR.
+
+Correção: reescrever em UTF-8 limpo e criar `.gitattributes` com `*.ts text eol=lf`. Não existe
+`.gitattributes` no repo.
+
+```sh
+# confirmar
+git ls-files --eol supabase/functions/_shared/query_plan.ts
+```
+
+### 5.4 O chat não está ligado
+
+`PlumChat.tsx:144` continua com o mock:
+
+```ts
 const mockPythonVetor = { rows: [{ valor: "Simulado" }], msg: "Execução do Pandas pendente da API Python." };
 ```
 
-por uma chamada real à Edge Function (não à EC2 direto):
+Falta a `action: 'execute_plan'` na Edge Function `ai-plum-chat` — hoje ela só repassa para o
+Gemini, sem nenhuma checagem de tenant. É a peça que fecha R-05 nessa rota.
 
-```ts
-const execRes = await supabase.functions.invoke('ai-plum-chat', {
-  body: { action: 'execute_plan', datasetId: selectedDatasetId, plan }
-});
-if (execRes.error) throw execRes.error;
-const executorResult = execRes.data.result;
-```
-E usar `executorResult` (em vez de `mockPythonVetor`) na chamada de `synthesize_answer`.
+**Não reescrever do zero:** `supabase/functions/dashboard-execute/index.ts` já faz exatamente
+esse fluxo (JWT → `allowed_columns` do cargo → extração de colunas → assinatura HMAC → chamada
+ao executor). O chat precisa da mesma coisa com um plano só em vez de N cards.
 
----
-
-## 4. Infraestrutura AWS (EC2 Ubuntu)
-
-### 4.1 Rede e segurança
-- VPC nova ou default, 1 subnet pública pequena (não há necessidade de ALB/ASG no volume
-  descrito em `prd.md` — "dezenas de usuários da mesma empresa").
-- Instância `t3.small` (2 vCPU/2GB — pandas em memória com poucas colunas por vez, cache TTL
-  15min) Ubuntu 22.04 LTS.
-- **Sem porta 22 aberta.** Acesso via **AWS Systems Manager Session Manager** (IAM role com
-  `AmazonSSMManagedInstanceCore`), zero chave SSH exposta.
-- Security Group: entrada só 443/tcp de `0.0.0.0/0` (a Edge Function não tem IP fixo — Deno
-  Deploy é multi-região); toda a proteção real é a assinatura HMAC na camada de aplicação.
-  Saída: 443 para `sheets.googleapis.com` e para o host do Postgres do Supabase (se a EC2
-  precisar checar algo direto — no desenho acima ela não precisa, só a Edge Function fala com
-  o Postgres).
-
-  > **Atualizado na §7:** ao usar Cloudflare Tunnel (recomendado), essa regra de entrada some
-  > por completo — o Security Group fica sem NENHUMA porta de entrada aberta.
-- Elastic IP fixo + registro DNS (`query-engine.seudominio.com.br`) na Route 53 ou onde o
-  domínio já estiver. (Também não é necessário com Cloudflare Tunnel — ver §7.)
-- TLS: Nginx como reverse proxy na porta 443 + Certbot (Let's Encrypt), renovação automática
-  via `certbot.timer`. (Substituído por Cloudflare Tunnel na §7 — mais simples e sem porta
-  de entrada nenhuma.)
-
-### 4.1.a Checklist prático do wizard "Launch an instance" (console AWS)
-
-Respostas diretas às três decisões que o wizard pede na tela **Network settings** e
-**Advanced details**, já considerando que o desenho final usa Cloudflare Tunnel (§7):
-
-1. **Criar grupo de segurança? Sim — crie um novo, mas deixe sem regra de entrada nenhuma.**
-   O wizard sugere "Create security group" com a caixa "Allow SSH traffic" já marcada,
-   pedindo um IP de origem. **Desmarque essa caixa.** Não é necessário liberar porta 22: o
-   acesso ao terminal é via **AWS Systems Manager Session Manager** (não usa a rede da VPC
-   para entrar, é uma conexão iniciada pelo próprio SSM Agent para fora). Resultado esperado:
-   grupo de segurança criado com **0 regras de entrada** e a regra padrão de saída (`All
-   traffic` para `0.0.0.0/0`), que é suficiente para: `apt`, Docker Hub/GHCR, AWS Secrets
-   Manager, Google Sheets API e a conexão outbound do `cloudflared`.
-
-2. **Habilitar HTTP? Não. HTTPS também não.** Essas duas caixas ("Allow HTTP traffic", "Allow
-   HTTPS traffic") abririam as portas 80/443 do **Security Group** para `0.0.0.0/0` — é
-   exatamente o padrão do plano antigo (Nginx+Certbot), que a §7 substitui. Com Cloudflare
-   Tunnel o tráfego HTTPS público é terminado na borda da Cloudflare; a instância só faz uma
-   conexão **de saída** para o túnel. Deixe as duas desmarcadas.
-
-3. **Mexer em "Advanced details"? Sim, só um campo: "IAM instance profile".** Selecione ali o
-   role criado em **§4.2** (o que tem `secretsmanager:GetSecretValue` restrito aos dois ARNs
-   e a policy `AmazonSSMManagedInstanceCore`). Sem isso, nem o SSM Session Manager conecta,
-   nem o `aws secretsmanager get-secret-value` do passo 7.4 funciona. O resto de "Advanced
-   details" pode ficar no padrão (não precisa de "User data" — os passos manuais da §7 cobrem
-   o setup; não precisa de tenancy dedicada, nem shutdown behavior customizado).
-
-   Fora do "Advanced details", ainda na mesma tela de lançamento: em **"Key pair (login)"**
-   selecione **"Proceed without a key pair"** — coerente com não haver SSH; todo acesso é via
-   SSM.
-
-### 4.2 IAM
-- Instance Profile com política mínima: `secretsmanager:GetSecretValue` restrita ao ARN dos 2
-  secrets (Service Account JSON, shared secret), `ssm:*ManagedInstance*` para o Session
-  Manager. Nada de chave de acesso IAM de longa duração na máquina.
-
-**Política customizada — `PlumQueryEngineSecretsAccess`** (substitua `<region>` e
-`<account-id>`; o `-*` no final do ARN cobre o sufixo aleatório de 6 caracteres que o Secrets
-Manager sempre acrescenta ao nome do segredo):
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PlumQueryEngineReadSecrets",
-      "Effect": "Allow",
-      "Action": "secretsmanager:GetSecretValue",
-      "Resource": [
-        "arn:aws:secretsmanager:<region>:<account-id>:secret:plum/query-engine/google-service-account-*",
-        "arn:aws:secretsmanager:<region>:<account-id>:secret:plum/query-engine/shared-secret-*"
-      ]
-    }
-  ]
-}
-```
-
-Essa é a **única** policy customizada necessária. O acesso ao SSM Session Manager não precisa
-de JSON próprio — vem da policy gerenciada da AWS `AmazonSSMManagedInstanceCore`, anexada ao
-mesmo role.
-
-### 4.2.a Onde colocar isso no Console AWS (passo a passo por clique)
-
-**Sim, clique em "Create new IAM profile"** (o link que aparece no campo "IAM instance
-profile", em Advanced details, na tela de lançamento da instância). Isso abre uma nova aba já
-no console do IAM, no fluxo certo de criação de role. Nenhum dos dois JSON acima vai direto
-nesse link — eles entram em telas separadas do IAM, na ordem abaixo:
-
-1. **A aba nova abre em IAM → Roles → Create role.**
-   - "Trusted entity type": deixe **"AWS service"** (já vem selecionado).
-   - "Use case": deixe **"EC2"** (também já vem selecionado, por ter vindo do link do EC2).
-   - Clique **Next**.
-   - **Você não precisa colar o JSON da "trust policy" aqui** — ao escolher "AWS service" +
-     "EC2", o IAM já gera automaticamente o JSON de confiança que mostrei acima. Ele só fica
-     visível/editável depois, na aba "Trust relationships" do role já criado, caso queira
-     confirmar.
-
-2. **Tela "Add permissions"** (ainda no mesmo fluxo): na busca, digite `AmazonSSMManagedInstanceCore`
-   e marque o checkbox dela. Essa é uma policy **gerenciada pela AWS** — você não escreve JSON
-   para ela, só anexa. Clique **Next**.
-
-3. **Tela "Name, review, and create":** dê o nome `plum-query-engine-ec2-role` e clique
-   **Create role**. (Ao criar um role assim, a partir do fluxo EC2, o IAM já cria por baixo dos
-   panos um Instance Profile com o mesmo nome — é ele que vai aparecer de volta no dropdown da
-   tela do EC2.)
-
-4. **Agora sim, o primeiro JSON (o da §4.2) entra aqui:** ainda no console IAM, vá em
-   **Policies → Create policy**. Na tela de criação há duas abas: **"Visual"** e **"JSON"** —
-   clique na aba **JSON** e cole exatamente o bloco `PlumQueryEngineSecretsAccess` mostrado
-   acima (com `<region>` e `<account-id>` já substituídos). Clique **Next**, dê o nome
-   `PlumQueryEngineSecretsAccess` e clique **Create policy**.
-
-5. **Anexe essa policy ao role:** volte em **IAM → Roles → `plum-query-engine-ec2-role`** →
-   aba **Permissions** → **Add permissions → Attach policies** → busque
-   `PlumQueryEngineSecretsAccess` → marque o checkbox → **Attach policies**.
-
-6. **Volte para a aba do EC2** (a tela de lançamento da instância continua aberta) e clique no
-   ícone de atualizar (🔄) ao lado do campo "IAM instance profile" — o
-   `plum-query-engine-ec2-role` deve aparecer na lista agora. Selecione-o.
-
-Resumo de onde cada JSON vai: a **trust policy** você não cola em lugar nenhum manualmente (o
-console gera sozinho ao escolher "EC2" como use case); o **JSON de permissões**
-(`PlumQueryEngineSecretsAccess`) vai na aba **JSON** de **IAM → Policies → Create policy**, e
-depois só precisa ser *anexado* ao role — não colado de novo em outro lugar.
-
-**Trust policy do role** (para referência — só usada se você optar pela criação via CLI/JSON
-bruto em vez do fluxo por clique acima; quem cria pelo console nunca precisa colar isso):
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": { "Service": "ec2.amazonaws.com" },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-```
-
-**Criação via AWS CLI** (roda na sua máquina local, antes de lançar a instância — é esse role
-que você seleciona em "IAM instance profile" no passo 3 da §4.1.a):
-
-```bash
-# trust-policy.json e secrets-policy.json = os dois blocos JSON acima, salvos em arquivo
-
-aws iam create-role \
-  --role-name plum-query-engine-ec2-role \
-  --assume-role-policy-document file://trust-policy.json
-
-aws iam put-role-policy \
-  --role-name plum-query-engine-ec2-role \
-  --policy-name PlumQueryEngineSecretsAccess \
-  --policy-document file://secrets-policy.json
-
-aws iam attach-role-policy \
-  --role-name plum-query-engine-ec2-role \
-  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-
-aws iam create-instance-profile \
-  --instance-profile-name plum-query-engine-instance-profile
-
-aws iam add-role-to-instance-profile \
-  --instance-profile-name plum-query-engine-instance-profile \
-  --role-name plum-query-engine-ec2-role
-```
-
-No wizard, o campo "IAM instance profile" vai listar `plum-query-engine-instance-profile`.
-
-### 4.3 Segredos
-- **AWS Secrets Manager**: `plum/query-engine/google-service-account` (JSON da Service Account
-  que já tem acesso Leitor às planilhas dos clientes) e `plum/query-engine/shared-secret`.
-- Boot script (`user-data` ou `ExecStartPre`) busca os secrets via CLI/SDK e escreve em
-  `/etc/plum/` com permissão `600`, nunca versionados no repo.
-
-### 4.4 Deploy do processo
-- Containerizado com Docker (passo a passo completo na §7).
-- Deploy manual (consistente com o padrão do projeto — migrations e Edge Functions também são
-  manuais): `git pull` em `/opt/plum` + rebuild da imagem + restart do container. Documentar
-  isso em `docs/PASSO-A-PASSO-APLICAR.md` como já é feito para o resto.
-
-### 4.5 Observabilidade
-- CloudWatch Agent para logs do container/host e métricas de CPU/memória.
-- Alarme simples: CPU > 80% por 5min, ou taxa de erro 5xx acima de N/min (via logs do
-  `cloudflared` ou do próprio FastAPI).
+Duas diferenças a resolver antes:
+- O executor exige agregação (`RawRowsBlocked`) e aplica `k_min`. Uma pergunta de chat que peça
+  listagem vai ser recusada — decidir se o chat relaxa `k_min` ou se o Agente A é instruído a
+  sempre agregar.
+- O cache de dados (TTL 15 min do `cache.py`) morreu com a consolidação. Hoje só há cache de
+  *metadados* da planilha, em `sheets.py`. Para o chat, várias perguntas seguidas sobre o mesmo
+  dataset viram várias leituras.
 
 ---
 
-## 5. Fluxo E2E resultante
+## 6. O que foi feito
 
-```
-PlumChat.tsx
-  → ai-plum-chat (guard)         [Gemini]
-  → ai-plum-chat (plan_query)    [Gemini]
-  → ai-plum-chat (execute_plan)  [valida tenant no Postgres, assina HMAC]
-       → EC2 Ubuntu (Cloudflare Tunnel → container Docker → FastAPI)
-            → cache TTL 15min (hit/miss)
-            → Google Sheets API (Service Account, column-range GET)
-            → pandas_executor.execute_plan()
-       ← vetor de resultados
-  → ai-plum-chat (synthesize_answer) [Gemini, recebe o vetor real]
-← resposta final salva em plum_chat
-```
+| # | Mudança | Arquivos |
+|---|---|---|
+| 1 | Byte NUL de `query_plan.ts` virou escape `\u0000`; `.gitattributes` criado | `_shared/query_plan.ts`, `.gitattributes` |
+| 2 | Código morto removido | `cache.py` (apagado), `requirements.txt`, `pandas_executor.py`, `__init__.py`, `tests/test_privacidade.py` |
+| 3 | Coluna `datasets.formatting_contract` + tipos | `migrations/20260807120000_contrato_formatacao.sql`, `types.ts` |
+| 4 | Agentes 3/3.1 com enum fechado e validação no servidor | `supabase_edge_function_ai_agents.ts` |
+| 5 | `papeisDeColuna` lê o contrato, com fallback avisado | `_shared/query_plan.ts`, `_shared/query_plan.test.ts`, `dashboard-execute/index.ts` |
+| 6 | Contrato persistido e exibido | `DatabasePipeline.tsx`, `Cfgdatabase.tsx`, `src/lib/formatting-contract.ts` |
+| 7 | Chat ligado ao executor | `functions/chat-execute/index.ts` (novo), `PlumChat.tsx` |
+
+Três decisões que valem registro, porque divergem do que o próprio documento
+pedia antes:
+
+**O NUL era intencional.** É o separador de `permissionsFingerprint`, e o
+comentário no arquivo explica por quê: sem um separador fora do alfabeto de
+nomes de coluna, `["ab","c"]` e `["a","bc"]` colidiriam. Trocar o byte cru por
+`\u0000` produz exatamente a mesma string, então **nenhuma digital muda** e
+nenhum snapshot em cache é invalidado.
+
+**`papeisDeColuna` mudou de arquivo, não só de lógica.** Estava dentro de
+`dashboard-execute/index.ts`, onde não tinha teste. Foi para
+`_shared/query_plan.ts`, que é o módulo coberto por vitest — coerente com a
+regra que o próprio repositório escreveu: *"a peça que aplica o RBAC é
+justamente a que não pode viver sem teste"*. Ganhou 8 casos, incluindo dois que
+**documentam o erro do fallback** em vez de escondê-lo.
+
+**O chat virou uma função nova, não uma `action` em `ai-plum-chat`.** Este
+documento pedia `action: 'execute_plan'` ali. Mas `ai-plum-chat` é colada à mão
+no painel e não pode importar `_shared/query_plan.ts` — colocar a autorização
+lá significaria uma **segunda cópia de `authorizePlan`**, exatamente o cenário
+de "duas travas que discordam" que `query_plan.ts` proíbe no seu comentário de
+abertura. `supabase/functions/chat-execute/index.ts` é irmã de
+`dashboard-execute`, deployada por CLI, e reusa o único parser.
+
+### O que o contrato resolve, em uma linha
+
+`column_roles` deixa de ser adivinhado por grep numa frase em português e passa
+a sair de um `tipo` de enum fechado, revisado por humano antes de virar dado.
+Base sem contrato continua funcionando pelo caminho antigo — e agora **avisa no
+log** que está adivinhando, que é o que faltava para o R-08 valer aqui.
 
 ---
 
-## 6. Ordem de execução recomendada
+## 7. Verificação — o que falta
 
-1. Escrever `app.py` + `sheets_client.py` + `cache.py` + `auth.py`, testar localmente com uma
-   planilha de teste.
-2. Provisionar EC2 + Secrets Manager + IAM role + Security Group (ver §7).
-3. Subir o serviço com Docker, testar `curl` direto com HMAC manual.
-4. Implementar `action: 'execute_plan'` na Edge Function, deploy manual pelo painel.
-5. Atualizar `PlumChat.tsx`, remover o mock.
-6. Rodar `supabase/tests/*.sql` de novo (não deveria haver impacto de RLS, mas o passo 9 do
-   `CLAUDE.md` exige checar sempre que se toca em RLS/policy — aqui a Edge Function passa a
-   fazer uma query nova).
-7. Teste manual E2E no chat com um dataset real, cobrindo: pergunta válida, pergunta bloqueada
-   pelo Agente Z, pergunta inviável (coluna inexistente), e tentativa de `dataset_id` de outra
-   organização (deve voltar 403 antes de chegar na EC2).
+Nada abaixo foi executado. A máquina onde a implementação foi feita não tem
+Python nem Node (os caminhos em `WindowsApps` são stubs da Microsoft Store).
 
----
-
-## 7. Passo a passo — provisionamento (Ubuntu + Docker + Cloudflare Tunnel)
-
-Todos os comandos abaixo são para o terminal Linux (bash), rodados **dentro da instância
-EC2** salvo indicação contrária. Conecte-se via SSM (sem SSH exposto):
-
-```bash
-# rodado na SUA máquina local, com AWS CLI configurado
-aws ssm start-session --target i-xxxxxxxxxxxxxxxxx
+```sh
+npm run build                          # typecheck + build
+npm test                               # vitest, inclui os 8 casos novos de papeisDeColuna
+cd query_engine && python -m pytest    # invariantes de privacidade e segurança
+git grep -n -E "^(<<<<<<< |=======$|>>>>>>> )"   # deve não retornar nada
+git ls-files --eol supabase/functions/_shared/query_plan.ts   # deve sair como texto, não binário
 ```
 
-### 7.1 Atualizar o sistema e endurecer o básico
+Depois, em ambiente real:
 
-```bash
-sudo apt update && sudo apt -y upgrade
-sudo apt -y install ufw fail2ban unattended-upgrades ca-certificates curl gnupg
+1. **Aplicar a migration** no SQL Editor do painel (não há CLI — `CLAUDE.md` §1).
+   O bloco de verificação no fim do arquivo deve imprimir `OK` nas cinco linhas.
+2. **Deploy manual** da Edge Function `ai-agents` pelo painel (é colada à mão).
+3. **Deploy por CLI** de `chat-execute`: `supabase functions deploy chat-execute`.
+   Ela precisa dos mesmos secrets de `dashboard-execute` (`PLUM_EXECUTOR_URL`,
+   `PLUM_EXECUTOR_HMAC_SECRET`, `PLUM_AWS_*`).
+4. **Pipeline de importação E2E**: subir uma planilha com coluna de moeda, data,
+   CPF e Sim/Não. Conferir na Etapa 3 que cada uma recebeu um tipo do enum e que
+   nenhuma caiu em "Sem transformação" por acidente. Finalizar e conferir no
+   painel que `datasets.formatting_contract` foi gravado.
+5. **Base legada**: abrir em `/cfgdatabase` um dataset importado antes da
+   migration. Deve aparecer o aviso "Formato legado" no card e o badge "Legado"
+   por coluna. Rodar o Agente 3.1 nele e confirmar que passa a ter contrato.
+6. **Chat E2E**: pergunta válida, bloqueada pelo Agente Z, inviável (coluna
+   inexistente), pergunta sobre coluna que o cargo não enxerga (deve dar 403 com
+   mensagem, sem chamar o Agente C) e `dataset_id` de outra organização (403
+   antes de chegar na AWS).
+7. `supabase/tests/*.sql` — o `CLAUDE.md` §9 exige rodar sempre que o schema muda
+   ou uma Edge Function passa a fazer query nova. As duas coisas aconteceram.
 
-# Com Cloudflare Tunnel não há NENHUMA porta de entrada necessária.
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw --force enable
-sudo ufw status verbose
+Para subir o serviço localmente, sem Lambda:
+
+```sh
+uvicorn query_engine.main:app --reload
 ```
-
-### 7.2 Criar usuário e diretórios de serviço
-
-```bash
-sudo adduser --system --group --home /opt/plum plum
-sudo mkdir -p /opt/plum/app /etc/plum
-sudo chown -R plum:plum /opt/plum
-```
-
-### 7.3 Instalar Docker Engine
-
-```bash
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt update
-sudo apt -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo usermod -aG docker plum
-sudo systemctl enable --now docker
-```
-
-### 7.4 Buscar os segredos do AWS Secrets Manager (via IAM role da instância, sem chave estática)
-
-```bash
-sudo aws secretsmanager get-secret-value \
-  --secret-id plum/query-engine/google-service-account \
-  --query SecretString --output text | sudo tee /etc/plum/google-credentials.json > /dev/null
-
-sudo aws secretsmanager get-secret-value \
-  --secret-id plum/query-engine/shared-secret \
-  --query SecretString --output text | sudo tee /etc/plum/shared-secret.txt > /dev/null
-
-sudo chmod 600 /etc/plum/google-credentials.json /etc/plum/shared-secret.txt
-sudo chown plum:plum /etc/plum/google-credentials.json /etc/plum/shared-secret.txt
-```
-
-Criar o arquivo de ambiente que o container vai consumir:
-
-```bash
-sudo tee /etc/plum/query-engine.env > /dev/null <<EOF
-GOOGLE_CLOUD_CREDENTIALS=/etc/plum/google-credentials.json
-EXECUTOR_SHARED_SECRET=$(cat /etc/plum/shared-secret.txt)
-PORT=8000
-EOF
-sudo chmod 600 /etc/plum/query-engine.env
-```
-
-### 7.5 Trazer o código para a instância
-
-```bash
-sudo -u plum git clone https://github.com/<sua-org>/<seu-repo>.git /opt/plum/app
-cd /opt/plum/app/query_engine
-```
-
-### 7.6 `Dockerfile` (criar em `query_engine/Dockerfile`)
-
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-
-RUN useradd -m appuser
-USER appuser
-
-EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
-```
-
-### 7.7 `docker-compose.yml` (query engine + Cloudflare Tunnel juntos)
-
-Crie em `/opt/plum/app/query_engine/docker-compose.yml`. Os dois serviços ficam na mesma
-rede interna do Docker — o container do `query-engine` **não expõe porta nenhuma no host**,
-só é alcançável pelo `cloudflared` via DNS interno do Docker (`http://query-engine:8000`):
-
-```yaml
-services:
-  query-engine:
-    build: .
-    container_name: plum-query-engine
-    restart: unless-stopped
-    env_file: /etc/plum/query-engine.env
-    volumes:
-      - /etc/plum/google-credentials.json:/etc/plum/google-credentials.json:ro
-    expose:
-      - "8000"
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: plum-cloudflared
-    restart: unless-stopped
-    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - query-engine
-```
-
-```bash
-sudo tee /opt/plum/app/query_engine/.env > /dev/null <<'EOF'
-CLOUDFLARE_TUNNEL_TOKEN=coloque_aqui_o_token_do_tunnel
-EOF
-sudo chmod 600 /opt/plum/app/query_engine/.env
-```
-
-### 7.8 Criar o túnel no Cloudflare (Zero Trust → Networks → Tunnels)
-
-Pode ser feito pela CLI (`cloudflared`) direto no terminal da instância, sem passar pelo
-dashboard:
-
-```bash
-# instala o cloudflared no host (só para autenticar/criar o túnel; a operação em produção
-# roda dentro do container, via docker-compose acima)
-curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-main.gpg
-echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | \
-  sudo tee /etc/apt/sources.list.d/cloudflared.list
-sudo apt update && sudo apt -y install cloudflared
-
-# autentica com a conta Cloudflare (abre um link — copie e acesse de outro navegador se a
-# instância não tiver GUI)
-cloudflared tunnel login
-
-# cria o túnel nomeado
-cloudflared tunnel create plum-query-engine
-
-# aponta o subdomínio para o túnel (precisa da zona do domínio já estar no Cloudflare)
-cloudflared tunnel route dns plum-query-engine query-engine.seudominio.com.br
-
-# pega o token do túnel para usar no container (equivalente ao criado pelo dashboard)
-cloudflared tunnel token plum-query-engine
-```
-
-Cole o token retornado no `.env` do passo 7.7 (`CLOUDFLARE_TUNNEL_TOKEN`).
-
-Depois, na aba **Public Hostname** do túnel (dashboard Cloudflare, `Networks → Tunnels →
-plum-query-engine → Configure`), ou via API, configure:
-- **Hostname:** `query-engine.seudominio.com.br`
-- **Service:** `http://query-engine:8000`
-
-(O nome `query-engine` resolve porque `cloudflared` está no mesmo `docker-compose`/rede que o
-serviço.)
-
-### 7.9 Subir tudo
-
-```bash
-cd /opt/plum/app/query_engine
-sudo docker compose up -d --build
-sudo docker compose ps
-sudo docker compose logs -f query-engine
-sudo docker compose logs -f cloudflared
-```
-
-### 7.10 Testar o endpoint de fora
-
-```bash
-BODY='{"organization_id":"00000000-0000-0000-0000-000000000000","dataset_id":"...", "google_sheet_id":"...", "target_columns":["faturamento"], "plan":{}}'
-TS=$(date +%s)
-SECRET=$(cat /etc/plum/shared-secret.txt)
-# assina "timestamp.body" — precisa bater exatamente com auth.compute_signature()
-SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
-
-curl -X POST "https://query-engine.seudominio.com.br/v1/execute-plan" \
-  -H "Content-Type: application/json" \
-  -H "X-Plum-Timestamp: ${TS}" \
-  -H "X-Plum-Signature: sha256=${SIG}" \
-  -d "${BODY}"
-```
-
-### 7.11 Deploy de atualizações futuras
-
-```bash
-cd /opt/plum/app
-sudo -u plum git pull
-cd query_engine
-sudo docker compose up -d --build
-```
-
-### 7.12 Checklist final de segurança da instância
-
-```bash
-# confirma que NENHUMA porta está aberta para a internet
-sudo ufw status verbose
-sudo ss -tlnp   # só deve mostrar processos escutando em 127.0.0.1 ou dentro da rede docker
-
-# confirma que os segredos não estão com permissão aberta
-ls -l /etc/plum/
-```
-
-Com isso, o Security Group da instância pode ficar **sem nenhuma regra de entrada**: todo o
-tráfego chega via túnel outbound do `cloudflared` para a borda da Cloudflare, e o TLS público
-é terminado pela Cloudflare, não pela EC2.

@@ -79,6 +79,11 @@ export type Database = {
           google_sheet_url: string | null
           google_sheet_tab: string
           schema_metadata: Json | null
+          // Contrato de formatação: {versao, colunas: {col: {tipo, params}}}.
+          // É daqui que sai o `column_roles` do executor. NULL = dataset
+          // legado, que ainda depende do grep sobre `cleaning_rule`.
+          // Ver migration 20260807120000_contrato_formatacao.sql.
+          formatting_contract: Json | null
           sketch: Json | null
           status: string | null
           created_at: string
@@ -91,6 +96,7 @@ export type Database = {
           google_sheet_url?: string | null
           google_sheet_tab?: string
           schema_metadata?: Json | null
+          formatting_contract?: Json | null
           sketch?: Json | null
           status?: string | null
           created_at?: string
@@ -103,6 +109,7 @@ export type Database = {
           google_sheet_url?: string | null
           google_sheet_tab?: string
           schema_metadata?: Json | null
+          formatting_contract?: Json | null
           sketch?: Json | null
           status?: string | null
           created_at?: string

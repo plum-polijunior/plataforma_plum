@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
 import {
   authorizePlan,
   extractColumns,
+  papeisDeColuna,
+  papelPorPalavraChave,
   permissionsFingerprint,
   signPayload,
   stripTable,
@@ -270,5 +272,148 @@ describe("signPayload", () => {
   it("muda quando o segredo muda", async () => {
     const corpo = '{"sheet_id":"x"}';
     expect(await signPayload(corpo, "s1")).not.toBe(await signPayload(corpo, "s2"));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Papéis de coluna
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// O papel decide se `sum` vira `avg` numa coluna percentual e se o executor
+// coage texto para número. Errar aqui devolve número errado com cara de certo,
+// que é o modo de falha que o produto promete não ter.
+
+const contrato = (colunas: Record<string, string>) => ({
+  versao: 1,
+  colunas: Object.fromEntries(
+    Object.entries(colunas).map(([c, tipo]) => [c, { tipo, params: {} }]),
+  ),
+});
+
+describe("papeisDeColuna — caminho do contrato", () => {
+  it("traduz cada tipo do enum para o papel do executor", () => {
+    const { roles, legado } = papeisDeColuna(
+      null,
+      contrato({
+        faturamento: "moeda_brl",
+        preco: "numero_decimal",
+        quantidade: "numero_inteiro",
+        margem: "percentual",
+        data_venda: "data",
+        cliente: "texto_trim_maiusculas",
+        cidade: "texto_trim_minusculas",
+        cpf: "documento_cpf_cnpj",
+        ativo: "booleano_sim_nao",
+        obs: "nenhuma",
+      }),
+      new Set([
+        "faturamento", "preco", "quantidade", "margem", "data_venda",
+        "cliente", "cidade", "cpf", "ativo", "obs",
+      ]),
+    );
+
+    expect(roles).toEqual({
+      faturamento: "number",
+      preco: "number",
+      quantidade: "number",
+      margem: "percent",
+      data_venda: "date",
+      cliente: "text",
+      cidade: "text",
+      cpf: "text",
+      ativo: "text",
+      obs: "text",
+    });
+    expect(legado).toEqual([]);
+  });
+
+  it("devolve só as colunas pedidas", () => {
+    const { roles } = papeisDeColuna(
+      null,
+      contrato({ a: "percentual", b: "data", c: "moeda_brl" }),
+      new Set(["b"]),
+    );
+    expect(Object.keys(roles)).toEqual(["b"]);
+  });
+
+  it("o contrato vence a frase, quando os dois existem e discordam", () => {
+    // A frase diz "texto"; o contrato diz percentual. Quem manda é o contrato.
+    const { roles, legado } = papeisDeColuna(
+      { columns: { margem: { cleaning_rule: "Manter como texto" } } },
+      contrato({ margem: "percentual" }),
+      new Set(["margem"]),
+    );
+    expect(roles.margem).toBe("percent");
+    expect(legado).toEqual([]);
+  });
+
+  it("tipo fora do enum não é aceito: cai no legado em vez de virar papel inválido", () => {
+    const { roles, legado } = papeisDeColuna(
+      { columns: { x: { cleaning_rule: "Converter para percentual" } } },
+      { versao: 1, colunas: { x: { tipo: "moeda_em_dolar" } } },
+      new Set(["x"]),
+    );
+    expect(roles.x).toBe("percent"); // veio do fallback, não do tipo inventado
+    expect(legado).toEqual(["x"]);
+  });
+});
+
+describe("papeisDeColuna — fallback de base legada", () => {
+  it("sem contrato, adivinha pela frase e reporta como legado", () => {
+    const { roles, legado } = papeisDeColuna(
+      {
+        columns: {
+          margem: { cleaning_rule: "Converter para percentual com 2 casas" },
+          data_venda: { cleaning_rule: "Converter para data dd/mm/aaaa" },
+          faturamento: { cleaning_rule: "Retirar o R$ e converter para float" },
+          cliente: { cleaning_rule: "Manter como texto" },
+        },
+      },
+      null,
+      new Set(["margem", "data_venda", "faturamento", "cliente"]),
+    );
+
+    expect(roles).toEqual({
+      margem: "percent",
+      data_venda: "date",
+      faturamento: "number",
+      cliente: "text",
+    });
+    // Todas adivinhadas: quem chama precisa saber para poder avisar.
+    expect(legado.sort()).toEqual(
+      ["cliente", "data_venda", "faturamento", "margem"],
+    );
+  });
+
+  it("contrato parcial: só a coluna que falta entra em legado", () => {
+    const { roles, legado } = papeisDeColuna(
+      { columns: { antiga: { cleaning_rule: "Retirar o R$" } } },
+      contrato({ nova: "percentual" }),
+      new Set(["nova", "antiga"]),
+    );
+    expect(roles).toEqual({ nova: "percent", antiga: "number" });
+    expect(legado).toEqual(["antiga"]);
+  });
+
+  it("coluna sem nenhuma informação vira text, nunca undefined", () => {
+    const { roles, legado } = papeisDeColuna(null, null, new Set(["fantasma"]));
+    expect(roles.fantasma).toBe("text");
+    expect(legado).toEqual(["fantasma"]);
+  });
+});
+
+describe("papelPorPalavraChave — o grep que o contrato aposenta", () => {
+  // Estes casos são a razão de o contrato existir. Ficam registrados como
+  // comportamento conhecido do fallback, não como comportamento desejável.
+  it("erra em regra que não usa o vocabulário esperado", () => {
+    expect(papelPorPalavraChave("converter Sim/Não para booleano")).toBe("text");
+    expect(papelPorPalavraChave("remover pontos e traços do CPF")).toBe("text");
+    expect(papelPorPalavraChave("padronizar em caixa alta")).toBe("text");
+  });
+
+  it("percentual só é reconhecido com as palavras certas", () => {
+    expect(papelPorPalavraChave("taxa de conversao")).toBe("percent");
+    // Mesma coluna, outra redação: perde a proteção de nunca-somar.
+    expect(papelPorPalavraChave("razao entre vendas e visitas")).toBe("text");
   });
 });

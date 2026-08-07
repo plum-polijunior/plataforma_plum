@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
 import * as XLSX from "xlsx";
 import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
+import { ROTULO_DO_TIPO, semTratamento, type ItemContrato } from "@/lib/formatting-contract";
 
 interface DatabasePipelineProps {
   organizationId: string;
@@ -103,6 +104,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           setDataSamples(matchedDataset.sketch.dataSamples);
           
           if (matchedDataset.sketch.formattingRules) setFormattingRules(matchedDataset.sketch.formattingRules);
+          if (matchedDataset.sketch.formattingContract) setFormattingContract(matchedDataset.sketch.formattingContract);
           if (matchedDataset.sketch.semanticDefinitions) setSemanticDefinitions(matchedDataset.sketch.semanticDefinitions);
           if (matchedDataset.sketch.formattedDataSamples) setFormattedDataSamples(matchedDataset.sketch.formattedDataSamples);
           
@@ -152,7 +154,13 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
   const [semanticDefinitions, setSemanticDefinitions] = useState<Record<string, string>>({});
   const [formattedDataSamples, setFormattedDataSamples] = useState<any[]>([]);
+  // Dois lados da mesma resposta do Agente 3:
+  //   formattingRules    {coluna: frase}  -> o que a pessoa lê e revisa
+  //   formattingContract {coluna: {tipo, params, explicacao}} -> o que a máquina executa
+  // A frase é derivada do contrato na Edge Function, nunca o contrário, para os
+  // dois não poderem divergir. Ver query_engine/urgent.md.
   const [formattingRules, setFormattingRules] = useState<Record<string, string>>({});
+  const [formattingContract, setFormattingContract] = useState<Record<string, ItemContrato>>({});
 
   const [formatQuery, setFormatQuery] = useState("");
   const [isFormatRefining, setIsFormatRefining] = useState(false);
@@ -169,6 +177,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
             normalizedColumns,
             dataSamples,
             formattingRules: extraData.formattingRules || formattingRules,
+            formattingContract: extraData.formattingContract || formattingContract,
             semanticDefinitions: extraData.semanticDefinitions || semanticDefinitions,
             formattedDataSamples: extraData.formattedDataSamples || formattedDataSamples
           }
@@ -179,6 +188,21 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     }
   };
 
+  /**
+   * A Edge Function troca por "nenhuma" todo `tipo` que o modelo inventou fora
+   * do enum. Isso não pode passar calado: a coluna deixa de ser formatada e
+   * quem aprova o dicionário precisa saber disso ANTES de aprovar (R-08).
+   */
+  const avisarSeContratoAjustado = (avisos?: string[]) => {
+    if (!avisos?.length) return;
+    console.warn("Contrato de formatação ajustado pela validação:", avisos);
+    toast({
+      title: `${avisos.length} coluna(s) sem formatação definida`,
+      description: "A IA não soube classificar. Revise essas colunas antes de finalizar.",
+      variant: "destructive",
+    });
+  };
+
   const handleRefineFormat = async () => {
     if (!formatQuery.trim()) return;
     setIsFormatRefining(true);
@@ -187,9 +211,11 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       
       const formatRes = await supabase.functions.invoke('ai-agents', {
         body: { 
-          action: 'refine_format', 
+          action: 'refine_format',
           prompt: formatQuery,
-          columns: formattingRules,
+          // Manda o contrato, não a frase: o Agente 3.1 precisa preservar
+          // `tipo` e `params` das colunas que não foram citadas no pedido.
+          columns: formattingContract,
           dataSamples: dataSamples
         }
       });
@@ -209,17 +235,21 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       if (formatResult && (formatResult.formattedSamples || formatResult.formattingRules)) {
         const newFormattedSamples = formatResult.formattedSamples || formattedDataSamples;
         const newFormattingRules = formatResult.formattingRules || formattingRules;
+        const newFormattingContract = formatResult.formattingContract || formattingContract;
 
         setFormattedDataSamples(newFormattedSamples);
         setFormattingRules(newFormattingRules);
+        setFormattingContract(newFormattingContract);
         setFormatQuery(""); // Limpa o chat após sucesso
-        
+
         // Salva rascunho
         saveSketch(2, {
           formattedDataSamples: newFormattedSamples,
-          formattingRules: newFormattingRules
+          formattingRules: newFormattingRules,
+          formattingContract: newFormattingContract
         });
 
+        avisarSeContratoAjustado(formatResult.avisosContrato);
         toast({ title: "Formatação atualizada!", description: "A IA aplicou as suas correções.", variant: "default" });
       } else {
         throw new Error("A IA não retornou um formato válido.");
@@ -256,12 +286,15 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       if (formatResult && formatResult.formattedSamples) {
         setFormattedDataSamples(formatResult.formattedSamples);
         setFormattingRules(formatResult.formattingRules || {});
-        
+        setFormattingContract(formatResult.formattingContract || {});
+
         saveSketch(2, {
           formattedDataSamples: formatResult.formattedSamples,
-          formattingRules: formatResult.formattingRules || {}
+          formattingRules: formatResult.formattingRules || {},
+          formattingContract: formatResult.formattingContract || {}
         });
 
+        avisarSeContratoAjustado(formatResult.avisosContrato);
         setStep(2); // Vai para Formatação
       } else {
         setFormattedDataSamples(dataSamples);
@@ -390,11 +423,30 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
     setIsProcessing(true);
     try {
+      const colunas = Object.values(normalizedColumns);
+
       const schemaMetadata = {
-        columns: Object.values(normalizedColumns).reduce((acc: any, col) => {
+        columns: colunas.reduce((acc: any, col) => {
           acc[col] = {
             semantic_definition: semanticDefinitions[col] || "",
-            cleaning_rule: formattingRules[col] || ""
+            // A frase continua aqui, para o humano ler no painel de bases.
+            cleaning_rule: formattingContract[col]?.explicacao || formattingRules[col] || ""
+          };
+          return acc;
+        }, {})
+      };
+
+      // O que a máquina executa, separado do que a pessoa lê. Toda coluna entra,
+      // mesmo as que a IA não soube classificar — "nenhuma" é uma declaração
+      // explícita de "não formatar", diferente de ausência, que viraria adivinhação
+      // por palavra-chave lá na Edge Function.
+      const formattingContractSalvo = {
+        versao: 1,
+        colunas: colunas.reduce((acc: any, col) => {
+          const item = formattingContract[col];
+          acc[col] = {
+            tipo: item?.tipo || "nenhuma",
+            params: item?.params || {}
           };
           return acc;
         }, {})
@@ -406,6 +458,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           name: fileName || "Nova Planilha",
           status: "active",
           schema_metadata: schemaMetadata as any,
+          formatting_contract: formattingContractSalvo as any,
           google_sheet_id: sheetId,         // fonte da verdade: a API do Google exige o ID
           google_sheet_url: sheetUrlToSave, // só para exibir na tela de bases
           sketch: null // Limpa o rascunho
@@ -425,6 +478,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       setDataSamples([]);
       setSemanticDefinitions({});
       setFormattingRules({});
+      setFormattingContract({});
       setSheetUrl("");
     } catch (err: any) {
       toast({
@@ -579,12 +633,30 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                 <div className="mt-6 space-y-3">
                   <h4 className="font-semibold text-sm">Regras Aplicadas por Coluna:</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {Object.entries(formattingRules).map(([colName, rule], idx) => (
-                      <div key={idx} className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
-                        <span className="font-bold text-primary font-mono block mb-1">{colName}</span>
-                        <span className="text-muted-foreground leading-relaxed">{rule}</span>
-                      </div>
-                    ))}
+                    {Object.entries(formattingRules).map(([colName, rule], idx) => {
+                      const tipo = formattingContract[colName]?.tipo;
+                      // "nenhuma" ou tipo ausente = a coluna não vai ser
+                      // formatada. Isso precisa ser visível ANTES de aprovar,
+                      // não descoberto depois num número errado.
+                      const semTipo = semTratamento(tipo);
+                      return (
+                        <div key={idx} className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="font-bold text-primary font-mono">{colName}</span>
+                            <span
+                              className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0 ${
+                                semTipo
+                                  ? "bg-destructive/10 text-destructive border border-destructive/30"
+                                  : "bg-primary/15 text-primary border border-primary/30"
+                              }`}
+                            >
+                              {ROTULO_DO_TIPO[tipo ?? ""] ?? "Sem tipo"}
+                            </span>
+                          </div>
+                          <span className="text-muted-foreground leading-relaxed">{rule}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -625,7 +697,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
             <div className="mt-4 p-4 border border-border/50 rounded-xl bg-background/50">
               <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">JSON da Formatação (Por baixo dos panos)</h4>
-              <pre className="text-xs text-foreground/80 overflow-auto max-h-40">{JSON.stringify(formattingRules, null, 2)}</pre>
+              <pre className="text-xs text-foreground/80 overflow-auto max-h-40">{JSON.stringify(formattingContract, null, 2)}</pre>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border/30">

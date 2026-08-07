@@ -140,12 +140,42 @@ export default function PlumChat() {
       if (planRes.error) throw planRes.error;
       const plan = planRes.data.result;
 
-      // 4. Executa Python Pandas (MOCK)
-      const mockPythonVetor = { rows: [{ valor: "Simulado" }], msg: "Execução do Pandas pendente da API Python." };
+      // 4. Executa o plano no Pandas, via chat-execute.
+      //
+      // O navegador nunca fala com a AWS: quem valida o tenant, resolve as
+      // colunas contra o cargo e assina o payload é a Edge Function. Aqui só
+      // vai o dataset_id e o plano — e o dataset_id é candidato, não
+      // declaração: `chat-execute` confere contra o JWT antes de qualquer coisa.
+      const execRes = await supabase.functions.invoke('chat-execute', {
+        body: { dataset_id: dataset.id, plan }
+      });
+
+      // Erro de execução não pode virar resposta inventada. O Agente C só é
+      // chamado quando existe um número real para ele traduzir; sem isso, a
+      // pessoa recebe o motivo.
+      //
+      // Em status fora do 2xx o supabase-js devolve `data: null` e guarda a
+      // resposta em `error.context` — a mensagem útil ("essa coluna não é
+      // visível para o seu cargo") só existe lá.
+      if (execRes.error) {
+        let motivo = "Não consegui calcular esse resultado agora.";
+        try {
+          const corpo = await (execRes.error as any).context?.json?.();
+          if (corpo?.error) motivo = corpo.error;
+        } catch {
+          // Sem corpo legível: fica a mensagem genérica acima.
+        }
+        console.error("Falha no chat-execute:", execRes.error);
+        await saveAndShowAssistantMsg(motivo);
+        setIsProcessing(false);
+        return;
+      }
+
+      const executorResult = execRes.data.result;
 
       // 5. Chama Agente C (Sintetizador)
       const synthRes = await supabase.functions.invoke('ai-plum-chat', {
-        body: { action: 'synthesize_answer', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, executorResult: mockPythonVetor }
+        body: { action: 'synthesize_answer', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, executorResult }
       });
       if (synthRes.error) throw synthRes.error;
       const synthMsg = synthRes.data.result;

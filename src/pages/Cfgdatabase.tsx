@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DatabasePipeline from "@/components/DatabasePipeline";
-import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2 } from "lucide-react";
+import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
+import { ROTULO_DO_TIPO, semTratamento } from "@/lib/formatting-contract";
 
 export default function DatabasePage() {
   const [organization, setOrganization] = useState<any>(null);
@@ -206,6 +207,15 @@ export default function DatabasePage() {
                   <span className="flex items-center gap-1"><Activity className="h-3 w-3" /> {Object.keys(dataset.schema_metadata.columns || {}).length} Colunas</span>
                 )}
               </div>
+              {/* Base importada antes do contrato de formatação existir: o papel
+                  de cada coluna ainda é adivinhado por palavra-chave na frase do
+                  Agente 3, o que erra em silêncio. Ver query_engine/urgent.md. */}
+              {dataset.status === 'active' && !dataset.formatting_contract && (
+                <div className="mt-3 flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-500 leading-snug">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                  <span>Formato legado — reprocesse a formatação para garantir os cálculos.</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -375,12 +385,28 @@ export default function DatabasePage() {
                   <p className="text-xs text-muted-foreground">Visualize as regras de formatação atuais. Dê uma ordem em linguagem natural para que o Agente ajuste as regras em massa.</p>
                   
                   <div className="flex flex-col gap-3 max-h-60 overflow-y-auto pr-2 border border-border/50 p-3 rounded-xl bg-background/50">
-                    {Object.entries(editedSchema.columns).map(([colName, colData]: [string, any]) => (
-                      <div key={colName} className="flex gap-4 p-2 bg-muted/10 rounded-md border border-border/30">
-                        <span className="text-xs font-bold font-mono text-primary w-1/4 truncate">{colName}</span>
-                        <span className="text-xs text-muted-foreground flex-1 break-words">{colData.cleaning_rule || 'Sem regra'}</span>
-                      </div>
-                    ))}
+                    {Object.entries(editedSchema.columns).map(([colName, colData]: [string, any]) => {
+                      // O `tipo` é o que a máquina executa; a frase é só leitura
+                      // humana. Mostrar os dois lado a lado é o que permite a
+                      // quem aprova perceber uma classificação errada.
+                      const tipo = selectedDataset.formatting_contract?.colunas?.[colName]?.tipo;
+                      const semTipo = semTratamento(tipo);
+                      return (
+                        <div key={colName} className="flex gap-3 items-start p-2 bg-muted/10 rounded-md border border-border/30">
+                          <span className="text-xs font-bold font-mono text-primary w-1/4 truncate shrink-0">{colName}</span>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0 ${
+                              semTipo
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/30'
+                                : 'bg-primary/15 text-primary border border-primary/30'
+                            }`}
+                          >
+                            {ROTULO_DO_TIPO[tipo ?? ''] ?? 'Legado'}
+                          </span>
+                          <span className="text-xs text-muted-foreground flex-1 break-words">{colData.cleaning_rule || 'Sem regra'}</span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="flex gap-2">
@@ -392,30 +418,67 @@ export default function DatabasePage() {
                     <Button disabled={isRefining || !refinePrompt.trim()} onClick={async () => {
                       setIsRefining(true);
                       try {
-                        const currentRules = Object.entries(selectedDataset.schema_metadata.columns).reduce((acc: any, [k, v]: [string, any]) => {
-                          acc[k] = v.cleaning_rule;
-                          return acc;
-                        }, {});
-                        
+                        // Manda o contrato atual, não a frase. Numa base legada
+                        // (sem contrato) o contrato vai vazio e o Agente 3.1
+                        // classifica do zero — que é justamente como uma base
+                        // antiga sai do formato legado.
+                        const contratoAtual = Object.entries(selectedDataset.schema_metadata.columns).reduce(
+                          (acc: any, [col, v]: [string, any]) => {
+                            const item = selectedDataset.formatting_contract?.colunas?.[col];
+                            acc[col] = {
+                              tipo: item?.tipo ?? 'nenhuma',
+                              params: item?.params ?? {},
+                              explicacao: v.cleaning_rule ?? '',
+                            };
+                            return acc;
+                          }, {});
+
                         const res = await supabase.functions.invoke('ai-agents', {
-                          body: { action: 'refine_format', prompt: refinePrompt, columns: currentRules, dataSamples: [] }
+                          body: { action: 'refine_format', prompt: refinePrompt, columns: contratoAtual, dataSamples: [] }
                         });
-                        
+
                         if (res.error) throw res.error;
-                        
-                        const newRules = res.data.result.formattingRules;
+
+                        const novoContrato = res.data.result.formattingContract ?? {};
+                        const newRules = res.data.result.formattingRules ?? {};
+
                         const newSchema = { ...selectedDataset.schema_metadata };
                         Object.keys(newRules).forEach(col => {
                           if (newSchema.columns[col]) {
                             newSchema.columns[col].cleaning_rule = newRules[col];
                           }
                         });
-                        
-                        await supabase.from('datasets').update({ schema_metadata: newSchema }).eq('id', selectedDataset.id);
-                        setSelectedDataset({...selectedDataset, schema_metadata: newSchema});
+
+                        // Só as colunas que existem no schema entram no contrato
+                        // salvo — o modelo não pode inventar coluna nova aqui.
+                        const contratoSalvo = {
+                          versao: 1,
+                          colunas: Object.keys(newSchema.columns).reduce((acc: any, col) => {
+                            acc[col] = {
+                              tipo: novoContrato[col]?.tipo ?? 'nenhuma',
+                              params: novoContrato[col]?.params ?? {},
+                            };
+                            return acc;
+                          }, {}),
+                        };
+
+                        const { error: erroSalvar } = await supabase
+                          .from('datasets')
+                          .update({ schema_metadata: newSchema, formatting_contract: contratoSalvo })
+                          .eq('id', selectedDataset.id);
+                        if (erroSalvar) throw erroSalvar;
+
+                        setSelectedDataset({ ...selectedDataset, schema_metadata: newSchema, formatting_contract: contratoSalvo });
                         setEditedSchema(newSchema);
                         setRefinePrompt("");
-                        alert("Regras refinadas com sucesso pela IA!");
+
+                        const avisos: string[] = res.data.result.avisosContrato ?? [];
+                        if (avisos.length) {
+                          console.warn("Contrato ajustado pela validação:", avisos);
+                          alert(`Regras refinadas, mas ${avisos.length} coluna(s) ficaram sem formatação definida. Revise-as.`);
+                        } else {
+                          alert("Regras refinadas com sucesso pela IA!");
+                        }
                       } catch (err) {
                         alert("Erro ao refinar");
                         console.error(err);
@@ -444,7 +507,14 @@ export default function DatabasePage() {
                         </div>
                         <div>
                           <span className="text-xs text-muted-foreground font-semibold uppercase block mb-1">Regra de Formatação (Agente 3)</span>
-                          <span className="text-foreground/70">{colData.cleaning_rule || 'Não definida'}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* O tipo é o que decide o cálculo. A frase ao lado
+                                é a mesma informação em português, para conferir. */}
+                            <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">
+                              {ROTULO_DO_TIPO[selectedDataset.formatting_contract?.colunas?.[colName]?.tipo ?? ''] ?? 'Legado'}
+                            </span>
+                            <span className="text-foreground/70">{colData.cleaning_rule || 'Não definida'}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
