@@ -25,9 +25,12 @@ Edge Function, que já é o ponto de confiança (R-05).
 Novo processo FastAPI (`query_engine/app.py`) expondo `POST /v1/execute-plan`:
 
 1. Autentica a requisição por **assinatura HMAC** (não JWT do usuário — a EC2 não deve
-   reimplementar auth de usuário final). Header `X-Plum-Signature: sha256=<hmac(body,
-   EXECUTOR_SHARED_SECRET)>` + `X-Plum-Timestamp` com janela de 60s (anti-replay). Segredo só
-   existe em dois lugares: Supabase Edge Function secrets e AWS Secrets Manager.
+   reimplementar auth de usuário final). Header `X-Plum-Signature: sha256=<hmac(timestamp +
+   "." + body, EXECUTOR_SHARED_SECRET)>` + `X-Plum-Timestamp` com janela de 60s (anti-replay).
+   O timestamp entra **dentro** da mensagem assinada — se só o corpo fosse assinado, um par
+   (corpo, assinatura) capturado poderia ser reenviado para sempre trocando só o header de
+   timestamp para "agora" (implementado em `query_engine/auth.py`). Segredo só existe em dois
+   lugares: Supabase Edge Function secrets e AWS Secrets Manager.
 2. Recebe `{ organization_id, dataset_id, google_sheet_id, target_columns, plan,
    formatting_rules }`. **Não recebe a pergunta em linguagem natural** — mantém o "motorista
    cego" do PRD.
@@ -188,7 +191,52 @@ Essa é a **única** policy customizada necessária. O acesso ao SSM Session Man
 de JSON próprio — vem da policy gerenciada da AWS `AmazonSSMManagedInstanceCore`, anexada ao
 mesmo role.
 
-**Trust policy do role** (quem pode assumi-lo — só o serviço EC2):
+### 4.2.a Onde colocar isso no Console AWS (passo a passo por clique)
+
+**Sim, clique em "Create new IAM profile"** (o link que aparece no campo "IAM instance
+profile", em Advanced details, na tela de lançamento da instância). Isso abre uma nova aba já
+no console do IAM, no fluxo certo de criação de role. Nenhum dos dois JSON acima vai direto
+nesse link — eles entram em telas separadas do IAM, na ordem abaixo:
+
+1. **A aba nova abre em IAM → Roles → Create role.**
+   - "Trusted entity type": deixe **"AWS service"** (já vem selecionado).
+   - "Use case": deixe **"EC2"** (também já vem selecionado, por ter vindo do link do EC2).
+   - Clique **Next**.
+   - **Você não precisa colar o JSON da "trust policy" aqui** — ao escolher "AWS service" +
+     "EC2", o IAM já gera automaticamente o JSON de confiança que mostrei acima. Ele só fica
+     visível/editável depois, na aba "Trust relationships" do role já criado, caso queira
+     confirmar.
+
+2. **Tela "Add permissions"** (ainda no mesmo fluxo): na busca, digite `AmazonSSMManagedInstanceCore`
+   e marque o checkbox dela. Essa é uma policy **gerenciada pela AWS** — você não escreve JSON
+   para ela, só anexa. Clique **Next**.
+
+3. **Tela "Name, review, and create":** dê o nome `plum-query-engine-ec2-role` e clique
+   **Create role**. (Ao criar um role assim, a partir do fluxo EC2, o IAM já cria por baixo dos
+   panos um Instance Profile com o mesmo nome — é ele que vai aparecer de volta no dropdown da
+   tela do EC2.)
+
+4. **Agora sim, o primeiro JSON (o da §4.2) entra aqui:** ainda no console IAM, vá em
+   **Policies → Create policy**. Na tela de criação há duas abas: **"Visual"** e **"JSON"** —
+   clique na aba **JSON** e cole exatamente o bloco `PlumQueryEngineSecretsAccess` mostrado
+   acima (com `<region>` e `<account-id>` já substituídos). Clique **Next**, dê o nome
+   `PlumQueryEngineSecretsAccess` e clique **Create policy**.
+
+5. **Anexe essa policy ao role:** volte em **IAM → Roles → `plum-query-engine-ec2-role`** →
+   aba **Permissions** → **Add permissions → Attach policies** → busque
+   `PlumQueryEngineSecretsAccess` → marque o checkbox → **Attach policies**.
+
+6. **Volte para a aba do EC2** (a tela de lançamento da instância continua aberta) e clique no
+   ícone de atualizar (🔄) ao lado do campo "IAM instance profile" — o
+   `plum-query-engine-ec2-role` deve aparecer na lista agora. Selecione-o.
+
+Resumo de onde cada JSON vai: a **trust policy** você não cola em lugar nenhum manualmente (o
+console gera sozinho ao escolher "EC2" como use case); o **JSON de permissões**
+(`PlumQueryEngineSecretsAccess`) vai na aba **JSON** de **IAM → Policies → Create policy**, e
+depois só precisa ser *anexado* ao role — não colado de novo em outro lugar.
+
+**Trust policy do role** (para referência — só usada se você optar pela criação via CLI/JSON
+bruto em vez do fluxo por clique acima; quem cria pelo console nunca precisa colar isso):
 
 ```json
 {
@@ -468,10 +516,11 @@ sudo docker compose logs -f cloudflared
 ### 7.10 Testar o endpoint de fora
 
 ```bash
-BODY='{"organization_id":"00000000-0000-0000-0000-000000000000","dataset_id":"...", "plan":{}}'
+BODY='{"organization_id":"00000000-0000-0000-0000-000000000000","dataset_id":"...", "google_sheet_id":"...", "target_columns":["faturamento"], "plan":{}}'
 TS=$(date +%s)
 SECRET=$(cat /etc/plum/shared-secret.txt)
-SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
+# assina "timestamp.body" — precisa bater exatamente com auth.compute_signature()
+SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
 
 curl -X POST "https://query-engine.seudominio.com.br/v1/execute-plan" \
   -H "Content-Type: application/json" \
