@@ -45,7 +45,12 @@ URL="${URL%/}"
 
 # ── 1. O endpoint está fechado? ──────────────────────────────────────────────
 log "1/3 O endpoint recusa quem não tem credencial da AWS?"
-CODIGO="$(curl -s -o /dev/null -w '%{http_code}' "${URL}/health" || echo "000")"
+# O `|| echo` NAO pode ficar dentro da substituicao: se o curl escreve "403" na
+# saida e ainda assim retorna codigo diferente de zero, as duas saidas sao
+# concatenadas e o valor vira "403000". Tratar a falha FORA da substituicao.
+CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${URL}/health" 2>/dev/null)" \
+  || CODIGO="${CODIGO:-000}"
+CODIGO="${CODIGO//[^0-9]/}"   # tira qualquer sujeira de terminal
 if [ "$CODIGO" = "403" ]; then
   ok "403 sem assinatura. O endpoint NÃO é público."
 else
@@ -58,15 +63,23 @@ fi
 
 # ── 2. A função responde? ────────────────────────────────────────────────────
 log "2/3 A função sobe e responde?"
-aws lambda invoke --function-name "$FUNCAO" --region "$REGIAO" \
-  --payload '{"version":"2.0","rawPath":"/health","requestContext":{"http":{"method":"GET","path":"/health"}},"headers":{}}' \
-  --cli-binary-format raw-in-base64-out /tmp/plum-health.json >/dev/null
 
-if jq -e '.body | fromjson | .status == "ok"' /tmp/plum-health.json >/dev/null 2>&1; then
+# Caminho RELATIVO de proposito. Com MSYS_NO_PATHCONV ligado (necessario para o
+# SSM), um `/tmp/arquivo.json` chega literal para o aws.exe do Windows, que nao
+# tem /tmp e falha. Caminho relativo funciona no Windows, no Mac e no Linux.
+SAIDA="plum-health-$$.json"
+trap 'rm -f "$SAIDA"' EXIT
+
+aws lambda invoke --function-name "$FUNCAO" --region "$REGIAO" \
+  --payload '{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"host":"smoke.local"},"requestContext":{"accountId":"anonymous","apiId":"smoke","domainName":"smoke.local","domainPrefix":"smoke","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"plum-smoke-test"},"requestId":"smoke","routeKey":"$default","stage":"$default","time":"01/Jan/2026:00:00:00 +0000","timeEpoch":1767225600},"isBase64Encoded":false}' \
+  --cli-binary-format raw-in-base64-out "$SAIDA" >/dev/null
+
+if jq -e '.body | fromjson | .status == "ok"' "$SAIDA" >/dev/null 2>&1; then
   ok "health respondeu ok"
 else
   bad "health não respondeu como esperado. Resposta crua:"
-  cat /tmp/plum-health.json
+  cat "$SAIDA" 2>/dev/null || echo "(o arquivo de resposta nem foi criado)"
+  echo
   bad "Veja o log: aws logs tail /aws/lambda/${FUNCAO} --region ${REGIAO} --since 5m"
   exit 1
 fi
