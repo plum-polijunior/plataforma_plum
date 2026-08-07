@@ -1,8 +1,13 @@
 name: query-engine
 
-# Testa em todo push, e só publica quando entra na branch principal.
-# Nenhum segredo de longa duração vive no GitHub: a autenticação com a AWS é
-# por OIDC, que troca a identidade do workflow por credencial temporária.
+# Testa em todo push e pull request. Publica quando entra na branch principal,
+# ou quando você clica em "Run workflow" aqui no GitHub.
+#
+# É AQUI que a imagem Docker é construída. Ninguém precisa de Docker na
+# própria máquina: o runner do GitHub já vem com ele.
+#
+# Nenhum segredo de longa duração vive no GitHub. A autenticação com a AWS é
+# por OIDC: o workflow troca a identidade dele por credencial temporária.
 
 on:
   push:
@@ -18,21 +23,24 @@ on:
       - "supabase/functions/**"
       - "src/lib/**"
       - ".github/workflows/query-engine.yml"
+  workflow_dispatch: # botão "Run workflow" na aba Actions
 
 permissions:
   contents: read
   id-token: write # necessário para o OIDC com a AWS
 
 env:
-  AWS_REGION: sa-east-1 # São Paulo: menor latência para o time e para o cliente
+  AWS_REGION: sa-east-1
   ECR_REPOSITORY: plum/query-engine
   LAMBDA_FUNCTION: plum-query-engine
+  LAMBDA_ROLE: plum-query-engine-exec
 
 jobs:
   testes:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -61,7 +69,7 @@ jobs:
 
   publicar:
     needs: testes
-    if: github.ref == 'refs/heads/plataforma' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/plataforma' && github.event_name == 'push')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,8 +79,8 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-        # AWS_DEPLOY_ROLE_ARN não é uma chave, é o ARN de uma role cuja trust
-        # policy aceita só este repositório e esta branch.
+        # AWS_DEPLOY_ROLE_ARN não é uma chave: é o ARN de uma role cuja
+        # política de confiança aceita só este repositório.
 
       - name: Login no ECR
         id: ecr
@@ -84,24 +92,71 @@ jobs:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
-          docker build -t "$IMAGE" .
+          # --platform explícito: o Lambda roda x86_64. Sem isto, um runner
+          # arm publicaria uma imagem que sobe e morre com "exec format error".
+          docker build --platform linux/amd64 -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      - name: Atualizar a função Lambda
+      - name: Criar ou atualizar a função Lambda
         run: |
-          aws lambda update-function-code \
+          set -euo pipefail
+          CONTA="$(aws sts get-caller-identity --query Account --output text)"
+          ROLE_ARN="arn:aws:iam::${CONTA}:role/${{ env.LAMBDA_ROLE }}"
+
+          if aws lambda get-function --function-name "${{ env.LAMBDA_FUNCTION }}" >/dev/null 2>&1; then
+            echo "Função existe: atualizando o código."
+            aws lambda update-function-code \
+              --function-name "${{ env.LAMBDA_FUNCTION }}" \
+              --image-uri "$IMAGE" >/dev/null
+            aws lambda wait function-updated --function-name "${{ env.LAMBDA_FUNCTION }}"
+          else
+            echo "Primeira publicação: criando a função."
+            aws lambda create-function \
+              --function-name "${{ env.LAMBDA_FUNCTION }}" \
+              --package-type Image --code "ImageUri=${IMAGE}" \
+              --role "$ROLE_ARN" --timeout 30 --memory-size 1024 >/dev/null
+            aws lambda wait function-active --function-name "${{ env.LAMBDA_FUNCTION }}"
+          fi
+
+          # As variáveis guardam o CAMINHO do parâmetro no SSM, nunca o valor.
+          # O segredo é lido em tempo de execução com a role do Lambda.
+          aws lambda update-function-configuration \
             --function-name "${{ env.LAMBDA_FUNCTION }}" \
-            --image-uri "$IMAGE"
-          aws lambda wait function-updated \
-            --function-name "${{ env.LAMBDA_FUNCTION }}"
+            --environment 'Variables={GOOGLE_SA_PARAM=/plum/prod/google-sa-json,HMAC_SECRET_PARAM=/plum/prod/hmac-secret,PLUM_K_MIN=5,PLUM_MAX_ROWS=200000,LOG_LEVEL=INFO}' \
+            >/dev/null
+          aws lambda wait function-updated --function-name "${{ env.LAMBDA_FUNCTION }}"
+
+      - name: Garantir que o endpoint NÃO é público
+        run: |
+          set -euo pipefail
+          if aws lambda get-function-url-config --function-name "${{ env.LAMBDA_FUNCTION }}" >/dev/null 2>&1; then
+            aws lambda update-function-url-config \
+              --function-name "${{ env.LAMBDA_FUNCTION }}" --auth-type AWS_IAM >/dev/null
+          else
+            aws lambda create-function-url-config \
+              --function-name "${{ env.LAMBDA_FUNCTION }}" --auth-type AWS_IAM >/dev/null
+          fi
+
+          AUTH="$(aws lambda get-function-url-config \
+                  --function-name "${{ env.LAMBDA_FUNCTION }}" --query AuthType --output text)"
+          echo "AuthType = $AUTH"
+          # Falha o deploy se por qualquer motivo o endpoint ficar aberto. A
+          # service account que ele carrega lê a planilha de TODOS os clientes.
+          test "$AUTH" = "AWS_IAM"
+
+          URL="$(aws lambda get-function-url-config \
+                 --function-name "${{ env.LAMBDA_FUNCTION }}" --query FunctionUrl --output text)"
+          echo "URL do serviço: $URL"
+          echo "### Executor publicado" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: \`${URL%/}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- AuthType: \`$AUTH\` (fechado por IAM)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Conferir que a função responde
         run: |
           aws lambda invoke \
             --function-name "${{ env.LAMBDA_FUNCTION }}" \
             --payload '{"version":"2.0","rawPath":"/health","requestContext":{"http":{"method":"GET","path":"/health"}},"headers":{}}' \
-            --cli-binary-format raw-in-base64-out \
-            /tmp/resposta.json
+            --cli-binary-format raw-in-base64-out /tmp/resposta.json
           cat /tmp/resposta.json
           grep -q '"status"' /tmp/resposta.json
