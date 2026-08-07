@@ -44,6 +44,7 @@ não está escrita não existe**, e três meses depois vira retrabalho ou bug.
 |---|---|---|
 | 2026-08-06 | [Fase 0 — Executor determinístico](2026-08-06-fase-0-executor-deterministico.md) | Serviço completo e testado; deploy e Edge Function pendentes |
 | 2026-08-07 | [Fase 0b — Ligando as pontas](2026-08-07-fase-0b-ligando-as-pontas.md) | Migration, Edge Function, `google_sheet_id`, vitest e script da AWS. Falta executar o provisionamento e aplicar a migration |
+| 2026-08-07 | [Fase 1 — Chat ligado ao executor real](2026-08-07-fase-1-chat-executor-real.md) | Chat, Edge Functions unificadas em `supabase/functions/`, cache ligado, deploy automático das Edge Functions via integração GitHub↔Supabase. Falta teste E2E real |
 
 ## Documentos relacionados
 

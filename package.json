@@ -11,8 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:py": "cd query_engine && python -m pytest",
-    "gen:edge": "node scripts/gerar-edge-function.mjs"
+    "test:py": "cd query_engine && python -m pytest"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

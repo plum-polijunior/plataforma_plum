@@ -192,6 +192,46 @@ export async function permissionsFingerprint(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Papéis de coluna (percent/date/number/text) a partir do schema_metadata
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Deriva o papel de cada coluna a partir da `cleaning_rule` que o Agente 3
+ * escreveu no onboarding (`schema_metadata.columns[nome].cleaning_rule`).
+ *
+ * Movido para cá em 2026-08-07: antes vivia só dentro de `dashboard-execute`,
+ * mas o chat (`ai-plum-chat`) precisa exatamente do mesmo cálculo — sem isto o
+ * executor não sabe que não deve somar uma coluna de percentual. Mesma regra
+ * de "um interpretador, dois pontos de aplicação" que já vale para
+ * `extractColumns`/`authorizePlan`: se o chat e o dashboard calculassem os
+ * papéis de coluna de jeitos levemente diferentes, uma pergunta no chat e um
+ * card no dashboard sobre a mesma coluna poderiam tratar o percentual de
+ * formas diferentes, e ninguém notaria a divergência.
+ *
+ * Continua sendo keyword-match sobre texto livre escrito por um LLM — dívida
+ * conhecida e registrada em `query_engine/urgent.md`, não resolvida aqui.
+ */
+export function columnRolesFromSchema(
+  schemaMetadata: unknown,
+  apenas: ReadonlySet<string>,
+): Record<string, string> {
+  const roles: Record<string, string> = {};
+  const cols = (schemaMetadata as { columns?: Record<string, { cleaning_rule?: string }> })
+    ?.columns;
+  if (!cols) return roles;
+
+  for (const [nome, def] of Object.entries(cols)) {
+    if (!apenas.has(nome)) continue;
+    const r = (def?.cleaning_rule ?? "").toLowerCase();
+    if (/percent|porcent|%|taxa/.test(r)) roles[nome] = "percent";
+    else if (/data|date/.test(r)) roles[nome] = "date";
+    else if (/r\$|moeda|float|int|numero|número|decimal/.test(r)) roles[nome] = "number";
+    else roles[nome] = "text";
+  }
+  return roles;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Assinatura do payload para o executor
 // ─────────────────────────────────────────────────────────────────────────────
 

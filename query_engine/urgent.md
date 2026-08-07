@@ -11,7 +11,7 @@ matemática" do `query_engine/prd.md`) · **Impacto:** respostas do chat podem e
 
 `formattingRules` é gerado pelo **Agente 3** (`action: 'format_data'`) e refinado pelo
 **Agente 3.1** (`action: 'refine_format'`), ambos em
-`supabase/edge-functions/supabase_edge_function_ai_agents.ts:49-60`, durante a Etapa 3 do
+`supabase/functions/ai-agents/index.ts:49-60`, durante a Etapa 3 do
 pipeline de importação (`DatabasePipeline.tsx`).
 
 O LLM recebe 5 linhas de amostra e devolve um JSON com duas chaves:

@@ -29,19 +29,12 @@
  * de idade em vez de um erro. Um dashboard que às vezes mostra erro é pior que
  * uma planilha, porque planilha sempre abre.
  *
- * DEPLOY — duas formas, e ESTE arquivo não é o que se cola.
- *
- * Este é o fonte. Ele importa `_shared/query_plan.ts`, que é código coberto
- * por 28 testes, e a peça que aplica o RBAC é justamente a que não pode viver
- * sem teste.
- *
- *   a) Pelo painel (convenção do projeto): cole o arquivo GERADO
- *      `supabase/edge-functions/supabase_edge_function_dashboard_execute.ts`,
- *      que é este mesmo código com o módulo compartilhado embutido. Gere com
- *      `npm run gen:edge`. Um teste falha se ele estiver desatualizado, então
- *      o que você cola é sempre o que os testes cobrem.
- *
- *   b) Pela CLI: `supabase functions deploy dashboard-execute`.
+ * DEPLOY: `supabase functions deploy dashboard-execute` (ou pipeline
+ * automático — ver `supabase/functions/README.md`). A convenção antiga de
+ * colar um arquivo único gerado no painel foi aposentada em 2026-08-07: com
+ * deploy automático pela CLI, a Edge Function pode importar
+ * `_shared/query_plan.ts` normalmente, sem precisar embutir o módulo
+ * compartilhado num arquivo só. Este é o único fonte que existe agora.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
@@ -49,6 +42,7 @@ import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 import {
   authorizePlan,
+  columnRolesFromSchema,
   permissionsFingerprint,
   signPayload,
 } from "../_shared/query_plan.ts";
@@ -238,7 +232,7 @@ Deno.serve(async (req: Request) => {
       resolved_columns: required,
     })),
     allowed_columns: allowedColumns,
-    column_roles: papeisDeColuna(dataset.schema_metadata, requiredColumns),
+    column_roles: columnRolesFromSchema(dataset.schema_metadata, requiredColumns),
     k_min: org?.dashboard_k_min ?? 5,
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
@@ -337,31 +331,3 @@ Deno.serve(async (req: Request) => {
 
   return json({ results });
 });
-
-/**
- * Papéis das colunas, derivados da `cleaning_rule` que o Agente 3 escreveu no
- * onboarding e que já vive em `schema_metadata`.
- *
- * O executor precisa disto para não somar coluna de percentual. A informação
- * não pode ser constante global no Python: a coluna de percentual da Poli
- * Júnior tem um nome e a do laticínio tem outro.
- */
-function papeisDeColuna(
-  schemaMetadata: unknown,
-  apenas: Set<string>,
-): Record<string, string> {
-  const roles: Record<string, string> = {};
-  const cols = (schemaMetadata as { columns?: Record<string, { cleaning_rule?: string }> })
-    ?.columns;
-  if (!cols) return roles;
-
-  for (const [nome, def] of Object.entries(cols)) {
-    if (!apenas.has(nome)) continue;
-    const r = (def?.cleaning_rule ?? "").toLowerCase();
-    if (/percent|porcent|%|taxa/.test(r)) roles[nome] = "percent";
-    else if (/data|date/.test(r)) roles[nome] = "date";
-    else if (/r\$|moeda|float|int|numero|número|decimal/.test(r)) roles[nome] = "number";
-    else roles[nome] = "text";
-  }
-  return roles;
-}

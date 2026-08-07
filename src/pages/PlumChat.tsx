@@ -140,12 +140,34 @@ export default function PlumChat() {
       if (planRes.error) throw planRes.error;
       const plan = planRes.data.result;
 
-      // 4. Executa Python Pandas (MOCK)
-      const mockPythonVetor = { rows: [{ valor: "Simulado" }], msg: "Execução do Pandas pendente da API Python." };
+      // 4. Executa o Pandas Executor de verdade (Lambda), via execute_plan.
+      // A Edge Function resolve as colunas do plano, confere contra
+      // allowed_columns do cargo do usuário, assina (HMAC + SigV4) e chama o
+      // mesmo executor que o dashboard usa — nenhum número inventado aqui.
+      const execRes = await supabase.functions.invoke('ai-plum-chat', {
+        body: { action: 'execute_plan', datasetId: selectedDatasetId, plan }
+      });
+      if (execRes.error) throw execRes.error;
+      const executorResult = execRes.data.result;
+
+      if (executorResult.status === 'forbidden') {
+        await saveAndShowAssistantMsg(
+          executorResult.error || "Seu cargo não tem acesso a uma das colunas necessárias para essa pergunta."
+        );
+        setIsProcessing(false);
+        return;
+      }
+      if (executorResult.status === 'error') {
+        await saveAndShowAssistantMsg(
+          executorResult.error || "Não consegui calcular isso agora. Tente novamente em instantes."
+        );
+        setIsProcessing(false);
+        return;
+      }
 
       // 5. Chama Agente C (Sintetizador)
       const synthRes = await supabase.functions.invoke('ai-plum-chat', {
-        body: { action: 'synthesize_answer', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, executorResult: mockPythonVetor }
+        body: { action: 'synthesize_answer', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, executorResult }
       });
       if (synthRes.error) throw synthRes.error;
       const synthMsg = synthRes.data.result;

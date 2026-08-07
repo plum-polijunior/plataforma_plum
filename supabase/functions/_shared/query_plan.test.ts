@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   authorizePlan,
+  columnRolesFromSchema,
   extractColumns,
   permissionsFingerprint,
   signPayload,
@@ -270,5 +271,48 @@ describe("signPayload", () => {
   it("muda quando o segredo muda", async () => {
     const corpo = '{"sheet_id":"x"}';
     expect(await signPayload(corpo, "s1")).not.toBe(await signPayload(corpo, "s2"));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// columnRolesFromSchema — usado por dashboard-execute E ai-plum-chat (2026-08-07)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("columnRolesFromSchema", () => {
+  const schema = {
+    columns: {
+      margem_lucro: { cleaning_rule: "Converter para percentual (%)" },
+      data_venda: { cleaning_rule: "Converter para data" },
+      faturamento: { cleaning_rule: "Remover R$ e converter para número" },
+      regiao: { cleaning_rule: "Nenhuma" },
+    },
+  };
+
+  it("classifica percent, date e number pela cleaning_rule", () => {
+    const roles = columnRolesFromSchema(
+      schema,
+      new Set(["margem_lucro", "data_venda", "faturamento"]),
+    );
+    expect(roles).toEqual({
+      margem_lucro: "percent",
+      data_venda: "date",
+      faturamento: "number",
+    });
+  });
+
+  it("cai em 'text' quando a regra não bate em nenhum padrão conhecido", () => {
+    const roles = columnRolesFromSchema(schema, new Set(["regiao"]));
+    expect(roles).toEqual({ regiao: "text" });
+  });
+
+  it("só devolve papel para as colunas pedidas, mesmo com mais no schema", () => {
+    const roles = columnRolesFromSchema(schema, new Set(["margem_lucro"]));
+    expect(Object.keys(roles)).toEqual(["margem_lucro"]);
+  });
+
+  it("não quebra com schema_metadata sem 'columns' (base ainda não finalizada)", () => {
+    expect(columnRolesFromSchema({}, new Set(["x"]))).toEqual({});
+    expect(columnRolesFromSchema(null, new Set(["x"]))).toEqual({});
+    expect(columnRolesFromSchema(undefined, new Set(["x"]))).toEqual({});
   });
 });

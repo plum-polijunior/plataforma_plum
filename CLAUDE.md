@@ -40,8 +40,11 @@ extração de coluna do RBAC) que não podem regredir em silêncio.
 
 **Migrations não são aplicadas por CLI.** `supabase/config.toml` só contém `project_id`;
 o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar
-(ver `docs/PASSO-A-PASSO-APLICAR.md`). Edge Functions também são deployadas manualmente
-pelo painel.
+(ver `docs/PASSO-A-PASSO-APLICAR.md`). Edge Functions vivem em `supabase/functions/<nome>/index.ts`
+(padrão CLI, ver `supabase/functions/README.md`) e são publicadas **automaticamente**, desde
+2026-08-07, pela integração nativa GitHub↔Supabase (branch `plataforma`) — push que muda
+`supabase/functions/**` já deploya sozinho, sem passar pelo painel nem por comando manual.
+Migrations continuam manuais, de propósito — essa integração não cobre migrations aqui.
 
 ---
 
@@ -79,9 +82,14 @@ query_engine/
 supabase/
   migrations/                aplicar em ordem (§6)
   tests/                     cenários de RLS/SSO
-  edge-functions/            Edge Functions LEGADAS, fonte solta, deploy manual (ai-agents, ai-plum-chat)
-  functions/                 Edge Functions NOVAS, estrutura padrão do CLI, com teste (dashboard-execute)
+  functions/                 TODAS as Edge Functions — uma pasta por função, index.ts (padrão CLI)
+    ai-agents/               pipeline de importação (agentes 0/1/2/3/3.1)
+    ai-plum-chat/            chat: Agente Z/A/C + execute_plan (executor real)
+    dashboard-execute/       RBAC de coluna + executor real para os cards
+    plum-chat/               demo da landing page — NÃO confundir com ai-plum-chat
+    send-auth-email/         e-mails transacionais (Resend)
     _shared/query_plan.ts    ⭐ único interpretador de Query Plan do sistema (extrai colunas p/ RBAC)
+    README.md                deploy, segredos, o que cada função faz
 infra/aws/
   PASSO-A-PASSO.md           ⭐ como subir/operar o executor — fonte única de verdade, não duplicar
   provision.sh               cria ECR, SSM, IAM roles, OIDC do GitHub (idempotente)
@@ -252,27 +260,33 @@ Três invocações sequenciais, todas recebendo `schemaMetadata`:
    linhas de dados**. Emite um Query Plan JSON: `from`, `target_columns`, `select`, `where`,
    `group_by`, `order_by`, `limit`.
 3. `synthesize_answer` — **Agente C** (Sintetizador). Vê a pergunta + o vetor de resultados
-   do executor, **nunca a base**. Não inventa número que não esteja no resultado.
+   do executor, **nunca a base**. Não inventa número que não esteja no resultado. Se
+   `suppressed_groups > 0` no resultado, explica que parte foi omitida por privacidade
+   (k-anonimato) — nunca ignora o campo em silêncio.
 
-⚠️ **Entre (2) e (3) ainda NÃO roda o executor real.** `PlumChat.tsx:143-144` usa um vetor
-mockado fixo (`{ rows: [{ valor: "Simulado" }], ... }`). O executor de verdade existe e está
-em produção (ver abaixo), mas o único consumidor ligado a ele hoje é o dashboard, não o chat.
-Ver `query_engine/prd.md` §9 para o caminho recomendado de ligar isso sem duplicar o RBAC de
-coluna que o dashboard já tem.
+**Entre (2) e (3) roda o executor real, desde 2026-08-07 (Fase 2 de `organizar_tudo.md`)** —
+uma quarta ação, `execute_plan`, no mesmo `ai-plum-chat`: resolve `allowed_columns` do cargo
+do usuário para o dataset, autoriza o plano do Agente A com `authorizePlan`
+(`_shared/query_plan.ts` — o mesmo interpretador que `dashboard-execute` usa, não uma segunda
+implementação), assina (HMAC + SigV4) e chama o mesmo Lambda do dashboard. Sem card salvo nem
+cache de snapshot — cada pergunta do chat é ad-hoc; falha do executor vira mensagem de erro,
+não degradação para resultado antigo (não existe "resultado antigo" de uma pergunta nova).
 
-### O executor real: `query_engine/` em AWS Lambda + Edge Function `dashboard-execute`
+### O executor real: `query_engine/` em AWS Lambda
 
 O motorista cego (`query_engine/main.py`, `security.py`, `sheets.py`, `pandas_executor.py`)
 roda como **imagem de container em AWS Lambda**, atrás de uma Function URL com
 `AuthType=AWS_IAM` (não é endpoint público). Deploy via GitHub Actions + OIDC, sem chave AWS
 de longa duração. Fonte de verdade de como subir/operar: `infra/aws/PASSO-A-PASSO.md`.
 
-O único consumidor ligado hoje é o **dashboard** (`dashboard_cards`), pela Edge Function
-`supabase/functions/dashboard-execute/index.ts` — essa sim já segue a estrutura padrão do
-Supabase CLI, com teste (`supabase/functions/_shared/query_plan.ts`, testado por `vitest`).
-Toda a decisão de autorização vive **só** nessa Edge Function (JWT + RLS + RBAC de coluna); o
-Lambda nunca consulta o Supabase, só compara o conjunto de colunas já resolvido contra
-`allowed_columns` de novo, como segunda barreira.
+Dois consumidores chamam o mesmo Lambda hoje: o **dashboard**
+(`supabase/functions/dashboard-execute/index.ts`, para `dashboard_cards`) e o **chat**
+(`supabase/functions/ai-plum-chat/index.ts`, ação `execute_plan`). Os dois seguem a mesma
+estrutura padrão do Supabase CLI e importam o mesmo `supabase/functions/_shared/query_plan.ts`
+(testado por `vitest`) em vez de reimplementar a extração de colunas cada um do seu jeito.
+Toda a decisão de autorização vive **só** na Edge Function que chamou (JWT + RLS + RBAC de
+coluna); o Lambda nunca consulta o Supabase, só compara o conjunto de colunas já resolvido
+contra `allowed_columns` de novo, como segunda barreira.
 
 Duas camadas de segurança **independentes** protegem a chamada Edge Function → Lambda:
 SigV4 (`AuthType=AWS_IAM`, resolvido pela infraestrutura, antes do código Python rodar) e um
@@ -295,25 +309,26 @@ formatação de exibição).
 - **R-01 Read-only absoluto.** O Plum nunca escreve na planilha do cliente. Só HTTP `GET`,
   escopo `spreadsheets.readonly` (não usa Drive API).
 - **R-02 A IA planeja, o código executa.** Nenhum número sai de texto livre do LLM.
-- **R-05 Isolamento de tenant** é invariante, não feature. No caminho do dashboard, hoje
-  aplicado: JWT + RLS + RBAC de coluna resolvidos **antes** de qualquer chamada ao executor
-  (`dashboard-execute`, ver §5); o Lambda em si não confia em `organization_id`/`dataset_id`
-  de ninguém, só em `allowed_columns` já resolvido no payload assinado. No caminho do chat,
-  esta invariante ainda **não se aplica de fato**, porque o chat não chama o executor real.
+- **R-05 Isolamento de tenant** é invariante, não feature. Aplicado nos dois caminhos que
+  chamam o executor (dashboard e chat, ver §5): JWT + RLS + RBAC de coluna resolvidos **antes**
+  de qualquer chamada ao Lambda; o Lambda em si não confia em `organization_id`/`dataset_id`
+  de ninguém, só em `allowed_columns` já resolvido no payload assinado.
 - **R-06** O dicionário semântico é revisado por humano. **R-08** Validação alerta, nunca corrige.
 - **R-11 Limites do plano:** colunas ∈ `allowed_cols`, agg ∈ {sum,avg,min,max,count},
   `limit` 1..500, **joins bloqueados**.
 - **R-12 k-Anonimato.** Nenhum vetor de resultado sai sem agregação; todo grupo precisa de no
   mínimo `k_min` linhas de origem (padrão 5, configurável por organização). Ver §5.
 - **O Plum não cria planilhas.** O usuário cola a URL da própria planilha e compartilha com
-  a service account (`reader@plum-ai.iam.gserviceaccount.com`) como **Leitor**. A governança
-  de acesso continua do cliente.
+  a service account (`plum-polijunior@plataforma-plum.iam.gserviceaccount.com`) como
+  **Leitor**. A governança de acesso continua do cliente.
 - **Um `batchGet` por dataset, não por pergunta/card** (não por Column-Range isolado):
   evita o limite de 60 req/min da API do Google Sheets agrupando a união das colunas de todos
-  os cards de uma vez. O teto de linhas é checado **antes** do parse, pelos metadados da
-  planilha. O cache de **dados** (linhas) com TTL existe em código (`query_engine/cache.py`)
-  mas está **desligado de propósito** — decisão de privacidade pendente, ver `TODOS.md` #1.
-  Só o cabeçalho e a contagem de linhas ficam em cache (15 min), nunca dado de cliente.
+  os cards/perguntas de uma vez. O teto de linhas é checado **antes** do parse, pelos
+  metadados da planilha. **Cache de dados (linhas) com TTL de 15 min ligado desde
+  2026-08-07** (`query_engine/cache.py`, chave por planilha+aba+conjunto exato de colunas —
+  decisão registrada em `TODOS.md` #1, aceitando conscientemente que a linha bruta do cliente
+  fica até 15 min na memória do processo). Cabeçalho e contagem de linhas têm cache próprio,
+  separado, também 15 min.
 - **Chat é 100% privado por usuário.** RLS de `plum_chat` é `auth.uid() = user_id`.
   Nem gestor nem colega lê. Tornar algo visível para a org exige aprovação explícita.
 
@@ -368,20 +383,16 @@ formatação de exibição).
 - `src/integrations/supabase/client.ts` tem URL e anon key hardcoded, apesar de existir
   `.env.example` com `VITE_SUPABASE_*`. Chave `anon` é pública por design (protegida por
   RLS), mas a inconsistência é real.
-- **O chat não usa o executor real.** `PlumChat.tsx:143-144` monta um vetor mockado; o
-  Lambda existe e está em produção, mas só o dashboard o chama. Ver `query_engine/prd.md` §9.
-- `apply_formatting_rules`/`roles_from_formatting_rules` em `pandas_executor.py` continuam
-  decidindo o tipo de cada coluna por keyword-match em texto livre (a `cleaning_rule` que o
-  Agente 3 escreve) — não existe mais constante global vazia (`_PCT_COLS` foi substituído por
-  `column_roles`), mas o mecanismo de origem é o mesmo e tem a mesma fragilidade. Ver
-  `query_engine/urgent.md`.
-- `query_engine/cache.py` está escrito e testável, mas **não é importado em lugar nenhum** —
-  decisão consciente (ver `TODOS.md` #1), não esquecimento. Não presuma que dados ficam em
-  cache só porque o arquivo existe.
-- Duas Edge Functions convivem em convenções diferentes: `supabase/edge-functions/*.ts`
-  (legado, fonte solta, deploy manual, sem teste — `ai-agents`, `ai-plum-chat`) e
-  `supabase/functions/**` (padrão do CLI, com teste — `dashboard-execute`). Novas Edge
-  Functions devem seguir o padrão de `supabase/functions/`, não o legado.
+- `apply_formatting_rules`/`roles_from_formatting_rules` em `pandas_executor.py`, e
+  `columnRolesFromSchema` em `_shared/query_plan.ts` (a versão TypeScript, usada tanto por
+  `dashboard-execute` quanto por `ai-plum-chat`), continuam decidindo o tipo de cada coluna por
+  keyword-match em texto livre (a `cleaning_rule` que o Agente 3 escreve). Não existe mais
+  constante global vazia (`_PCT_COLS` foi substituído por `column_roles`), mas o mecanismo de
+  origem é o mesmo e tem a mesma fragilidade. Ver `query_engine/urgent.md`.
+- A matriz de permissões (quais colunas cada cargo vê) ainda mora só em `Dashboard.tsx`,
+  duplicada em intenção com um plano nunca aplicado (`reorganizacao_cargos_e_permissoes`, na
+  raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `organizar_tudo.md` §2.1 — o
+  plano continua válido, só não é prioridade no momento.
 
 ---
 
