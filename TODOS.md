@@ -9,7 +9,18 @@ Origem: `/plan-eng-review` de 2026-08-06 sobre o design doc do Dashboard PLUM
 
 ---
 
-## 1. Cache de coluna com TTL no serviço Python
+## 1. Cache de coluna com TTL no serviço Python — RESOLVIDO em 2026-08-07
+
+**Decisão tomada, por conversa entre Allekka/bmchad/RicardoMoussalli:** ligar o cache agora,
+aceitando conscientemente que o dado bruto do cliente fica até 15 minutos na memória do
+processo (era exatamente essa a decisão de privacidade que faltava, descrita abaixo). Feito em
+`query_engine/sheets.py`: `load_columns` agora passa pelo `cache.get_or_fetch`, chave por
+planilha+aba+conjunto exato de colunas. Suíte de testes (53 testes) roda verde depois da
+mudança. O raciocínio original que levou a adiar fica registrado abaixo, sem alterar — é o
+motivo de a decisão ter sido consciente, não um commit de passagem.
+
+<details>
+<summary>Raciocínio original (antes da decisão)</summary>
 
 **O quê:** guardar as colunas lidas do Google Sheets por ~15 minutos, chaveado por
 `(google_sheet_id, coluna)`, no serviço Python.
@@ -44,6 +55,8 @@ passagem. Se ligar, o material comercial precisa refletir isso.
 
 **Depende de / bloqueado por:** T7 (batchGet) no ar, medição real de chamadas por minuto, e a
 decisão de privacidade acima.
+
+</details>
 
 ---
 
@@ -153,7 +166,7 @@ de auditoria.
 ## 6. Parar de enviar amostras reais da planilha para o Gemini (premissa P2)
 
 **O quê:** os agentes `predict_semantics` e `format_data` em
-`supabase/edge-functions/supabase_edge_function_ai_agents.ts:36-37` e `50-51` recebem
+`supabase/functions/ai-agents/index.ts:36-37` e `50-51` recebem
 `dataSamples`, que são 5 linhas reais da planilha do cliente lidas em
 `src/components/DatabasePipeline.tsx:72-75`, e as enviam para a API do Google.
 

@@ -15,6 +15,15 @@ implementado:
      resposta minúscula, e a leitura é abortada antes de qualquer MB entrar.
 
 O PLUM só lê. Nenhum método deste arquivo escreve na planilha do cliente.
+
+CACHE DE DADOS (TTL 15 min): decisão tomada em 2026-08-07 (ver `TODOS.md` #1) — as
+linhas lidas do Google ficam até 15 minutos na memória do processo, via
+`query_engine/cache.py`, chaveadas por planilha+aba+conjunto exato de colunas.
+Isto estende a vida do dado bruto do cliente de "uma requisição" para "até 15
+minutos na memória", o que é a mudança de postura de privacidade que o TODOS
+pedia para ser consciente. Não persiste em disco em nenhum momento. Diferente do
+`_meta_cache` abaixo, que só guarda cabeçalho e contagem de linhas (nunca dado
+de cliente) e por isso não precisou dessa decisão.
 """
 
 from __future__ import annotations
@@ -24,6 +33,8 @@ import time
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
+
+from query_engine import cache
 
 logger = logging.getLogger(__name__)
 
@@ -192,36 +203,11 @@ def _ranges_for(headers: Sequence[str], wanted: Set[str], tab: str):
     return ranges, nomes
 
 
-def load_columns(
-    service,
-    sheet_id: str,
-    tab: str,
-    columns: Set[str],
-    max_rows: Optional[int] = None,
+def _fetch_columns_uncached(
+    service, sheet_id: str, tab: str, columns: Set[str], headers: List[str]
 ) -> pd.DataFrame:
-    """
-    Carrega só as colunas pedidas, numa requisição.
-
-    `columns` vem da checagem de conjunto de `security.assert_columns_allowed`,
-    então por construção nunca contém coluna fora da permissão do cargo. E como
-    nada além disso é carregado, um plano que referencie outra coluna falha no
-    executor com `MissingColumnError`, em vez de silenciosamente funcionar.
-    """
-    if not columns:
-        raise SheetError("Nenhuma coluna a carregar para este card.")
-
-    meta = get_meta(service, sheet_id, tab)
-
-    # ── Teto ANTES de qualquer dado entrar em memória ────────────────────────
-    linhas_de_dados = max(meta.row_count - 1, 0)
-    if max_rows is not None and linhas_de_dados > max_rows:
-        raise SheetTooLarge(
-            f"Essa planilha tem cerca de {linhas_de_dados:,} linhas e o limite "
-            f"desta organizacao e de {max_rows:,}. Reduza a base ou fale com "
-            f"quem administra a conta.".replace(",", ".")
-        )
-
-    ranges, nomes = _ranges_for(meta.headers, columns, tab)
+    """A leitura de rede em si — só roda em cache miss. Ver `load_columns`."""
+    ranges, nomes = _ranges_for(headers, columns, tab)
 
     try:
         resp = (
@@ -239,7 +225,8 @@ def load_columns(
         raise _translate(exc, sheet_id) from exc
 
     logger.info(
-        "Sheets: 1 batchGet para %d coluna(s) da planilha %s", len(ranges), sheet_id[:8]
+        "Sheets: 1 batchGet para %d coluna(s) da planilha %s (cache miss)",
+        len(ranges), sheet_id[:8],
     )
 
     series: Dict[str, List] = {}
@@ -254,3 +241,46 @@ def load_columns(
             series[nome] = series[nome] + [None] * faltam
 
     return pd.DataFrame(series)
+
+
+def load_columns(
+    service,
+    sheet_id: str,
+    tab: str,
+    columns: Set[str],
+    max_rows: Optional[int] = None,
+) -> pd.DataFrame:
+    """
+    Carrega só as colunas pedidas, numa requisição (ou do cache, ver abaixo).
+
+    `columns` vem da checagem de conjunto de `security.assert_columns_allowed`,
+    então por construção nunca contém coluna fora da permissão do cargo. E como
+    nada além disso é carregado, um plano que referencie outra coluna falha no
+    executor com `MissingColumnError`, em vez de silenciosamente funcionar.
+
+    Cache de dados: chave por planilha + aba + conjunto exato de colunas, TTL
+    15 min (`query_engine/cache.py`). Um pedido com um conjunto de colunas
+    diferente (mesmo que seja um subconjunto do que já foi cacheado) é cache
+    miss — a granularidade é o conjunto pedido, não a coluna individual.
+    """
+    if not columns:
+        raise SheetError("Nenhuma coluna a carregar para este card.")
+
+    meta = get_meta(service, sheet_id, tab)
+
+    # ── Teto ANTES de qualquer dado entrar em memória ────────────────────────
+    # Roda sempre, mesmo em cache hit: é uma verificação sobre o tamanho da
+    # planilha (via _meta_cache, que não guarda dado de cliente), não sobre o
+    # resultado cacheado.
+    linhas_de_dados = max(meta.row_count - 1, 0)
+    if max_rows is not None and linhas_de_dados > max_rows:
+        raise SheetTooLarge(
+            f"Essa planilha tem cerca de {linhas_de_dados:,} linhas e o limite "
+            f"desta organizacao e de {max_rows:,}. Reduza a base ou fale com "
+            f"quem administra a conta.".replace(",", ".")
+        )
+
+    chave = cache.make_cache_key(f"{sheet_id}::{tab}", list(columns))
+    return cache.get_or_fetch(
+        chave, lambda: _fetch_columns_uncached(service, sheet_id, tab, columns, meta.headers)
+    )
