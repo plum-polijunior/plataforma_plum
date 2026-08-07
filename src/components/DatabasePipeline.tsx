@@ -406,12 +406,8 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           name: fileName || "Nova Planilha",
           status: "active",
           schema_metadata: schemaMetadata as any,
-<<<<<<< HEAD
-          google_sheet_id: sheetId,        // fonte da verdade
+          google_sheet_id: sheetId,         // fonte da verdade: a API do Google exige o ID
           google_sheet_url: sheetUrlToSave, // só para exibir na tela de bases
-=======
-          google_sheet_id: sheetUrlToSave,
->>>>>>> a4baeeeadf72cdd52ecb51df121448e199e50314
           sketch: null // Limpa o rascunho
         })
         .eq('id', datasetId);
