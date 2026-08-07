@@ -1,0 +1,13 @@
+# Dependências só de teste. Não entram na imagem do Lambda.
+#
+# httpx está aqui porque o TestClient do FastAPI é construído em cima dele.
+# Sem httpx, `import fastapi.testclient` levanta RuntimeError (não ImportError),
+# e o pytest quebra na COLETA em vez de pular o teste, o que derruba a suíte
+# inteira com exit code 2. Foi assim que a primeira execução do CI falhou:
+# httpx existia por acaso na máquina de quem escreveu os testes, como
+# dependência transitiva de outra coisa, e não existia no runner.
+
+-r requirements.txt
+
+pytest==8.3.4
+httpx==0.28.1

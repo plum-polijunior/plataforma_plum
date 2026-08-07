@@ -18,7 +18,23 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-fastapi_testclient = pytest.importorskip("fastapi.testclient")
+# `pytest.importorskip` NÃO serve aqui: quando falta o httpx, o
+# `fastapi.testclient` levanta RuntimeError, não ImportError, e o importorskip
+# só captura o segundo. O resultado é erro de COLETA, que derruba a suíte
+# inteira com exit code 2 em vez de pular estes nove testes.
+#
+# O httpx está declarado em requirements-dev.txt. Este bloco existe para o caso
+# de alguém rodar a suíte sem instalar as dependências de teste: aí é melhor
+# pular com uma mensagem clara do que quebrar tudo sem explicar.
+try:
+    from fastapi.testclient import TestClient
+except Exception as exc:  # noqa: BLE001
+    pytest.skip(
+        f"TestClient indisponivel ({type(exc).__name__}). "
+        "Instale as dependencias de teste: "
+        "pip install -r query_engine/requirements-dev.txt",
+        allow_module_level=True,
+    )
 
 from query_engine import config, main, sheets  # noqa: E402
 from query_engine.security import sign  # noqa: E402
@@ -57,7 +73,7 @@ def ambiente(monkeypatch):
 
 @pytest.fixture
 def client():
-    return fastapi_testclient.TestClient(main.app)
+    return TestClient(main.app)
 
 
 def _corpo(**over):
