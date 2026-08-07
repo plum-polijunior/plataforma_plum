@@ -406,8 +406,12 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           name: fileName || "Nova Planilha",
           status: "active",
           schema_metadata: schemaMetadata as any,
+<<<<<<< HEAD
           google_sheet_id: sheetId,        // fonte da verdade
           google_sheet_url: sheetUrlToSave, // só para exibir na tela de bases
+=======
+          google_sheet_id: sheetUrlToSave,
+>>>>>>> a4baeeeadf72cdd52ecb51df121448e199e50314
           sketch: null // Limpa o rascunho
         })
         .eq('id', datasetId);
@@ -715,7 +719,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                   <p>Clique no botão azul <strong>"Compartilhar"</strong> no canto superior direito.</p>
                   <p>Cole o e-mail abaixo e mantenha a permissão restrita a <strong>Leitor</strong>:</p>
                   <div className="bg-background border border-border/50 rounded p-2 font-mono text-xs text-primary font-bold break-all select-all">
-                    reader@plum-ai.iam.gserviceaccount.com
+                    plum-polijunior@plataforma-plum.iam.gserviceaccount.com
                   </div>
                   <p>Clique em <strong>Concluído</strong>. O Plum nunca irá alterar ou apagar seus dados.</p>
                 </div>
@@ -730,7 +734,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                 <div className="space-y-3 pl-8">
                   <p className="text-sm text-muted-foreground">Cole abaixo o link da sua planilha após compartilhar:</p>
                   <Input 
-                    placeholder="https://docs.google.com/spreadsheets/d/..." 
+                    placeholder="https://docs.google.com/spreadsheets/d/[ID_DA_SUA_PLANILHA]" 
                     value={sheetUrl}
                     onChange={(e) => setSheetUrl(e.target.value)}
                   />
