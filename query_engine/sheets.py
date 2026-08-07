@@ -61,6 +61,19 @@ def _col_letter(index_zero_based: int) -> str:
     return out
 
 
+def _quoted_sheet(tab: str) -> str:
+    """
+    Nome de aba com espaço ou apóstrofo precisa de aspas na notação A1.
+
+    Sem isto, uma aba chamada "Vendas 2026" gera a faixa `Vendas 2026!A2:A`,
+    que a API do Google recusa. Crédito para `query_engine/cache.py` e o
+    `sheets_client.py` do bmchad, que tratavam este caso e o meu não.
+    """
+    if any(c in tab for c in " '"):
+        return "'" + tab.replace("'", "''") + "'"
+    return tab
+
+
 def build_service(service_account_info: dict):
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
@@ -116,7 +129,7 @@ def get_meta(service, sheet_id: str, tab: str) -> SheetMeta:
             service.spreadsheets()
             .get(
                 spreadsheetId=sheet_id,
-                ranges=[f"{tab}!1:1"],
+                ranges=[f"{_quoted_sheet(tab)}!1:1"],
                 includeGridData=True,
                 fields=(
                     "sheets.properties.gridProperties.rowCount,"
@@ -157,7 +170,7 @@ def _ranges_for(headers: Sequence[str], wanted: Set[str], tab: str):
     for idx, h in enumerate(headers):
         if h in faltando:
             letra = _col_letter(idx)
-            ranges.append(f"{tab}!{letra}2:{letra}")
+            ranges.append(f"{_quoted_sheet(tab)}!{letra}2:{letra}")
             nomes.append(h)
             faltando.discard(h)
     if faltando:

@@ -30,8 +30,20 @@ dataset com **um** `batchGet` da união das colunas. Isso mata o N+1 em vez de e
 de cache. O cache de coluna continua valendo, mas como otimização de segunda ordem, quando
 houver medição mostrando que ainda faz falta.
 
-**Depende de / bloqueado por:** T7 (batchGet) no ar e medição real de chamadas por minuto em
-produção. Não implementar antes de ter o número.
+**A implementação já existe e está no repositório.** `query_engine/cache.py`, escrito pelo
+bmchad, é um `TTLCache` com lock, chave por tenant e janela de 15 minutos. Ele foi mantido de
+propósito quando o resto da implementação paralela dele foi consolidada. Ligar é conectar
+`load_columns` a ele.
+
+**O que precisa ser decidido antes de ligar, e é o motivo de não estar ligado:** o cache
+guarda **linhas brutas do cliente na memória do processo por 15 minutos**. A premissa P1.2 diz
+que nenhuma linha bruta é persistida em disco, e memória não é disco, então não há violação
+literal. Mas estender a vida do dado bruto de "uma requisição" para "quinze minutos" muda a
+postura de privacidade, e isso merece uma decisão consciente e escrita, não um commit de
+passagem. Se ligar, o material comercial precisa refletir isso.
+
+**Depende de / bloqueado por:** T7 (batchGet) no ar, medição real de chamadas por minuto, e a
+decisão de privacidade acima.
 
 ---
 

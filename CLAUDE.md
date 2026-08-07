@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-# gstack
-
-Use the /browse skill from gstack for all web browsing. NEVER use mcp__claude-in-chrome__* tools.
-
-Available skills:
-/office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /design-review, /setup-browser-cookies, /setup-deploy, /setup-gbrain, /retro, /investigate, /document-release, /document-generate, /codex, /cso, /autoplan, /plan-devex-review, /devex-review, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn
-=======
 # CLAUDE.md — Plataforma Plum
 
 Contexto operacional para agentes de código. Leia isto antes de qualquer alteração.
@@ -15,8 +7,10 @@ O usuário conecta um Google Sheets, a IA gera um dicionário semântico da base
 conversa com os dados em português. **A IA nunca calcula: ela planeja, o Python executa.**
 
 Stack: React 18 + Vite 5 + TypeScript + Tailwind + shadcn/ui · Supabase (Postgres + RLS +
-Edge Functions Deno) · Google Gemini (`gemini-3.5-flash`) · Pandas (executor determinístico).
-Projeto Supabase: `rjwidarrsykufuifzunu`. Deploy: Vercel (SPA rewrite em `vercel.json`).
+Edge Functions Deno) · Google Gemini (`gemini-3.5-flash`) · Pandas (executor determinístico,
+hoje rodando como **AWS Lambda** — ver §5). Projeto Supabase: `rjwidarrsykufuifzunu`.
+Deploy do front: Vercel (SPA rewrite em `vercel.json`). Deploy do executor: GitHub Actions →
+ECR → Lambda, via OIDC (`infra/aws/`).
 
 ---
 
@@ -30,12 +24,19 @@ npm run lint         # eslint
 npx tsc --noEmit     # só tipagem
 ```
 
-Não há suite de testes JS. Os testes do projeto são **SQL**:
+Testes automatizados, em três frentes:
 
 ```sh
-psql "$DATABASE_URL" -f supabase/tests/endurecimento_rls_test.sql
+npm test                              # vitest — RBAC de coluna (_shared/query_plan.ts)
+npm run test:py                       # pytest do query_engine (k-anonimato, assinatura, etc.)
+psql "$DATABASE_URL" -f supabase/tests/endurecimento_rls_test.sql   # RLS/SSO
 psql "$DATABASE_URL" -f supabase/tests/sso_dominio_test.sql
 ```
+
+O CI (`.github/workflows/query-engine.yml`) roda `npm test` + `pytest` a cada push/PR que
+toque `query_engine/`, `supabase/functions/` ou `src/lib/`, e só publica no Lambda se os dois
+passarem — são as barreiras de privacidade/segurança (k-anonimato, bloqueio de linha bruta,
+extração de coluna do RBAC) que não podem regredir em silêncio.
 
 **Migrations não são aplicadas por CLI.** `supabase/config.toml` só contém `project_id`;
 o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar
@@ -66,12 +67,26 @@ src/
     PlumThinkingBar.tsx      barra de progresso do chat
     ui/                      shadcn — não editar sem motivo
 query_engine/
-  pandas_executor.py         execute_plan(plan, tables) — o "motorista cego"
-  prd.md                     ⭐ arquitetura do chat + query engine
+  main.py                    FastAPI — POST /execute, roda em Lambda via lambda_handler.py
+  security.py                4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna
+  sheets.py                  Google Sheets: 1 batchGet por dataset, teto de linhas antes do parse
+  config.py                  segredos via SSM Parameter Store (nunca .env com valor)
+  pandas_executor.py         execute_plan(plan, tables, column_roles, k_min, max_rows)
+  cache.py                   TTLCache pronto mas **não conectado** (ver TODOS.md #1)
+  prd.md                     ⭐ arquitetura do chat + query engine (ver §9 lá: chat != dashboard)
+  implementation.md          histórico do plano de EC2 abandonado; aponta pra infra/aws/
+  urgent.md                  ⚠️ formattingRules por keyword-match — dívida ativa, ver §8
 supabase/
   migrations/                aplicar em ordem (§6)
   tests/                     cenários de RLS/SSO
-  edge-functions/            fonte das Edge Functions (deploy manual)
+  edge-functions/            Edge Functions LEGADAS, fonte solta, deploy manual (ai-agents, ai-plum-chat)
+  functions/                 Edge Functions NOVAS, estrutura padrão do CLI, com teste (dashboard-execute)
+    _shared/query_plan.ts    ⭐ único interpretador de Query Plan do sistema (extrai colunas p/ RBAC)
+infra/aws/
+  PASSO-A-PASSO.md           ⭐ como subir/operar o executor — fonte única de verdade, não duplicar
+  provision.sh               cria ECR, SSM, IAM roles, OIDC do GitHub (idempotente)
+src/lib/
+  google-sheets.ts           utilidades de URL/ID de planilha, com teste (vitest)
 docs/
   PRD-PLUM2.0.md             visão/roadmap — NÃO é o schema real
   SSO-DOMINIO.md             especificação do SSO por domínio
@@ -91,11 +106,13 @@ docs/
 
 | Tabela | Papel | Colunas notáveis |
 |---|---|---|
-| `organizations` | tenant | `join_code` (12 chars cripto, UNIQUE), `share_id` (4 chars, legado), `join_mode` ∈ `share_id`\|`dominio` |
+| `organizations` | tenant | `join_code` (12 chars cripto, UNIQUE), `share_id` (4 chars, legado), `join_mode` ∈ `share_id`\|`dominio`, `dashboard_k_min` (padrão 5), `dashboard_max_rows` (padrão 200000) |
 | `profiles` | usuário (estende `auth.users`) | `organization_id` (nullable!), `role_id`, `status` enum `profile_status`, `updated_at` |
 | `roles` | cargo por org | `name` — Admin é **por nome**, não por flag |
 | `role_permissions` | permissão granular | `(role_id, dataset_id)` UNIQUE, `allowed_columns TEXT[]` default `'{}'` |
-| `datasets` | base conectada | `google_sheet_id`, `schema_metadata jsonb` ⭐, `sketch jsonb` (rascunho do pipeline), `status` |
+| `datasets` | base conectada | `google_sheet_id` (fonte da verdade p/ o executor), `google_sheet_url` (só exibição), `google_sheet_tab` (default `Sheet1`), `schema_metadata jsonb` ⭐, `sketch jsonb`, `status` |
+| `dashboard_cards` | card do dashboard = Query Plan salvo | `query_plan jsonb`, `viz` (sem `donut`, ver `DESIGN.md`), `refresh_interval_minutes` |
+| `dashboard_card_snapshots` | histórico de execuções de card | chave por `permissions_fingerprint` (hash de `allowed_columns`), **não** por `role_id` — revogar coluna invalida o cache sozinho |
 | `organization_domains` | SSO | `domain` UNIQUE + lowercase, `verified`, `verification_method` ∈ `admin`\|`dns_txt`, `ms_tenant_id` |
 | `public_email_domains` | denylist | 15 domínios públicos seed (gmail, outlook, …) |
 | `domain_binding_audit` | auditoria de vínculo | `signal`, `result` |
@@ -200,9 +217,11 @@ roteador destruiria a URL antes de a sessão ser salva.
 
 ## 5. Arquitetura de IA
 
-Dois Edge Functions, ambos roteadores por `action`, ambos usando Gemini com
+`ai-agents` e `ai-plum-chat` são roteadores por `action`, ambos usando Gemini com
 `temperature: 0.2` e `response_mime_type: application/json` quando a saída é estruturada.
-A `GEMINI_API_KEY` vive no ambiente da Edge Function — **nunca no front**.
+A `GEMINI_API_KEY` vive no ambiente da Edge Function — **nunca no front**. Uma terceira peça,
+`dashboard-execute`, não fala com o Gemini — ela só autoriza e chama o executor Python (ver
+abaixo).
 
 ### `ai-agents` — pipeline de importação (`DatabasePipeline.tsx`, `Cfgdatabase.tsx`)
 
@@ -221,7 +240,7 @@ colunas, normalização para `snake_case`. (3) formatação (agentes 3 / 3.1). (
 (agentes 1 / 2). (5) persistência do `schema_metadata` + vínculo do Google Sheet.
 Rascunhos intermediários vivem em `datasets.sketch` e viram `NULL` na finalização.
 
-### `ai-plum-chat` — chat conversacional (`PlumChat.tsx` + `query_engine/`)
+### `ai-plum-chat` — chat conversacional (`PlumChat.tsx`)
 
 Três invocações sequenciais, todas recebendo `schemaMetadata`:
 
@@ -235,24 +254,66 @@ Três invocações sequenciais, todas recebendo `schemaMetadata`:
 3. `synthesize_answer` — **Agente C** (Sintetizador). Vê a pergunta + o vetor de resultados
    do executor, **nunca a base**. Não inventa número que não esteja no resultado.
 
-Entre (2) e (3) roda o **Pandas Executor** (`query_engine/pandas_executor.py`),
-o *motorista cego*: recebe só o plano JSON e os dados, **não vê a pergunta nem a intenção**.
-Aplica `where` → `formattingRules` → agregações. Proteção embutida: coluna percentual
-(`_PCT_COLS`) nunca é somada — `sum` vira `avg`.
+⚠️ **Entre (2) e (3) ainda NÃO roda o executor real.** `PlumChat.tsx:143-144` usa um vetor
+mockado fixo (`{ rows: [{ valor: "Simulado" }], ... }`). O executor de verdade existe e está
+em produção (ver abaixo), mas o único consumidor ligado a ele hoje é o dashboard, não o chat.
+Ver `query_engine/prd.md` §9 para o caminho recomendado de ligar isso sem duplicar o RBAC de
+coluna que o dashboard já tem.
+
+### O executor real: `query_engine/` em AWS Lambda + Edge Function `dashboard-execute`
+
+O motorista cego (`query_engine/main.py`, `security.py`, `sheets.py`, `pandas_executor.py`)
+roda como **imagem de container em AWS Lambda**, atrás de uma Function URL com
+`AuthType=AWS_IAM` (não é endpoint público). Deploy via GitHub Actions + OIDC, sem chave AWS
+de longa duração. Fonte de verdade de como subir/operar: `infra/aws/PASSO-A-PASSO.md`.
+
+O único consumidor ligado hoje é o **dashboard** (`dashboard_cards`), pela Edge Function
+`supabase/functions/dashboard-execute/index.ts` — essa sim já segue a estrutura padrão do
+Supabase CLI, com teste (`supabase/functions/_shared/query_plan.ts`, testado por `vitest`).
+Toda a decisão de autorização vive **só** nessa Edge Function (JWT + RLS + RBAC de coluna); o
+Lambda nunca consulta o Supabase, só compara o conjunto de colunas já resolvido contra
+`allowed_columns` de novo, como segunda barreira.
+
+Duas camadas de segurança **independentes** protegem a chamada Edge Function → Lambda:
+SigV4 (`AuthType=AWS_IAM`, resolvido pela infraestrutura, antes do código Python rodar) e um
+HMAC-SHA256 sobre o corpo, com um segredo **diferente** da credencial AWS. Vazar uma não
+basta para forjar a outra.
+
+Proteções de privacidade no `pandas_executor.py`: **k-anonimato** (todo grupo do resultado
+precisa de no mínimo `k_min` linhas de origem, padrão 5 — grupos menores são suprimidos e
+contados em `suppressed_groups`), bloqueio de linhas brutas (`RawRowsBlocked` — todo plano
+precisa de agregação), teto de linhas verificado **antes** do parse (`RowLimitExceeded`), e
+coluna referenciada mas não carregada é erro (`MissingColumnError`), nunca um filtro
+silenciosamente ignorado. `column_roles` (percent/date/number/text) substitui a antiga
+constante global `_PCT_COLS`/`_STRING_COLS` — mas continua derivado por **keyword-match em
+texto livre** sobre a `cleaning_rule` do Agente 3, a mesma dívida do `query_engine/urgent.md`
+(agora com consequência maior: alimenta a proteção de k-anonimato/percentual, não só a
+formatação de exibição).
 
 ### Invariantes de produto
 
-- **R-01 Read-only absoluto.** O Plum nunca escreve na planilha do cliente. Só HTTP `GET`.
+- **R-01 Read-only absoluto.** O Plum nunca escreve na planilha do cliente. Só HTTP `GET`,
+  escopo `spreadsheets.readonly` (não usa Drive API).
 - **R-02 A IA planeja, o código executa.** Nenhum número sai de texto livre do LLM.
-- **R-05 Isolamento de tenant** é invariante, não feature: todo acesso valida
-  `dataset_id` × `organization_id` antes de tocar o Google Sheets → senão 403.
+- **R-05 Isolamento de tenant** é invariante, não feature. No caminho do dashboard, hoje
+  aplicado: JWT + RLS + RBAC de coluna resolvidos **antes** de qualquer chamada ao executor
+  (`dashboard-execute`, ver §5); o Lambda em si não confia em `organization_id`/`dataset_id`
+  de ninguém, só em `allowed_columns` já resolvido no payload assinado. No caminho do chat,
+  esta invariante ainda **não se aplica de fato**, porque o chat não chama o executor real.
 - **R-06** O dicionário semântico é revisado por humano. **R-08** Validação alerta, nunca corrige.
 - **R-11 Limites do plano:** colunas ∈ `allowed_cols`, agg ∈ {sum,avg,min,max,count},
   `limit` 1..500, **joins bloqueados**.
+- **R-12 k-Anonimato.** Nenhum vetor de resultado sai sem agregação; todo grupo precisa de no
+  mínimo `k_min` linhas de origem (padrão 5, configurável por organização). Ver §5.
 - **O Plum não cria planilhas.** O usuário cola a URL da própria planilha e compartilha com
-  o service account como **Leitor**. A governança de acesso continua do cliente.
-- **Column-Range GET + cache TTL 15 min:** ler `Sheet1!B:B,E:E` em vez de `A1:Z100000`
-  (payload de ~15MB → ~50KB) e evitar o limite de 60 req/min da API do Google Sheets.
+  a service account (`reader@plum-ai.iam.gserviceaccount.com`) como **Leitor**. A governança
+  de acesso continua do cliente.
+- **Um `batchGet` por dataset, não por pergunta/card** (não por Column-Range isolado):
+  evita o limite de 60 req/min da API do Google Sheets agrupando a união das colunas de todos
+  os cards de uma vez. O teto de linhas é checado **antes** do parse, pelos metadados da
+  planilha. O cache de **dados** (linhas) com TTL existe em código (`query_engine/cache.py`)
+  mas está **desligado de propósito** — decisão de privacidade pendente, ver `TODOS.md` #1.
+  Só o cabeçalho e a contagem de linhas ficam em cache (15 min), nunca dado de cliente.
 - **Chat é 100% privado por usuário.** RLS de `plum_chat` é `auth.uid() = user_id`.
   Nem gestor nem colega lê. Tornar algo visível para a org exige aprovação explícita.
 
@@ -269,6 +330,9 @@ Aplica `where` → `formattingRules` → agregações. Proteção embutida: colu
 6. `20260722130000_endurecimento_rls.sql` — requer 110000 e 120000; precisa de `pgcrypto`
 7. `20260722140000_integracao_sketch_e_admin_case.sql`
 8. `create_plum_chat_table.sql` — ⚠️ sem prefixo de timestamp, fora da convenção do CLI
+9. `20260806230000_dashboard_cards.sql` — `dashboard_cards`, `dashboard_card_snapshots`,
+   `organizations.dashboard_k_min`/`dashboard_max_rows`, `datasets.google_sheet_id` como
+   fonte da verdade (com backfill a partir da URL antiga)
 
 ---
 
@@ -292,8 +356,6 @@ Aplica `where` → `formattingRules` → agregações. Proteção embutida: colu
 
 - **`Leads`** tem policy `ALL / true` para qualquer autenticado — decisão D-13 aceita
   conscientemente. **Fechar antes do primeiro usuário de cliente real.**
-- Edge Functions com fonte solta na raiz (`supabase_edge_function_ai_plum_chat.ts`) fora de
-  `supabase/functions/`, deploy manual, sem rastreabilidade.
 - Divergências entre o banco real (dump em `supabase/backup/`) e as migrations:
   `share_id` não aparece no dump; `join_mode` tem `DEFAULT 'codigo'`/`CHECK IN ('codigo','dominio')`
   no dump vs `'share_id'` no SQL versionado (todo o SQL compara com `'share_id'`).
@@ -306,7 +368,20 @@ Aplica `where` → `formattingRules` → agregações. Proteção embutida: colu
 - `src/integrations/supabase/client.ts` tem URL e anon key hardcoded, apesar de existir
   `.env.example` com `VITE_SUPABASE_*`. Chave `anon` é pública por design (protegida por
   RLS), mas a inconsistência é real.
-- `_PCT_COLS` e `_STRING_COLS` em `pandas_executor.py` estão vazios (`#definir`).
+- **O chat não usa o executor real.** `PlumChat.tsx:143-144` monta um vetor mockado; o
+  Lambda existe e está em produção, mas só o dashboard o chama. Ver `query_engine/prd.md` §9.
+- `apply_formatting_rules`/`roles_from_formatting_rules` em `pandas_executor.py` continuam
+  decidindo o tipo de cada coluna por keyword-match em texto livre (a `cleaning_rule` que o
+  Agente 3 escreve) — não existe mais constante global vazia (`_PCT_COLS` foi substituído por
+  `column_roles`), mas o mecanismo de origem é o mesmo e tem a mesma fragilidade. Ver
+  `query_engine/urgent.md`.
+- `query_engine/cache.py` está escrito e testável, mas **não é importado em lugar nenhum** —
+  decisão consciente (ver `TODOS.md` #1), não esquecimento. Não presuma que dados ficam em
+  cache só porque o arquivo existe.
+- Duas Edge Functions convivem em convenções diferentes: `supabase/edge-functions/*.ts`
+  (legado, fonte solta, deploy manual, sem teste — `ai-agents`, `ai-plum-chat`) e
+  `supabase/functions/**` (padrão do CLI, com teste — `dashboard-execute`). Novas Edge
+  Functions devem seguir o padrão de `supabase/functions/`, não o legado.
 
 ---
 
@@ -318,4 +393,28 @@ Aplica `where` → `formattingRules` → agregações. Proteção embutida: colu
       rodou `supabase/tests/*.sql`.
 - [ ] Nenhuma decisão de autorização depende de dado enviado pelo cliente.
 - [ ] Explique brevemente cada alteração feita (convenção deste projeto).
->>>>>>> a4baeeeadf72cdd52ecb51df121448e199e50314
+
+---
+
+## 10. gstack
+
+Use a skill `/browse` do gstack para qualquer navegação web. NUNCA use ferramentas
+`mcp__claude-in-chrome__*`.
+
+Skills disponíveis: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`,
+`/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`,
+`/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`,
+`/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`,
+`/setup-deploy`, `/setup-gbrain`, `/retro`, `/investigate`, `/document-release`,
+`/document-generate`, `/codex`, `/cso`, `/autoplan`, `/plan-devex-review`,
+`/devex-review`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`,
+`/learn`.
+
+### Documentos que complementam este
+
+| Arquivo | O que traz |
+|---|---|
+| `DESIGN.md` | Sistema de design: as duas superfícies, paleta validada, os cinco estados do card |
+| `TODOS.md` | Trabalho conscientemente adiado, com o raciocínio junto |
+| `docs/fases dashboard/` | Um arquivo por fase, com resumo estruturado por task |
+| `infra/aws/PASSO-A-PASSO.md` | Como subir o executor |

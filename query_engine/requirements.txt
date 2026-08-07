@@ -1,17 +1,21 @@
-<<<<<<< HEAD
-fastapi>=0.110
-uvicorn[standard]>=0.29
-pandas>=2.2
-numpy>=1.26
-google-auth>=2.29
-google-api-python-client>=2.125
-cachetools>=5.3
-=======
+# União das duas listas que colidiram no merge ad08c60.
+# Versões fixadas de propósito: o container precisa ser reprodutível, senão o
+# build de hoje e o de daqui a três meses instalam coisas diferentes.
+
 fastapi==0.115.6
-mangum==0.19.0
 pydantic==2.10.4
+
+# Lambda: Mangum traduz o evento do Function URL para ASGI.
+mangum==0.19.0
+
+# Desenvolvimento local: uvicorn query_engine.main:app --reload
+uvicorn[standard]==0.34.0
+
 pandas==2.2.3
 numpy==2.2.1
+
 google-api-python-client==2.157.0
 google-auth==2.37.0
->>>>>>> 6ecebcd54ca2a0e44639c30a82ae3b5d10d1d7a0
+
+# Usado por query_engine/cache.py (TTLCache).
+cachetools==5.5.0
