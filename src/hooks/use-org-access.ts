@@ -26,6 +26,7 @@ export interface OrgAccess {
   session: Session | null;
   organizationId: string | null;
   organizationName: string | null;
+  roleId: string | null;
   roleName: string | null;
 }
 
@@ -33,6 +34,7 @@ export interface OrgAccess {
 interface PlumClaims {
   organization_id?: string | null;
   profile_status?: string | null;
+  role_id?: string | null;
   role_name?: string | null;
 }
 
@@ -69,6 +71,7 @@ export function useOrgAccess(): OrgAccess {
     session: null,
     organizationId: null,
     organizationName: null,
+    roleId: null,
     roleName: null,
   });
 
@@ -90,6 +93,7 @@ export function useOrgAccess(): OrgAccess {
             session: null,
             organizationId: null,
             organizationName: null,
+            roleId: null,
             roleName: null,
           });
         }
@@ -100,18 +104,20 @@ export function useOrgAccess(): OrgAccess {
       const claims = lerClaims(session);
       let orgId = claims?.organization_id ?? null;
       let status = claims?.profile_status ?? null;
+      let roleId = claims?.role_id ?? null;
       let roleName = claims?.role_name ?? null;
 
       // Fallback para sessões emitidas antes do hook entrar no ar.
       if (status === null || status === undefined) {
         const { data } = await supabase
           .from("profiles")
-          .select("organization_id, status, roles(name)")
+          .select("organization_id, status, role_id, roles(name)")
           .eq("id", session.user.id)
           .maybeSingle();
 
         orgId = (data?.organization_id as string | null) ?? null;
         status = (data?.status as string | null) ?? null;
+        roleId = (data?.role_id as string | null) ?? null;
         roleName =
           ((data as unknown as { roles?: { name?: string } } | null)?.roles?.name) ?? null;
       }
@@ -132,6 +138,7 @@ export function useOrgAccess(): OrgAccess {
           session,
           organizationId: orgId,
           organizationName: orgName,
+          roleId,
           roleName,
         });
       }

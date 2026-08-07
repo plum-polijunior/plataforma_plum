@@ -27,3 +27,7 @@ CREATE POLICY "Usuários podem inserir próprias mensagens"
     ON public.plum_chat
     FOR INSERT
     WITH CHECK (auth.uid() = user_id);
+
+-- Sem este GRANT, o Postgres nega o acesso antes de avaliar as policies
+-- acima (erro 42501), mesmo com RLS e policy corretos.
+GRANT SELECT, INSERT ON TABLE public.plum_chat TO authenticated;

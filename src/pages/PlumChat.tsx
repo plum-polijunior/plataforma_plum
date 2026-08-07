@@ -16,7 +16,7 @@ interface ChatMessage {
 }
 
 export default function PlumChat() {
-  const { session, profile } = useOrgAccess();
+  const { session, organizationId, roleId } = useOrgAccess();
   const { toast } = useToast();
   
   const [datasets, setDatasets] = useState<any[]>([]);
@@ -28,11 +28,11 @@ export default function PlumChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (session && profile?.organization_id && profile?.role_id) {
+    if (session && organizationId && roleId) {
       fetchDatasets();
       fetchHistory();
     }
-  }, [session, profile]);
+  }, [session, organizationId, roleId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -47,16 +47,16 @@ export default function PlumChat() {
       const { data: rolePerms } = await supabase
         .from('role_permissions')
         .select('dataset_id')
-        .eq('role_id', profile.role_id);
-      
+        .eq('role_id', roleId);
+
       const allowedIds = rolePerms?.map(rp => rp.dataset_id) || [];
-      
+
       if (allowedIds.length === 0) return;
 
       const { data: dsData } = await supabase
         .from('datasets')
         .select('*')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', organizationId)
         .eq('status', 'active')
         .in('id', allowedIds);
         
@@ -100,7 +100,7 @@ export default function PlumChat() {
       const { data: userMsgData, error: insertErr } = await supabase
         .from('plum_chat')
         .insert({
-          organization_id: profile.organization_id,
+          organization_id: organizationId,
           user_id: session.user.id,
           role: 'user',
           content: userMsgContent
@@ -188,7 +188,7 @@ export default function PlumChat() {
       const { data, error } = await supabase
         .from('plum_chat')
         .insert({
-          organization_id: profile.organization_id,
+          organization_id: organizationId,
           user_id: session.user.id,
           role: 'assistant',
           content: content
