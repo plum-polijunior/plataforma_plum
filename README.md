@@ -96,3 +96,20 @@ npx tsc --noEmit
 # 4. (Opcional) Executar Edge Functions localmente
 npx supabase functions serve
 ```
+
+## 🔄 COMO VER OS LOGS DOS AGENTES DO PLUM CHAT
+CLI já está logado e o projeto (rjwidarrsykufuifzunu) está linkado. Passos:
+
+1. Confirme o deploy — a integração GitHub↔Supabase publica automaticamente ao push. Você pode conferir no painel: Edge Functions → ai-plum-chat → deve mostrar um deploy recente (do commit b4e8887).
+2. Abra os logs em modo streaming, num terminal, e deixe rodando:
+npx supabase functions logs ai-plum-chat --project-ref rjwidarrsykufuifzunu
+Esse comando pode ser só "puxar o histórico atual" e não ficar em tail -f — se não houver flag de follow na versão instalada, rode-o de novo depois da pergunta para pegar o log mais recente (ou use o painel abaixo em paralelo).
+
+3. Em outro terminal, para ver o Pandas/Lambda ao mesmo tempo:
+aws logs tail /aws/lambda/plum-query-engine --region sa-east-1 --since 5m --follow
+
+4. Faça uma pergunta real no chat (PlumChat.tsx em produção ou local).
+5. Olhe a saída — vai aparecer:
+  - [plan_query] {...} → Query Plan do Agente A
+  - [synthesize_answer] {...} → resposta final do Agente C
+  - no outro terminal, os logger.info/warning/exception do pandas_executor.py
