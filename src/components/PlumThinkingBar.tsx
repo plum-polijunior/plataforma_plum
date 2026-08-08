@@ -18,9 +18,9 @@ export function PlumThinkingBar({ isProcessing }: PlumThinkingBarProps) {
     const timer = setInterval(() => {
       setProgress((prev) => {
         if (prev < 40) {
-          return prev + 8; // Rápida: Validação de cache e schema (0 - 40%)
+          return prev + 3.5; // Rápida: Validação de cache e schema (0 - 40%)
         } else if (prev < 90) {
-          return prev + 2.5; // Média: Computação matemática no Pandas + Agente (40 - 90%)
+          return prev + 1.5; // Média: Computação matemática no Pandas + Agente (40 - 90%)
         } else if (prev < 99) {
           return prev + 0.2; // Lenta: Redação e fechamento semântico (90 - 99%)
         }

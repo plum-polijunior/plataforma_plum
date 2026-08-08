@@ -256,3 +256,19 @@ depois de reproduzir.
 **Depende de / bloqueado por:** reproduzir de novo com o log novo no ar e olhar o valor real de
 `datasetId` — provável próximo passo é conferir se ele bate com o dataset da organização do
 usuário, e só então decidir se o bug é no front (estado stale) ou ainda na RLS/policy.
+
+**Atualização (2026-08-08):** numa reprodução mais recente, o erro `"base nao encontrada"`
+não apareceu mais — a pergunta passou pelo Agente Z, Agente A, achou o dataset e chegou em
+`handleExecutePlan`, que falhou com um 403 **diferente**: `"executor respondeu 403"`, vindo da
+própria AWS (Function URL do Lambda), não do Supabase. Diagnosticado e corrigido: a Function
+URL com `AuthType=AWS_IAM` não ficava autorizada só com a policy de identidade
+`lambda:InvokeFunctionUrl` em `plum-edge-invoker` (mesmo o IAM Policy Simulator confirmando
+"allowed" pra essa ação isolada, a chamada real via `aws4fetch` continuava recebendo
+`403 Forbidden` direto da AWS, antes do Lambda rodar — confirmado pelo CloudWatch do Lambda
+não ter nenhum log da tentativa). Faltavam **duas** coisas, nunca provisionadas: a ação
+`lambda:InvokeFunction` (além de `InvokeFunctionUrl`) na policy de identidade, e uma
+resource-based policy no próprio Lambda (`aws lambda add-permission`) — `provision.sh` e
+`valores-supabase.sh` foram corrigidos para provisionar as duas em deploys futuros. Este item
+some do jeito que estava descrito (o "base nao encontrada" não reproduz mais na mesma
+sequência de testes), mas fica aberto até confirmar em produção que `execute_plan` completa
+de ponta a ponta sem nenhum 403, em qualquer camada.

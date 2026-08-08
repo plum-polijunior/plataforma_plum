@@ -212,13 +212,21 @@ aws iam create-user --user-name "$USUARIO_EDGE" >/dev/null 2>&1 \
   && ok "criado: $USUARIO_EDGE" || ok "já existe: $USUARIO_EDGE"
 
 # A única coisa que este usuário pode fazer na conta inteira.
+#
+# InvokeFunctionUrl E InvokeFunction, as duas — descoberto na prática em
+# 2026-08-08: uma Function URL com AuthType=AWS_IAM nao autoriza so com
+# InvokeFunctionUrl (mesmo o IAM Policy Simulator confirmando "allowed" pra
+# essa acao isolada). A chamada real via aws4fetch so passou depois de
+# conceder as duas acoes. Falta uma das duas -> 403 "Forbidden" da AWS,
+# antes mesmo do Lambda rodar (log do executor fica vazio).
 aws iam put-user-policy --user-name "$USUARIO_EDGE" --policy-name "invocar-executor" \
   --policy-document "{
     \"Version\":\"2012-10-17\",
-    \"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"lambda:InvokeFunctionUrl\",
+    \"Statement\":[{\"Effect\":\"Allow\",
+      \"Action\":[\"lambda:InvokeFunctionUrl\",\"lambda:InvokeFunction\"],
       \"Resource\":\"arn:aws:lambda:${REGIAO}:${CONTA}:function:${FUNCAO}\",
       \"Condition\":{\"StringEquals\":{\"lambda:FunctionUrlAuthType\":\"AWS_IAM\"}}}]}" >/dev/null
-ok "permissão restrita a invocar apenas esta função"
+ok "permissão restrita a invocar apenas esta função (InvokeFunctionUrl + InvokeFunction)"
 
 # ── Resumo ───────────────────────────────────────────────────────────────────
 JA_TEM_FUNCAO="nao"

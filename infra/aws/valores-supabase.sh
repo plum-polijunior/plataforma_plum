@@ -66,6 +66,22 @@ URL="$(aws lambda get-function-url-config --function-name "$FUNCAO" --region "$R
        --query FunctionUrl --output text)"
 URL="${URL%/}"
 
+# ── Permissão de recurso (resource-based policy) ─────────────────────────────
+# Function URL com AuthType=AWS_IAM não fica autorizada só com a policy de
+# identidade em provision.sh (mesmo o IAM Policy Simulator confirmando
+# "allowed"). É preciso TAMBÉM esta permissão de recurso no próprio Lambda.
+# Sem ela, toda chamada da Edge Function recebe 403 "Forbidden" da própria
+# AWS, antes de o Lambda rodar — o log do executor fica vazio, sem pista.
+# Idempotente: remove a declaração antiga (se existir) antes de recriar.
+aws lambda remove-permission --function-name "$FUNCAO" --region "$REGIAO" \
+  --statement-id invocar-via-edge-function >/dev/null 2>&1 || true
+aws lambda add-permission --function-name "$FUNCAO" --region "$REGIAO" \
+  --statement-id invocar-via-edge-function \
+  --action lambda:InvokeFunctionUrl \
+  --principal "arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):user/${USUARIO_EDGE}" \
+  --function-url-auth-type AWS_IAM >/dev/null
+ok "permissão de recurso concedida a ${USUARIO_EDGE} no Lambda"
+
 # ── Chave da Edge Function ───────────────────────────────────────────────────
 # Se já existe uma chave, o AWS não deixa recuperar o segredo dela. Nesse caso
 # apagamos e criamos outra: é seguro, porque a chave antiga só serve para este

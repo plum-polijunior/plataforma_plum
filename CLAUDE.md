@@ -400,8 +400,15 @@ formatação de exibição).
   (`DatabasePipeline.tsx:handleFinalizeAndSave`). Não confirmado ainda se isso quebra a leitura
   no `query_engine` (que espera um ID puro) ou se é sintoma do bug em investigação no
   `TODOS.md` #8. Confira antes de assumir que `google_sheet_id` é sempre só o ID.
-- Chat real (`execute_plan`) tem um 403 `"base nao encontrada"` em investigação — ver
-  `TODOS.md` #8 para o que já foi descartado e o diagnóstico deixado no ar.
+- Chat real (`execute_plan`): o 403 `"base nao encontrada"` original não reproduz mais na
+  investigação mais recente — ver `TODOS.md` #8. Nessa investigação apareceu um 403
+  **diferente**, mais adiante no fluxo (`aws4fetch` → Function URL do Lambda), já corrigido:
+  a Function URL com `AuthType=AWS_IAM` exige tanto `lambda:InvokeFunctionUrl` quanto
+  `lambda:InvokeFunction` na policy de identidade de `plum-edge-invoker`, **e** uma
+  resource-based policy no próprio Lambda (`aws lambda add-permission`) — nenhuma das duas
+  era provisionada antes. `infra/aws/provision.sh` e `infra/aws/valores-supabase.sh` já
+  incluem os dois passos. Item continua aberto até confirmar em produção que `execute_plan`
+  completa sem 403 em nenhuma camada.
 
 ---
 
