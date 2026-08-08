@@ -655,18 +655,19 @@ def apply_formatting_rules(
             continue
 
         if tipo == "data":
-            # Debug temporario (ver conversa sobre "data nao encontrada"):
-            # precisa ver o valor bruto do Sheets antes de qualquer suspeita
-            # sobre locale/serial se confirmar ou cair.
+            # Debug temporario (ver conversa sobre "data nao encontrada"): a
+            # amostra de 3 linhas nao provava se a linha do filtro estava no
+            # meio do dado — coluna inteira, ja que o dataset de teste e
+            # pequeno (poucas dezenas de linhas).
             logger.info(
-                "Coluna '%s' (data): bruto amostra=%s dtype_bruto=%s",
-                col, df[col].head(3).tolist(), df[col].dtype,
+                "Coluna '%s' (data): bruto=%s dtype_bruto=%s",
+                col, df[col].tolist(), df[col].dtype,
             )
         df[col] = formatter(df[col], params)
         if tipo == "data":
             logger.info(
-                "Coluna '%s' (data): formatado amostra=%s",
-                col, df[col].head(3).tolist(),
+                "Coluna '%s' (data): formatado=%s",
+                col, df[col].tolist(),
             )
 
     return df
