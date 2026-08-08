@@ -341,6 +341,8 @@ Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, e
     }
   }
 
+  console.log(`[${action}]`, JSON.stringify(finalResponse));
+
   return json({ result: finalResponse });
 }
 
