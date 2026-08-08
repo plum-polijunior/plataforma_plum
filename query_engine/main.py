@@ -49,7 +49,12 @@ from query_engine.security import (
     verify_signature,
 )
 
-logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+
+# O runtime Python do Lambda ja anexa um handler ao root logger antes deste
+# modulo carregar. Sem `force=True`, basicConfig() e um no-op nesse caso (doc
+# do stdlib) e todo `logger.info` fica mudo no CloudWatch — só WARNING/ERROR
+# apareciam, porque o handler que o runtime anexa comeca mais restritivo.
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), force=True)
 logger = logging.getLogger("plum.executor")
 
 app = FastAPI(title="PLUM Query Engine", docs_url=None, redoc_url=None)
