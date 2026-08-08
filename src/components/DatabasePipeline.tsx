@@ -650,21 +650,6 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm text-muted-foreground uppercase">Antes (Original)</h4>
-                <div className="border border-border/50 rounded-xl overflow-x-auto bg-background p-4">
-                  <pre className="text-xs text-foreground/70">{JSON.stringify(dataSamples, null, 2)}</pre>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm text-primary uppercase">Depois (Formatado)</h4>
-                <div className="border border-primary/20 rounded-xl overflow-x-auto bg-primary/5 p-4">
-                  <pre className="text-xs text-primary">{JSON.stringify(formattedDataSamples, null, 2)}</pre>
-                </div>
-              </div>
-            </div>
-
             <div className="bg-muted/30 border border-border/40 rounded-xl p-4 space-y-3 mt-4">
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary" /> A formatação não ficou legal? Peça ajustes para o Agente 3.1
@@ -681,11 +666,6 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                   {isFormatRefining ? <Loader2 className="h-4 w-4 animate-spin" /> : "Corrigir Formatação"}
                 </Button>
               </div>
-            </div>
-
-            <div className="mt-4 p-4 border border-border/50 rounded-xl bg-background/50">
-              <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">JSON da Formatação (Por baixo dos panos)</h4>
-              <pre className="text-xs text-foreground/80 overflow-auto max-h-40">{JSON.stringify(formattingRules, null, 2)}</pre>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border/30">
@@ -732,11 +712,6 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                   ))}
                 </tbody>
               </table>
-            </div>
-
-            <div className="mt-4 p-4 border border-border/50 rounded-xl bg-background/50">
-              <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">JSON da Semântica (Por baixo dos panos)</h4>
-              <pre className="text-xs text-foreground/80 overflow-auto max-h-40">{JSON.stringify(semanticDefinitions, null, 2)}</pre>
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border/30">

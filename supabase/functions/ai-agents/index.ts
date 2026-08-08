@@ -8,6 +8,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rótulo de log por `action` — números dos agentes do pipeline de importação
+// (ver CLAUDE.md §5), pra identificar no log de quem é cada resposta.
+const AGENT_LABELS: Record<string, string> = {
+  guard: 'agent-0',
+  predict_semantics: 'agent-1',
+  refine_semantics: 'agent-2',
+  format_data: 'agent-3',
+  refine_format: 'agent-3.1',
+  column_support: 'agent-support',
+};
+
 // Enum fechado de `type` de formatação — espelha _FORMATTERS/TYPE_TO_ROLE em
 // query_engine/pandas_executor.py. Mudar um lado sem o outro quebra o
 // dispatcher em silêncio, então trate os dois como uma unidade.
@@ -180,6 +191,8 @@ Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras d
           resultado.formattingRules = sanitizeFormattingRules(resultado.formattingRules);
         }
       }
+
+      console.log(`[${AGENT_LABELS[action] ?? action}]`, JSON.stringify(finalResponse));
 
       return new Response(JSON.stringify({ result: finalResponse }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
