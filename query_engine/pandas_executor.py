@@ -4,13 +4,18 @@ Executor de cálculos do Agente A.
 Motorista Cego: não recebe a pergunta do usuário e não conhece a intenção de
 negócio. Lê apenas o Query Plan JSON e os dados das colunas que o plano pede.
 
-Invariantes de privacidade que este módulo garante (design doc, premissas P1/P3):
+Invariante de privacidade que este módulo garante (design doc, premissa P1.3):
 
   P1.3  Só sai daqui vetor agregado. Um plano sem agregação devolveria linhas
-        brutas, então ele é recusado quando k_min > 0.
-  P3    Todo grupo do resultado tem no mínimo k_min linhas de origem. Grupos
-        abaixo do limiar são suprimidos ANTES de o vetor sair, e a contagem de
-        suprimidos volta no retorno para a interface poder explicar o buraco.
+        brutas, e é recusado sempre.
+
+A supressão por k-anonimato (grupo com poucas linhas de origem) existiu aqui
+até 2026-08-08 (P3 do design doc) e foi removida por decisão de produto: pra
+90% das planilhas reais (bases pequenas, poucas dezenas/centenas de linhas) o
+limiar padrão suprimia respostas legítimas com frequência maior do que
+qualquer ganho de privacidade que gerava — o custo em confiabilidade do chat
+superava o benefício. `suppressed_groups` continua no retorno por
+compatibilidade com quem consome a resposta (Agente C, cards), mas é sempre 0.
 
 Os papéis das colunas (percentual, texto, data) chegam por parâmetro, derivados
 do schema_metadata do tenant. Não existe constante global de coluna aqui: cada
@@ -27,10 +32,6 @@ import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-# Mínimo de linhas por grupo para o resultado poder sair. Ver P3.
-DEFAULT_K_MIN = 5
 
 
 class ExecutorError(Exception):
@@ -73,7 +74,6 @@ def execute_plan(
     tables: Dict[str, pd.DataFrame],
     *,
     column_roles: Optional[Dict[str, str]] = None,
-    k_min: int = DEFAULT_K_MIN,
     max_rows: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
@@ -81,8 +81,6 @@ def execute_plan(
 
     column_roles: {coluna: 'percent'|'text'|'date'|'number'}, derivado do
         schema_metadata do tenant. Substitui as antigas constantes globais.
-    k_min: mínimo de linhas por grupo. 0 desliga a proteção (só para uso
-        interno em teste; o caminho de produção nunca passa 0).
     max_rows: teto de linhas da base carregada. Verificado ANTES de qualquer
         processamento, porque o `limit` do plano corta a saída e não a entrada.
     """
@@ -120,17 +118,9 @@ def execute_plan(
     group_by_raw = plan.get("group_by", [])
 
     if not select_items:
-        if k_min > 0:
-            raise RawRowsBlocked(
-                "Plano sem 'select' devolveria linhas brutas da base."
-            )
-        df_out = _serialize_df(df.head(50).copy())
-        return {
-            "columns": list(df_out.columns),
-            "rows": df_out.to_dict(orient="records"),
-            "row_count": len(df),
-            "suppressed_groups": 0,
-        }
+        raise RawRowsBlocked(
+            "Plano sem 'select' devolveria linhas brutas da base."
+        )
 
     direct_cols: list = []   # (alias, raw_col)
     aggs: list = []          # (alias, func, raw_col)
@@ -155,13 +145,12 @@ def execute_plan(
             direct_cols.append((alias, col))
 
     # ── P1.3: sem agregacao, sairiam linhas brutas ───────────────────────────
-    if not aggs and k_min > 0:
+    if not aggs:
         raise RawRowsBlocked(
             "Plano sem agregacao devolveria linhas brutas. Todo card precisa "
             "de pelo menos uma funcao de agregacao (sum, avg, min, max, count)."
         )
 
-    suppressed_groups = 0
     gb_cols = [_strip_table(c) for c in group_by_raw if c]
 
     # ── COM AGRUPAMENTO ──────────────────────────────────────────────────────
@@ -176,25 +165,12 @@ def execute_plan(
     implicit_gb = [col for _, col in direct_cols if col in df.columns]
 
     if gb_cols:
-        df_out, suppressed_groups = _grouped_agg(
-            df, gb_cols, aggs, direct_cols, roles, k_min
-        )
+        df_out = _grouped_agg(df, gb_cols, aggs, direct_cols, roles)
     elif direct_cols and implicit_gb:
-        df_out, suppressed_groups = _grouped_agg(
-            df, implicit_gb, aggs, direct_cols, roles, k_min
-        )
+        df_out = _grouped_agg(df, implicit_gb, aggs, direct_cols, roles)
     else:
         # ── AGREGADO ÚNICO sobre a base filtrada ──────────────────────────
-        # Um número só. O "grupo" aqui é a base inteira depois do where, então
-        # o teste de k é sobre len(df).
-        if k_min > 0 and len(df) < k_min:
-            logger.info(
-                "Agregado unico suprimido: %d linhas, minimo e %d.", len(df), k_min
-            )
-            return {
-                "columns": [], "rows": [], "row_count": 0,
-                "suppressed_groups": 1,
-            }
+        # Um número só, sobre a base inteira depois do where.
         row: Dict[str, Any] = {}
         for alias, func, col in aggs:
             row[alias] = _scalar_agg(df, func, col, roles)
@@ -218,7 +194,10 @@ def execute_plan(
         "columns": list(df_out.columns),
         "rows": df_out.to_dict(orient="records"),
         "row_count": int(len(df_out)),
-        "suppressed_groups": int(suppressed_groups),
+        # Sempre 0: supressao por k-anonimato foi removida (ver docstring do
+        # modulo). O campo fica no retorno por compatibilidade com quem
+        # consome a resposta (Agente C, cards do dashboard).
+        "suppressed_groups": 0,
     }
 
 
@@ -245,16 +224,8 @@ def _grouped_agg(
     aggs: list,
     direct_cols: list,
     roles: Dict[str, str],
-    k_min: int,
 ):
-    """
-    Agrupa, agrega e aplica k-anonimato.
-
-    Devolve (df_out, suppressed_groups). Grupos com menos de k_min linhas de
-    origem são removidos ANTES de o vetor sair. Ver P3: `SUM(salario) GROUP BY
-    funcionario` numa base com uma linha por pessoa é a folha de pagamento
-    vestida de agregado.
-    """
+    """Agrupa e agrega. Devolve df_out."""
     missing = [c for c in gb_cols if c not in df.columns]
     if missing:
         raise MissingColumnError(
@@ -273,20 +244,6 @@ def _grouped_agg(
         agg_dict[alias] = (col, "mean" if func == "avg" else func)
 
     df_out = g.agg(**agg_dict).reset_index()
-
-    # ── k-anonimato ──────────────────────────────────────────────────────────
-    suppressed = 0
-    if k_min > 0:
-        sizes = g.size().reset_index(name="__k")
-        before = len(df_out)
-        df_out = df_out.merge(sizes, on=gb_cols, how="left")
-        df_out = df_out[df_out["__k"] >= k_min].drop(columns="__k")
-        suppressed = before - len(df_out)
-        if suppressed:
-            logger.info(
-                "k-anonimato: %d de %d grupos suprimidos (minimo %d linhas).",
-                suppressed, before, k_min,
-            )
 
     rename_map = {
         col: alias
@@ -308,7 +265,7 @@ def _grouped_agg(
         if alias in df_out.columns and alias not in ordered:
             ordered.append(alias)
 
-    return df_out[[c for c in ordered if c in df_out.columns]], suppressed
+    return df_out[[c for c in ordered if c in df_out.columns]]
 
 
 def _scalar_agg(df: pd.DataFrame, func: str, col: str, roles: Dict[str, str]):
@@ -654,21 +611,7 @@ def apply_formatting_rules(
             )
             continue
 
-        if tipo == "data":
-            # Debug temporario (ver conversa sobre "data nao encontrada"): a
-            # amostra de 3 linhas nao provava se a linha do filtro estava no
-            # meio do dado — coluna inteira, ja que o dataset de teste e
-            # pequeno (poucas dezenas de linhas).
-            logger.info(
-                "Coluna '%s' (data): bruto=%s dtype_bruto=%s",
-                col, df[col].tolist(), df[col].dtype,
-            )
         df[col] = formatter(df[col], params)
-        if tipo == "data":
-            logger.info(
-                "Coluna '%s' (data): formatado=%s",
-                col, df[col].tolist(),
-            )
 
     return df
 
@@ -697,7 +640,6 @@ def execute_plan_with_formatting(
     formatting_rules: Dict[str, Dict[str, Any]] | None = None,
     *,
     column_roles: Optional[Dict[str, str]] = None,
-    k_min: int = DEFAULT_K_MIN,
     max_rows: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
@@ -713,7 +655,7 @@ def execute_plan_with_formatting(
 
     if not formatting_rules:
         return execute_plan(
-            plan, tables, column_roles=roles, k_min=k_min, max_rows=max_rows
+            plan, tables, column_roles=roles, max_rows=max_rows
         )
 
     formatted_tables: Dict[str, pd.DataFrame] = {}
@@ -721,6 +663,6 @@ def execute_plan_with_formatting(
         formatted_tables[table_name] = apply_formatting_rules(df, formatting_rules)
 
     return execute_plan(
-        plan, formatted_tables, column_roles=roles, k_min=k_min, max_rows=max_rows
+        plan, formatted_tables, column_roles=roles, max_rows=max_rows
     )
 

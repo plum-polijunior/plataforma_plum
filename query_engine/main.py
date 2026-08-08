@@ -103,7 +103,6 @@ async def execute(
         logger.warning("Payload expirado: %s", exc)
         raise HTTPException(status_code=401, detail="payload expirado") from exc
 
-    k_min = payload.k_min if payload.k_min is not None else config.default_k_min()
     max_rows = payload.max_rows or config.default_max_rows()
 
     # ── Barreira 4: conjunto de colunas, por card ────────────────────────────
@@ -170,7 +169,6 @@ async def execute(
                 plano,
                 tabelas,
                 column_roles=column_roles,
-                k_min=k_min,
                 max_rows=None,  # já barrado em sheets.load_columns
             )
             resultados.append(

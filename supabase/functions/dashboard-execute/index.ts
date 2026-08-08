@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
   // ── 8. Uma chamada ao executor, com tudo que faltou ──────────────────────
   const { data: org } = await supabase
     .from("organizations")
-    .select("dashboard_k_min, dashboard_max_rows")
+    .select("dashboard_max_rows")
     .eq("id", profile.organization_id)
     .maybeSingle();
 
@@ -232,7 +232,6 @@ Deno.serve(async (req: Request) => {
     })),
     allowed_columns: allowedColumns,
     formatting_rules: formattingRulesFromSchema(dataset.schema_metadata, requiredColumns),
-    k_min: org?.dashboard_k_min ?? 5,
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
   };

@@ -117,10 +117,6 @@ def google_service_account_info() -> dict:
         ) from exc
 
 
-def default_k_min() -> int:
-    return int(os.environ.get("PLUM_K_MIN", "5"))
-
-
 def default_max_rows() -> int:
     return int(os.environ.get("PLUM_MAX_ROWS", "200000"))
 

@@ -313,7 +313,6 @@ npx supabase functions invoke dashboard-execute --project-ref rjwidarrsykufuifzu
 | `error` com "Planilha não acessível" | não compartilhou com o bot | etapa 6.1, item 2 |
 | `error` com "não tem a coluna" | nome diferente do cabeçalho | confira a primeira linha da planilha |
 | erro `401` | assinatura não bateu | rode `valores-supabase.sh` de novo e recole os segredos |
-| `suppressed_groups` alto e poucas linhas | k-anonimato funcionando | ponha mais linhas na planilha de teste |
 
 Para ver o que o serviço registrou:
 

@@ -57,8 +57,9 @@ jobs:
         working-directory: query_engine
         run: python -m pytest
       # Este passo é o que impede a garantia de privacidade de virar só uma
-      # frase de apresentação: se k-anonimato, bloqueio de linha bruta ou
-      # verificação de assinatura quebrarem, o PR não passa.
+      # frase de apresentação: se o bloqueio de linha bruta ou a verificação
+      # de assinatura quebrarem, o PR não passa. (k-anonimato foi removido em
+      # 2026-08-08 por decisão de produto — ver k-anonimato-removido.md.)
 
       - uses: actions/setup-node@v4
         with:
@@ -127,7 +128,7 @@ jobs:
           # O segredo é lido em tempo de execução com a role do Lambda.
           aws lambda update-function-configuration \
             --function-name "${{ env.LAMBDA_FUNCTION }}" \
-            --environment 'Variables={GOOGLE_SA_PARAM=/plum/prod/google-sa-json,HMAC_SECRET_PARAM=/plum/prod/hmac-secret,PLUM_K_MIN=5,PLUM_MAX_ROWS=200000,LOG_LEVEL=INFO}' \
+            --environment 'Variables={GOOGLE_SA_PARAM=/plum/prod/google-sa-json,HMAC_SECRET_PARAM=/plum/prod/hmac-secret,PLUM_MAX_ROWS=200000,LOG_LEVEL=INFO}' \
             >/dev/null
           aws lambda wait function-updated --function-name "${{ env.LAMBDA_FUNCTION }}"
 

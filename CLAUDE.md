@@ -28,15 +28,16 @@ Testes automatizados, em três frentes:
 
 ```sh
 npm test                              # vitest — RBAC de coluna (_shared/query_plan.ts)
-npm run test:py                       # pytest do query_engine (k-anonimato, assinatura, etc.)
+npm run test:py                       # pytest do query_engine (bloqueio de linha bruta, assinatura, etc.)
 psql "$DATABASE_URL" -f supabase/tests/endurecimento_rls_test.sql   # RLS/SSO
 psql "$DATABASE_URL" -f supabase/tests/sso_dominio_test.sql
 ```
 
 O CI (`.github/workflows/query-engine.yml`) roda `npm test` + `pytest` a cada push/PR que
 toque `query_engine/`, `supabase/functions/` ou `src/lib/`, e só publica no Lambda se os dois
-passarem — são as barreiras de privacidade/segurança (k-anonimato, bloqueio de linha bruta,
-extração de coluna do RBAC) que não podem regredir em silêncio.
+passarem — são as barreiras de privacidade/segurança (bloqueio de linha bruta, extração de
+coluna do RBAC) que não podem regredir em silêncio. (k-anonimato foi removido em 2026-08-08
+por decisão de produto — ver `k-anonimato-removido.md` na raiz do repo.)
 
 **Migrations não são aplicadas por CLI.** `supabase/config.toml` só contém `project_id`;
 o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar
@@ -74,7 +75,7 @@ query_engine/
   security.py                4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna
   sheets.py                  Google Sheets: 1 batchGet por dataset, teto de linhas antes do parse
   config.py                  segredos via SSM Parameter Store (nunca .env com valor)
-  pandas_executor.py         execute_plan(plan, tables, column_roles, k_min, max_rows)
+  pandas_executor.py         execute_plan(plan, tables, column_roles, max_rows)
   cache.py                   TTLCache pronto mas **não conectado** (ver TODOS.md #1)
   prd.md                     ⭐ arquitetura do chat + query engine (ver §9 lá: chat != dashboard)
   implementation.md          histórico do plano de EC2 abandonado; aponta pra infra/aws/
@@ -114,7 +115,7 @@ docs/
 
 | Tabela | Papel | Colunas notáveis |
 |---|---|---|
-| `organizations` | tenant | `join_code` (12 chars cripto, UNIQUE), `share_id` (4 chars, legado), `join_mode` ∈ `share_id`\|`dominio`, `dashboard_k_min` (padrão 5), `dashboard_max_rows` (padrão 200000) |
+| `organizations` | tenant | `join_code` (12 chars cripto, UNIQUE), `share_id` (4 chars, legado), `join_mode` ∈ `share_id`\|`dominio`, `dashboard_max_rows` (padrão 200000). `dashboard_k_min` ainda existe na coluna mas está **vestigial**: não é mais lido por nenhum código desde a remoção do k-anonimato (2026-08-08) |
 | `profiles` | usuário (estende `auth.users`) | `organization_id` (nullable!), `role_id`, `status` enum `profile_status`, `updated_at` |
 | `roles` | cargo por org | `name` — Admin é **por nome**, não por flag |
 | `role_permissions` | permissão granular | `(role_id, dataset_id)` UNIQUE, `allowed_columns TEXT[]` default `'{}'` |
@@ -260,9 +261,7 @@ Três invocações sequenciais, todas recebendo `schemaMetadata`:
    linhas de dados**. Emite um Query Plan JSON: `from`, `target_columns`, `select`, `where`,
    `group_by`, `order_by`, `limit`.
 3. `synthesize_answer` — **Agente C** (Sintetizador). Vê a pergunta + o vetor de resultados
-   do executor, **nunca a base**. Não inventa número que não esteja no resultado. Se
-   `suppressed_groups > 0` no resultado, explica que parte foi omitida por privacidade
-   (k-anonimato) — nunca ignora o campo em silêncio.
+   do executor, **nunca a base**. Não inventa número que não esteja no resultado.
 
 **Entre (2) e (3) roda o executor real, desde 2026-08-07 (Fase 2 de `organizar_tudo.md`)** —
 uma quarta ação, `execute_plan`, no mesmo `ai-plum-chat`: resolve `allowed_columns` do cargo
@@ -293,16 +292,16 @@ SigV4 (`AuthType=AWS_IAM`, resolvido pela infraestrutura, antes do código Pytho
 HMAC-SHA256 sobre o corpo, com um segredo **diferente** da credencial AWS. Vazar uma não
 basta para forjar a outra.
 
-Proteções de privacidade no `pandas_executor.py`: **k-anonimato** (todo grupo do resultado
-precisa de no mínimo `k_min` linhas de origem, padrão 5 — grupos menores são suprimidos e
-contados em `suppressed_groups`), bloqueio de linhas brutas (`RawRowsBlocked` — todo plano
-precisa de agregação), teto de linhas verificado **antes** do parse (`RowLimitExceeded`), e
-coluna referenciada mas não carregada é erro (`MissingColumnError`), nunca um filtro
-silenciosamente ignorado. `column_roles` (percent/date/number/text) substitui a antiga
-constante global `_PCT_COLS`/`_STRING_COLS` — mas continua derivado por **keyword-match em
-texto livre** sobre a `cleaning_rule` do Agente 3, a mesma dívida do `query_engine/urgent.md`
-(agora com consequência maior: alimenta a proteção de k-anonimato/percentual, não só a
-formatação de exibição).
+Proteções no `pandas_executor.py`: bloqueio de linhas brutas (`RawRowsBlocked` — todo plano
+precisa de agregação, sempre, sem exceção), teto de linhas verificado **antes** do parse
+(`RowLimitExceeded`), e coluna referenciada mas não carregada é erro (`MissingColumnError`),
+nunca um filtro silenciosamente ignorado. `column_roles` (percent/date/number/text) substitui
+a antiga constante global `_PCT_COLS`/`_STRING_COLS` — mas continua derivado por **keyword-
+match em texto livre** sobre a `cleaning_rule` do Agente 3, a mesma dívida do
+`query_engine/urgent.md`. Havia também **k-anonimato** aqui (grupo com menos de `k_min`
+linhas de origem era suprimido, contado em `suppressed_groups`) — removido em 2026-08-08 por
+decisão de produto, ver `k-anonimato-removido.md` na raiz do repo. `suppressed_groups`
+continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 
 ### Invariantes de produto
 
@@ -316,8 +315,12 @@ formatação de exibição).
 - **R-06** O dicionário semântico é revisado por humano. **R-08** Validação alerta, nunca corrige.
 - **R-11 Limites do plano:** colunas ∈ `allowed_cols`, agg ∈ {sum,avg,min,max,count},
   `limit` 1..500, **joins bloqueados**.
-- **R-12 k-Anonimato.** Nenhum vetor de resultado sai sem agregação; todo grupo precisa de no
-  mínimo `k_min` linhas de origem (padrão 5, configurável por organização). Ver §5.
+- **R-12 k-Anonimato — removido em 2026-08-08.** Existia aqui até então: nenhum vetor de
+  resultado saía sem agregação (isso **continua** valendo, ver R-02) e todo grupo precisava de
+  no mínimo `k_min` linhas de origem, configurável por organização. A parte de "mínimo de
+  linhas por grupo" foi removida por decisão de produto — ver `k-anonimato-removido.md` na
+  raiz do repo pelo raciocínio completo. Mantido aqui como registro histórico do número, não
+  reintroduzir sem decisão de produto equivalente.
 - **O Plum não cria planilhas.** O usuário cola a URL da própria planilha e compartilha com
   a service account (`plum-polijunior@plataforma-plum.iam.gserviceaccount.com`) como
   **Leitor**. A governança de acesso continua do cliente.

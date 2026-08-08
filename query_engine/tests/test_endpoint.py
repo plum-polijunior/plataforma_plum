@@ -2,7 +2,7 @@
 Teste de ponta a ponta do endpoint, com o Google Sheets dublado.
 
 Prova a cadeia inteira sem rede e sem credencial: assinatura → frescor →
-conjunto de colunas → leitura → k-anonimato → resposta por card.
+conjunto de colunas → leitura → resposta por card.
 
 O dublê do Sheets é intencional: o que precisa ser provado aqui é o
 comportamento do PLUM, não o da API do Google.
@@ -94,7 +94,6 @@ def _corpo(**over):
         ],
         "allowed_columns": ["faturamento", "regiao"],
         "formatting_rules": {},
-        "k_min": 5,
         "issued_at": int(time.time()),
     }
     base.update(over)
@@ -116,14 +115,14 @@ def test_health_nao_exige_assinatura(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
-def test_caminho_feliz_com_k_anonimato(client):
+def test_caminho_feliz_devolve_todos_os_grupos(client):
     r = _post(client, _corpo())
     assert r.status_code == 200
     card = r.json()["results"][0]
     assert card["status"] == "ok"
     regioes = {linha["regiao"] for linha in card["rows"]}
-    assert regioes == {"Sul", "Norte"}, "Ilha tem 2 linhas e deve sumir"
-    assert card["suppressed_groups"] == 1
+    assert regioes == {"Sul", "Norte", "Ilha"}, "k-anonimato foi removido: Ilha (2) nao suprime mais"
+    assert card["suppressed_groups"] == 0
 
 
 def test_sem_assinatura_devolve_401(client):

@@ -138,7 +138,13 @@ executor real estiver no ar, porque hoje toda resposta vem de `"Simulado"`.
 
 ---
 
-## 5. Privacidade diferencial contra ataque de diferenciação
+## 5. Privacidade diferencial contra ataque de diferenciação — MOOT em 2026-08-08
+
+O k-anonimato que este item protegia foi removido (decisão de produto, ver
+`k-anonimato-removido.md` na raiz do repo): sem supressão de grupo, não há grupo suprimido
+para reconstruir por diferença entre duas consultas. Mantido abaixo só como registro do
+raciocínio, para o caso de k-anonimato (ou proteção equivalente) ser reintroduzido no futuro
+— aí este ataque volta a valer.
 
 **O quê:** proteção contra reconstruir grupos suprimidos rodando duas consultas com filtros
 levemente diferentes e subtraindo os resultados.

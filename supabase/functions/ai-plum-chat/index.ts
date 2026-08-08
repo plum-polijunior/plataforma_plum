@@ -175,7 +175,7 @@ async function handleExecutePlan(
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("dashboard_k_min, dashboard_max_rows")
+    .select("dashboard_max_rows")
     .eq("id", profile.organization_id)
     .maybeSingle();
 
@@ -187,7 +187,6 @@ async function handleExecutePlan(
     plans: [{ card_id: "chat", plan, resolved_columns: veredito.required }],
     allowed_columns: allowedColumns,
     formatting_rules: formattingRulesFromSchema(dataset.schema_metadata, new Set(veredito.required)),
-    k_min: org?.dashboard_k_min ?? 5,
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
   };
@@ -252,6 +251,7 @@ async function handleAgente(
 
   let systemInstruction = "";
   let userPrompt = "";
+  const hoje = new Date().toISOString().slice(0, 10);
 
   if (action === "guard") {
     systemInstruction = `Você é o Agente Z, Guardião de Segurança, Contexto e Viabilidade da Plataforma Plum.
@@ -285,6 +285,7 @@ REGRAS OBRIGATÓRIAS DO QUERY PLAN:
 - "order_by": (opcional) array de objetos {"col": "nome_coluna", "dir": "asc"|"desc"}.
 - "limit": (opcional) inteiro limite de linhas (padrão 200).
 - Todo plano PRECISA ter pelo menos um "select" com função de agregação (sum, avg, min, max, count) — o executor recusa devolver linhas brutas, sem exceção.
+- Hoje é ${hoje}. Se o usuário mencionar uma data sem ano (ex: "2 de outubro", "dia 15/03"), assuma o ano atual — nunca infira um ano diferente por conta própria.
 
 Retorne ESTRITAMENTE o JSON do Query Plan sem markdown.`;
 
@@ -296,11 +297,8 @@ Você receberá a pergunta original do usuário, o schema_metadata de contexto e
 Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, elegante e precisa.
 - Utilize os valores exatos retornados pelo executor (respeite moedas R$, percentuais e totais).
 - Não invente nem adicione números que não estejam no resultado do executor.
-- Se o resultado tiver "suppressed_groups" maior que zero, explique brevemente que parte dos
-  grupos foi omitida por ter poucos registros — é proteção de privacidade (k-anonimato), não erro.
-  Nunca tente adivinhar ou revelar o que foi omitido.
-- Se "row_count" for zero e não houver "suppressed_groups", diga que não encontrou dados para o
-  recorte pedido, sem inventar um motivo.
+- Se "row_count" for zero, diga que não encontrou dados para o recorte pedido, sem inventar um
+  motivo.
 - Responda diretamente à dúvida do usuário de forma profissional.`;
 
     userPrompt = `Pergunta Original do Usuário: "${prompt}"\nResultado do Executor Python (Vetor de Dados): ${JSON.stringify(executorResult || {})}\nSchema Metadata: ${JSON.stringify(schemaMetadata || {})}`;

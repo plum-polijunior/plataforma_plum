@@ -79,7 +79,6 @@ class ExecutionPayload(BaseModel):
     # via schema_metadata. O executor deriva column_roles disto mesmo
     # (roles_from_formatting_rules), não recebe role prontos da Edge Function.
     formatting_rules: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    k_min: int = 5
     max_rows: Optional[int] = None
     # Segundos desde a época. A Edge Function carimba na hora de assinar.
     issued_at: int

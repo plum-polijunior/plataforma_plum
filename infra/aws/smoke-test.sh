@@ -97,9 +97,6 @@ log "3/3 Somando '${COLUNA}' da planilha real"
 SEGREDO="$(aws ssm get-parameter --name "$PARAM_HMAC" --with-decryption \
             --region "$REGIAO" --query Parameter.Value --output text)"
 
-# k_min=0 aqui de propósito: este teste soma a base inteira, sem agrupar, e o
-# objetivo é conferir o número contra a planilha. Nenhum caminho de produção
-# passa k_min=0.
 CORPO="$(jq -nc \
   --arg sheet "$SHEET_ID" --arg aba "$ABA" --arg col "$COLUNA" \
   --argjson ts "$(date +%s)" '
@@ -113,7 +110,6 @@ CORPO="$(jq -nc \
     }],
     allowed_columns: [$col],
     column_roles: {},
-    k_min: 0,
     issued_at: $ts
   }')"
 

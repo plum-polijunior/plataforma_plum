@@ -49,7 +49,6 @@ def _payload(**over):
         ],
         "allowed_columns": ["faturamento", "regiao", "data_venda"],
         "formatting_rules": {},
-        "k_min": 5,
         "issued_at": int(time.time()),
     }
     base.update(over)
@@ -160,10 +159,3 @@ def test_payload_sem_plano_e_recusado():
 
     with pytest.raises(ValidationError):
         ExecutionPayload.model_validate(_payload(plans=[]))
-
-
-def test_k_min_padrao_do_payload_e_cinco():
-    p = ExecutionPayload.model_validate(
-        {k: v for k, v in _payload().items() if k != "k_min"}
-    )
-    assert p.k_min == 5

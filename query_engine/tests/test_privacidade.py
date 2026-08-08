@@ -2,7 +2,13 @@
 Invariantes de privacidade do executor.
 
 Estes testes não provam que o dashboard funciona. Eles provam que ele não
-vaza. Cada um cita a premissa do design doc que sustenta.
+vaza linha bruta. Cada um cita a premissa do design doc que sustenta.
+
+A supressão por k-anonimato (P3, grupo com poucas linhas de origem) existiu
+aqui e foi removida em 2026-08-08 por decisão de produto — ver
+`k-anonimato-removido.md` na raiz do repo para o raciocínio completo. P1.3
+(nenhuma linha bruta atravessa a fronteira, sempre) continua de pé e sem
+excecão: é isso que este arquivo protege agora.
 
 Se algum destes ficar vermelho, o PLUM não pode ser vendido com a garantia de
 privacidade que está no material comercial. Não conserte o teste; conserte o
@@ -18,7 +24,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from query_engine.pandas_executor import (  # noqa: E402
-    DEFAULT_K_MIN,
     MissingColumnError,
     RawRowsBlocked,
     RowLimitExceeded,
@@ -34,8 +39,8 @@ from query_engine.pandas_executor import (  # noqa: E402
 @pytest.fixture
 def vendas():
     """
-    12 linhas. 'Sul' tem 6 (passa em k=5), 'Norte' tem 4 e 'Centro' tem 2
-    (os dois abaixo do limiar).
+    12 linhas. 'Sul' tem 6, 'Norte' tem 4 e 'Centro' tem 2 — grupos de
+    tamanhos diferentes, do tempo em que k-anonimato suprimia os pequenos.
     """
     return {
         "producao": pd.DataFrame(
@@ -61,37 +66,23 @@ def _plano_por_regiao():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# P3 — agregado não é sinônimo de anônimo
+# Regressão: k-anonimato foi removido de propósito, não pode voltar sozinho
 # ─────────────────────────────────────────────────────────────────────────────
 
-@pytest.mark.invariante
-def test_p3_grupo_abaixo_do_limiar_e_suprimido(vendas):
-    r = execute_plan(_plano_por_regiao(), vendas, k_min=5)
+def test_grupo_pequeno_nao_e_mais_suprimido(vendas):
+    """Norte (4) e Centro (2) apareciam suprimidos antes de 2026-08-08."""
+    r = execute_plan(_plano_por_regiao(), vendas)
 
     regioes = {row["regiao"] for row in r["rows"]}
-    assert regioes == {"Sul"}, "Norte (4) e Centro (2) deveriam sumir"
-    assert r["suppressed_groups"] == 2
+    assert regioes == {"Sul", "Norte", "Centro"}
+    assert r["suppressed_groups"] == 0
 
 
-@pytest.mark.invariante
-def test_p3_supressao_e_reportada_para_a_interface(vendas):
-    """A interface precisa do número para poder explicar o buraco na tela."""
-    r = execute_plan(_plano_por_regiao(), vendas, k_min=5)
-    assert r["suppressed_groups"] == 2
-
-
-@pytest.mark.invariante
-def test_p3_todos_os_grupos_abaixo_do_limiar_devolve_vazio_explicado(vendas):
-    r = execute_plan(_plano_por_regiao(), vendas, k_min=50)
-    assert r["rows"] == []
-    assert r["suppressed_groups"] == 3
-
-
-@pytest.mark.invariante
-def test_p3_agregado_unico_sobre_base_pequena_e_suprimido():
+def test_agregado_unico_sobre_base_pequena_nao_e_suprimido():
     """
-    Sem group_by o "grupo" é a base inteira depois do where. Um filtro que
-    isola 2 linhas e soma o salário delas é tão identificável quanto a linha.
+    Sem group_by o "grupo" é a base inteira depois do where. Antes de
+    2026-08-08 isolar 2 linhas e somar o salário delas era suprimido; hoje o
+    executor devolve o agregado normalmente.
     """
     tabelas = {
         "producao": pd.DataFrame(
@@ -102,18 +93,13 @@ def test_p3_agregado_unico_sobre_base_pequena_e_suprimido():
         "from": "producao",
         "select": [{"expr": {"agg": "sum", "col": "salario"}, "as": "folha"}],
     }
-    r = execute_plan(plano, tabelas, k_min=5)
-    assert r["rows"] == []
-    assert r["suppressed_groups"] == 1
-
-
-@pytest.mark.invariante
-def test_p3_o_limiar_padrao_e_cinco():
-    assert DEFAULT_K_MIN == 5
+    r = execute_plan(plano, tabelas)
+    assert r["rows"][0]["folha"] == pytest.approx(17000.0)
+    assert r["suppressed_groups"] == 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# P1.3 — só vetor agregado atravessa a fronteira
+# P1.3 — só vetor agregado atravessa a fronteira, sempre, sem excecão
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.invariante
@@ -123,13 +109,13 @@ def test_p13_plano_sem_agregacao_e_recusado(vendas):
         "select": [{"expr": "vendedor"}, {"expr": "faturamento"}],
     }
     with pytest.raises(RawRowsBlocked):
-        execute_plan(plano, vendas, k_min=5)
+        execute_plan(plano, vendas)
 
 
 @pytest.mark.invariante
 def test_p13_plano_sem_select_e_recusado(vendas):
     with pytest.raises(RawRowsBlocked):
-        execute_plan({"from": "producao"}, vendas, k_min=5)
+        execute_plan({"from": "producao"}, vendas)
 
 
 @pytest.mark.invariante
@@ -138,7 +124,7 @@ def test_p13_nenhuma_linha_bruta_no_retorno(vendas):
     Nenhum valor da coluna identificadora pode aparecer no vetor de saída.
     Este é o teste que a auditoria vai querer ver.
     """
-    r = execute_plan(_plano_por_regiao(), vendas, k_min=5)
+    r = execute_plan(_plano_por_regiao(), vendas)
     saida = str(r["rows"])
     for pessoa in vendas["producao"]["vendedor"]:
         assert pessoa not in saida
@@ -161,7 +147,7 @@ def test_regressao_coluna_ausente_no_where_levanta_excecao(vendas):
         "where": {"left": "coluna_que_nao_existe", "op": "=", "right": "x"},
     }
     with pytest.raises(MissingColumnError):
-        execute_plan(plano, vendas, k_min=0)
+        execute_plan(plano, vendas)
 
 
 @pytest.mark.regressao
@@ -185,7 +171,7 @@ def test_regressao_coluna_ausente_dentro_de_and_aninhado(vendas):
         },
     }
     with pytest.raises(MissingColumnError):
-        execute_plan(plano, vendas, k_min=0)
+        execute_plan(plano, vendas)
 
 
 @pytest.mark.regressao
@@ -196,7 +182,7 @@ def test_regressao_coluna_ausente_em_group_by(vendas):
         "group_by": ["fantasma"],
     }
     with pytest.raises(MissingColumnError):
-        execute_plan(plano, vendas, k_min=0)
+        execute_plan(plano, vendas)
 
 
 @pytest.mark.regressao
@@ -206,7 +192,7 @@ def test_regressao_coluna_ausente_em_select(vendas):
         "select": [{"expr": {"agg": "sum", "col": "fantasma"}, "as": "total"}],
     }
     with pytest.raises(MissingColumnError):
-        execute_plan(plano, vendas, k_min=0)
+        execute_plan(plano, vendas)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -221,7 +207,7 @@ def test_soma_de_percentual_vira_media(vendas):
         ],
     }
     r = execute_plan(
-        plano, vendas, column_roles={"margem_percentual": "percent"}, k_min=5
+        plano, vendas, column_roles={"margem_percentual": "percent"}
     )
     # 12 linhas de 10.0: somar daria 120, a média dá 10.
     assert r["rows"][0]["margem"] == pytest.approx(10.0)
@@ -235,7 +221,7 @@ def test_sem_papel_declarado_a_soma_continua_soma(vendas):
             {"expr": {"agg": "sum", "col": "margem_percentual"}, "as": "margem"}
         ],
     }
-    r = execute_plan(plano, vendas, k_min=5)
+    r = execute_plan(plano, vendas)
     assert r["rows"][0]["margem"] == pytest.approx(120.0)
 
 
@@ -272,7 +258,7 @@ def test_teto_de_linhas_recusa_antes_de_processar():
         "limit": 1,
     }
     with pytest.raises(RowLimitExceeded) as exc:
-        execute_plan(plano, tabelas, k_min=0, max_rows=500)
+        execute_plan(plano, tabelas, max_rows=500)
     # A mensagem precisa nomear o tamanho e o limite, senao o log nao ajuda.
     assert "1,000" in str(exc.value) and "500" in str(exc.value)
 
@@ -283,5 +269,5 @@ def test_dentro_do_teto_executa_normal():
         "from": "producao",
         "select": [{"expr": {"agg": "sum", "col": "v"}, "as": "t"}],
     }
-    r = execute_plan(plano, tabelas, k_min=0, max_rows=500)
+    r = execute_plan(plano, tabelas, max_rows=500)
     assert r["rows"][0]["t"] == pytest.approx(4950.0)

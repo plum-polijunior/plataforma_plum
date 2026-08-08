@@ -14,7 +14,7 @@ A arquitetura adota um pipeline modular composto pelo **Agente Z (Guardião)**, 
 3. **Motorista Cego (Blind Execution Pattern):** O executor (hoje um serviço AWS Lambda — ver §9) não recebe a pergunta do usuário, não conhece a intenção de negócio e **não consulta o Supabase**. Ele obedece um payload já assinado, contendo o conjunto de colunas já resolvido e autorizado. Toda decisão de autorização vive na Edge Function que o chama (`ai-plum-chat` ou `dashboard-execute`), nunca no executor.
 4. **Acesso Somente Leitura (`GET` HTTP) + Column-Range GET:** O Plum **nunca** altera a planilha do cliente. Ele lê **somente as colunas necessárias** via `batchGet`, numa única chamada por dataset (não uma por card/pergunta — decisão 11A), contornando o limite de 60 req/min da API do Google Sheets. **O cache de dados em TTL mencionado nas versões anteriores deste PRD existe no código (`query_engine/cache.py`) mas está intencionalmente desligado** — ver §9.
 5. **Multitenancy Inquebrável (Isolamento por `organization_id` & RLS):** Toda decisão de acesso é resolvida **antes** de chegar ao executor, na Edge Function, com o JWT do usuário e RLS do Postgres. A chamada da Edge Function para o executor em si é protegida por duas camadas independentes: assinatura **AWS SigV4** na própria infraestrutura (Lambda Function URL com `AuthType=AWS_IAM`) e uma **assinatura HMAC-SHA256 adicional**, com um segredo diferente da credencial AWS — vazar uma não basta para forjar a outra. Ver §9.
-6. **Privacidade por Agregação (k-Anonimato):** Nenhum vetor de resultado sai sem passar por agregação (`RawRowsBlocked` recusa planos sem `select`/sem função de agregação) e todo grupo do resultado precisa ter no mínimo `k_min` linhas de origem (padrão 5); grupos menores são suprimidos antes de sair, e a contagem de suprimidos volta no resultado (`suppressed_groups`) para a interface poder explicar o buraco em vez de simplesmente mostrar menos linhas sem explicação.
+6. **Privacidade por Agregação:** Nenhum vetor de resultado sai sem passar por agregação (`RawRowsBlocked` recusa planos sem `select`/sem função de agregação, sempre, sem exceção). Até 2026-08-08 havia também k-anonimato (grupo com menos de `k_min` linhas de origem era suprimido, contado em `suppressed_groups`) — removido por decisão de produto: pra maioria das planilhas reais (linhas organizadas por data/evento, não por pessoa) o limiar suprimia respostas legítimas com mais frequência do que protegia alguém. Ver `k-anonimato-removido.md` na raiz do repo. `suppressed_groups` continua no retorno por compatibilidade, sempre `0`.
 
 ---
 
@@ -97,15 +97,14 @@ sequenceDiagram
 ---
 
 ### 🐍 Pandas Executor: O Motorista Cego Determinístico (`query_engine/pandas_executor.py`)
-- **Entradas:** Query Plan JSON já autorizado (colunas resolvidas pela Edge Function) + `column_roles` (percent/date/number/text, derivado do `cleaning_rule` do schema) + `k_min` + `max_rows`.
+- **Entradas:** Query Plan JSON já autorizado (colunas resolvidas pela Edge Function) + `column_roles` (percent/date/number/text, derivado do `cleaning_rule` do schema) + `max_rows`.
 - **O que ele NÃO vê:** A pergunta do usuário, qualquer contexto conceitual, e o Supabase — ele nunca faz uma query SQL.
-- **Responsabilidade real hoje** (`execute_plan(plan, tables, *, column_roles, k_min, max_rows)`):
+- **Responsabilidade real hoje** (`execute_plan(plan, tables, *, column_roles, max_rows)`):
   1. Recusa a base inteira **antes de processar** se ela passar de `max_rows` (`RowLimitExceeded`) — o `limit` do plano só corta a saída, nunca protegeu a entrada, então essa checagem acontece à parte, mais cedo.
   2. Aplica `where`/`group_by`/`select`. Coluna referenciada e não carregada é **erro (`MissingColumnError`)**, nunca um filtro ignorado em silêncio — um filtro descartado devolveria o total sobre a base inteira com o rótulo do recorte pedido, um número errado com etiqueta convincente.
-  3. Recusa devolver linhas brutas (`RawRowsBlocked`) quando `k_min > 0`: todo plano precisa de pelo menos uma função de agregação.
-  4. Aplica **k-anonimato**: agrupa, agrega, e remove grupos com menos de `k_min` linhas de origem antes do vetor sair, retornando `suppressed_groups`.
-  5. `column_roles` substitui as antigas constantes globais (`_PCT_COLS`/`_STRING_COLS`, que ficavam vazias e sem uso real) — evita, por exemplo, somar uma coluna de percentual.
-- **O que NÃO mudou (dívida conhecida — ver `urgent.md`):** `apply_formatting_rules` e a nova `roles_from_formatting_rules` continuam decidindo o que fazer com cada coluna por **keyword-match em texto livre** (`cleaning_rule` escrito pelo Agente 3). Isso agora tem consequência maior do que quando o `urgent.md` foi escrito: `column_roles` alimenta a proteção de k-anonimato/percentual, então uma regra de limpeza que o Agente 3 escreveu fora do vocabulário reconhecido não é só uma coluna mal formatada — pode fazer o executor tratar errado uma coluna sensível.
+  3. Recusa devolver linhas brutas (`RawRowsBlocked`), sempre: todo plano precisa de pelo menos uma função de agregação. (k-anonimato — suprimir grupo com poucas linhas de origem — existiu aqui e foi removido em 2026-08-08; ver `k-anonimato-removido.md`.)
+  4. `column_roles` substitui as antigas constantes globais (`_PCT_COLS`/`_STRING_COLS`, que ficavam vazias e sem uso real) — evita, por exemplo, somar uma coluna de percentual.
+- **O que NÃO mudou (dívida conhecida — ver `urgent.md`):** `apply_formatting_rules` e a nova `roles_from_formatting_rules` continuam decidindo o que fazer com cada coluna por **keyword-match em texto livre** (`cleaning_rule` escrito pelo Agente 3). `column_roles` ainda alimenta a decisão de não somar percentual, então uma regra de limpeza fora do vocabulário reconhecido pode fazer o executor tratar errado uma coluna.
 - **Exemplo de Saída (vetor de resultado, um `card_id` por card no lote):**
   ```json
   {"results": [
@@ -180,7 +179,7 @@ o JWT do usuário e o RLS existem ao mesmo tempo. Ver `supabase/functions/dashbo
 | :--- | :--- | :--- |
 | **Agente Z** | LLM Prompt (Agente 0) | Guardião de Escopo (bloqueia "Revolução Francesa") e Viabilidade de Colunas. |
 | **Agente A** | LLM Prompt (Agente 1) | Converte linguagem natural em Query Plan JSON (filtro, select, agg). |
-| **Pandas Executor** | Python, AWS Lambda (`query_engine`) | Executa filtros, agrupamentos, k-anonimato e matemática exata com Pandas (Motorista Cego). Sem acesso ao Supabase. |
+| **Pandas Executor** | Python, AWS Lambda (`query_engine`) | Executa filtros, agrupamentos e matemática exata com Pandas (Motorista Cego). Sem acesso ao Supabase. |
 | **Agente C** | LLM Prompt (Agente 2) | Transforma o resultado numérico do Pandas em resposta natural fluida. |
 | **Supabase Postgres** | Banco Multitenant | Validação de RLS por `organization_id` e armazenamento do `schema_metadata`. |
 | **Edge Function `dashboard-execute`** | Deno, único ponto de RBAC | Autoriza por coluna, assina (SigV4+HMAC) e chama o Lambda; degrada para snapshot antigo se o executor falhar. |
@@ -197,8 +196,7 @@ o JWT do usuário e o RLS existem ao mesmo tempo. Ver `supabase/functions/dashbo
 | :--- | :--- | :--- |
 | `GOOGLE_SA_PARAM` | **Caminho** do parâmetro no SSM: `/plum/prod/google-sa-json` | Não é o JSON em si |
 | `HMAC_SECRET_PARAM` | **Caminho** do parâmetro no SSM: `/plum/prod/hmac-secret` | Não é o segredo em si |
-| `PLUM_K_MIN` | Mínimo de linhas por grupo (padrão `5`) — hoje sobrescrito por `organizations.dashboard_k_min` no caminho do dashboard | — |
-| `PLUM_MAX_ROWS` | Teto de linhas por base (padrão `200000`) — idem, sobrescrito por `organizations.dashboard_max_rows` | — |
+| `PLUM_MAX_ROWS` | Teto de linhas por base (padrão `200000`) — sobrescrito por `organizations.dashboard_max_rows` no caminho do dashboard | — |
 | `PLUM_SIGNATURE_MAX_AGE` | Janela de validade do HMAC em segundos (padrão `120`) | — |
 
 O **valor** de cada segredo nunca é uma env var — só o caminho. `query_engine/config.py` lê o
@@ -277,9 +275,9 @@ falsa hoje porque `predict_semantics`/`format_data` ainda recebem 5 linhas reais
 **Crítica para quem for mexer a seguir:**
 - `apply_formatting_rules`/`roles_from_formatting_rules` continuam por keyword-match em texto
   livre (ver `urgent.md`). Isso deixou de ser só "uma coluna mal formatada" — agora
-  `column_roles` alimenta a proteção de k-anonimato e a decisão de não somar percentual, então
-  vale reabrir `urgent.md` com essa consequência nova em mente antes de considerá-lo baixa
-  prioridade.
+  `column_roles` alimenta a decisão de não somar percentual, então vale reabrir `urgent.md`
+  com essa consequência nova em mente antes de considerá-lo baixa prioridade. (k-anonimato,
+  que também dependia disso, foi removido em 2026-08-08 — ver `k-anonimato-removido.md`.)
 - `query_engine/cache.py` está escrito, testado (implicitamente, por ser código simples) e
   **não importado em lugar nenhum**. Fica fácil um contribuidor futuro assumir que está ativo
   porque o arquivo existe e parece pronto. Vale um comentário no topo do arquivo apontando para
