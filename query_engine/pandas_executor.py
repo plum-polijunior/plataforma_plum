@@ -543,14 +543,18 @@ def _fmt_percentual(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
 
 def _fmt_data(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     # UNFORMATTED_VALUE (sheets.py) devolve numero de serie do Sheets/Excel
-    # (dias desde 1899-12-30) para celulas formatadas como Data. pd.to_datetime
-    # de um numero puro conta nanossegundos desde 1970, nao dias desde 1899 —
-    # sem isto a coluna virava silenciosamente timestamps de 1970 e todo filtro
-    # de data deixava de casar com qualquer linha.
+    # (dias desde 1899-12-30) para celulas formatadas como Data, e texto puro
+    # para celulas digitadas/coladas sem essa formatacao — a MESMA coluna pode
+    # ter as duas coisas, linha a linha (visto em produção: `data_apontamento`
+    # com serial em algumas linhas e "17/02/2026" em outras). Decidir por
+    # maioria da coluna inteira converte a minoria errado sempre — pd.to_datetime
+    # de um numero puro, sem `unit`/`origin`, conta nanossegundos desde 1970, nao
+    # dias desde 1899. Por isso a escolha e por LINHA: serial onde o valor bruto
+    # e numerico, texto (com dayfirst) onde nao e.
     numerico = pd.to_numeric(s, errors="coerce")
-    if numerico.notna().mean() > 0.5:
-        return pd.to_datetime(numerico, unit="D", origin="1899-12-30", errors="coerce")
-    return pd.to_datetime(s, dayfirst=bool(params.get("dayfirst", True)), errors="coerce")
+    via_serial = pd.to_datetime(numerico, unit="D", origin="1899-12-30", errors="coerce")
+    via_texto = pd.to_datetime(s, dayfirst=bool(params.get("dayfirst", True)), errors="coerce")
+    return via_serial.where(numerico.notna(), via_texto)
 
 
 def _fmt_texto_trim_maiusculas(s: pd.Series, params: Dict[str, Any]) -> pd.Series:

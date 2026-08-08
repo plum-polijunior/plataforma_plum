@@ -84,6 +84,21 @@ def test_data_converte_numero_de_serie_do_sheets_excel():
     ]
 
 
+def test_data_com_serial_e_texto_misturados_na_mesma_coluna():
+    # Bug real: a mesma coluna tinha algumas linhas como serial do Sheets
+    # (célula formatada como Data) e outras como texto puro (célula sem essa
+    # formatação) — decidir a conversão por maioria da coluna inteira convertia
+    # a minoria errado sempre. A escolha tem que ser por linha.
+    df = pd.DataFrame({"data_apontamento": [46297, "17/02/2026", 46328, "10/02/2026"]})
+    out = apply_formatting_rules(df, {"data_apontamento": _regra("data")})
+    assert out["data_apontamento"].tolist() == [
+        pd.Timestamp("2026-10-02"),
+        pd.Timestamp("2026-02-17"),
+        pd.Timestamp("2026-11-02"),
+        pd.Timestamp("2026-02-10"),
+    ]
+
+
 def test_texto_trim_maiusculas():
     df = pd.DataFrame({"cliente": ["  joão  ", "maria"]})
     out = apply_formatting_rules(
