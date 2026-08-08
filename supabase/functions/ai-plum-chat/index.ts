@@ -221,6 +221,7 @@ async function handleExecutePlan(
       status: "error",
       error: "Executor nao devolveu resultado.",
     };
+    console.log("[execute_plan]", JSON.stringify(resultado));
     return json({ result: resultado });
   } catch (err) {
     // Sem degradação para snapshot antigo aqui, ao contrário de
