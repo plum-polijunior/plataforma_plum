@@ -260,7 +260,16 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       if (formatRes.error) throw new Error(formatRes.error.message || "Erro na IA de Formatação");
 
-      const formatResult = formatRes.data.result;
+      let formatResult = formatRes.data?.result;
+      if (typeof formatResult === "string") {
+        try {
+          const cleaned = formatResult.replace(/```json\n?|\n?```/g, "").trim();
+          formatResult = JSON.parse(cleaned);
+        } catch (e) {
+          console.error("Falha ao analisar JSON retornado:", e);
+        }
+      }
+
       if (formatResult && formatResult.formattedSamples) {
         setFormattedDataSamples(formatResult.formattedSamples);
         setFormattingRules(formatResult.formattingRules || {});
@@ -366,7 +375,19 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
       if (predictRes.error) throw new Error(predictRes.error.message || "Erro na IA de Semântica");
 
-      const definitionsJSON = predictRes.data.result;
+      let definitionsJSON = predictRes.data?.result;
+      if (typeof definitionsJSON === "string") {
+        try {
+          const cleaned = definitionsJSON.replace(/```json\n?|\n?```/g, "").trim();
+          definitionsJSON = JSON.parse(cleaned);
+        } catch (e) {
+          console.error("Falha ao analisar JSON retornado:", e);
+        }
+      }
+      if (!definitionsJSON || typeof definitionsJSON !== "object") {
+        throw new Error("A IA não retornou as definições semânticas em um formato válido.");
+      }
+
       setSemanticDefinitions(definitionsJSON);
       saveSketch(3, { semanticDefinitions: definitionsJSON });
       setStep(3);

@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { parseGeminiJson } from '../_shared/gemini_parsing.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
@@ -152,14 +153,18 @@ Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras d
 
     if (res.ok) {
       const generatedText = data.candidates[0].content.parts[0].text;
-      let finalResponse = generatedText;
+      let finalResponse: unknown = generatedText;
 
       if (isJsonResponse) {
         try {
-          // Tenta fazer parse do JSON retornado pelo Gemini para garantir que é válido
-          finalResponse = JSON.parse(generatedText);
+          // Tolera fences de markdown e lixo à direita (ver _shared/gemini_parsing.ts).
+          finalResponse = parseGeminiJson(generatedText);
         } catch (e) {
+          // Antes: caía em silêncio pro texto bruto, e o front salvava essa
+          // string crua em `semanticDefinitions`/`formattingRules` sem notar
+          // — as caixas de texto por coluna quebravam sem nenhum aviso.
           console.error("Gemini não retornou um JSON válido:", generatedText);
+          throw new Error('A IA nao retornou um JSON valido. Tente novamente.');
         }
       }
 
@@ -168,9 +173,12 @@ Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras d
       // type inventado chegar até o schema_metadata persistido.
       if (
         (action === 'format_data' || action === 'refine_format') &&
-        finalResponse && typeof finalResponse === 'object' && finalResponse.formattingRules
+        finalResponse && typeof finalResponse === 'object'
       ) {
-        finalResponse.formattingRules = sanitizeFormattingRules(finalResponse.formattingRules);
+        const resultado = finalResponse as { formattingRules?: unknown };
+        if (resultado.formattingRules) {
+          resultado.formattingRules = sanitizeFormattingRules(resultado.formattingRules);
+        }
       }
 
       return new Response(JSON.stringify({ result: finalResponse }), {

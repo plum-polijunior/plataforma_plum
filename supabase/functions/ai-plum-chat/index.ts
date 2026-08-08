@@ -36,6 +36,7 @@ import {
   signPayload,
   type QueryPlan,
 } from "../_shared/query_plan.ts";
+import { parseGeminiJson } from "../_shared/gemini_parsing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -238,27 +239,6 @@ async function handleExecutePlan(
 // Agentes Z / A / C — proxy para o Gemini
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Mesmo com response_mime_type "application/json", o Gemini já devolveu
-// texto com uma chave de fechamento sobrando no final (ex: objeto válido
-// seguido de "}" e quebras de linha soltas). JSON.parse é estrito e rejeita
-// o texto inteiro por causa do lixo à direita, mesmo com o objeto em si
-// correto. Em vez de exigir que a resposta inteira seja JSON puro, isola só
-// o primeiro objeto balanceado (da primeira "{" até a "}" que fecha ela) e
-// ignora qualquer coisa depois.
-function extractJsonObject(text: string): string {
-  const inicio = text.indexOf("{");
-  if (inicio === -1) return text.trim();
-  let profundidade = 0;
-  for (let i = inicio; i < text.length; i++) {
-    if (text[i] === "{") profundidade++;
-    else if (text[i] === "}") {
-      profundidade--;
-      if (profundidade === 0) return text.slice(inicio, i + 1);
-    }
-  }
-  return text.slice(inicio).trim();
-}
-
 async function handleAgente(
   action: "guard" | "plan_query" | "synthesize_answer",
   prompt: string,
@@ -354,8 +334,7 @@ Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, e
 
   if (action === "guard" || action === "plan_query") {
     try {
-      const cleaned = generatedText.replace(/```json\n?|\n?```/g, "").trim();
-      finalResponse = JSON.parse(extractJsonObject(cleaned));
+      finalResponse = parseGeminiJson(generatedText);
     } catch {
       console.error("Falha ao parsear JSON retornado pelo Gemini:", generatedText);
       return json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502);
