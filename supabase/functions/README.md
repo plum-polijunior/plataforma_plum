@@ -25,11 +25,11 @@ painel. A integração cobre só Edge Functions; migrations continuam manuais, d
 Comando manual (só para debug local, ou publicar antes de dar push):
 
 ```bash
-supabase functions deploy ai-agents --project-ref rjwidarrsykufuifzunu
-supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
-supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
-supabase functions deploy plum-chat --project-ref rjwidarrsykufuifzunu
-supabase functions deploy send-auth-email --project-ref rjwidarrsykufuifzunu
+npx supabase functions deploy ai-agents --project-ref rjwidarrsykufuifzunu
+npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
+npx supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
+npx supabase functions deploy plum-chat --project-ref rjwidarrsykufuifzunu
+npx supabase functions deploy send-auth-email --project-ref rjwidarrsykufuifzunu
 ```
 
 ## Segredos

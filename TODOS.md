@@ -226,7 +226,7 @@ Rodar a consulta agora mesmo assim custa nada e já informa a Fase 1.
 
 ---
 
-## 8. Investigar o 403 "base nao encontrada" em `execute_plan` (chat)
+## 8. Investigar o 403 "base nao encontrada" em `execute_plan` (chat) — RESOLVIDO em 2026-08-08
 
 **O quê:** no primeiro teste de ponta a ponta do chat (2026-08-07, depois de ligar o executor
 real), toda pergunta chega a `execute_plan` e falha com `{"error": "base nao encontrada"}`,
@@ -278,3 +278,10 @@ resource-based policy no próprio Lambda (`aws lambda add-permission`) — `prov
 some do jeito que estava descrito (o "base nao encontrada" não reproduz mais na mesma
 sequência de testes), mas fica aberto até confirmar em produção que `execute_plan` completa
 de ponta a ponta sem nenhum 403, em qualquer camada.
+
+**Confirmado (2026-08-08):** ao longo desta mesma data, `execute_plan` completou de ponta a
+ponta múltiplas vezes sem 403 em nenhuma camada (ver os logs de Lambda capturados em
+`test_data/test_errors/test_error_2.txt` e `test_error_3.txt`, ambos com `POST /execute 200`).
+O que restava de "não encontrado" no chat era outra causa — investigada e documentada em
+`docs/fases dashboard/2026-08-08-fase-3-e2e-do-chat-e-remocao-do-k-anonimato.md` — e o usuário
+confirmou o chat funcionando ao final da sessão. Item fechado.
