@@ -73,6 +73,17 @@ def test_data_respeita_dayfirst_false_via_params():
     assert out["data_venda"].tolist() == [pd.Timestamp("2026-03-05")]
 
 
+def test_data_converte_numero_de_serie_do_sheets_excel():
+    # UNFORMATTED_VALUE devolve o serial (dias desde 1899-12-30) para celulas
+    # formatadas como Data no Sheets — 46063 = 2026-02-10.
+    df = pd.DataFrame({"data_apontamento": [46063, 46064]})
+    out = apply_formatting_rules(df, {"data_apontamento": _regra("data")})
+    assert out["data_apontamento"].tolist() == [
+        pd.Timestamp("2026-02-10"),
+        pd.Timestamp("2026-02-11"),
+    ]
+
+
 def test_texto_trim_maiusculas():
     df = pd.DataFrame({"cliente": ["  joão  ", "maria"]})
     out = apply_formatting_rules(

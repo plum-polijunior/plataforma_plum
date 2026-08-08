@@ -542,6 +542,14 @@ def _fmt_percentual(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
 
 
 def _fmt_data(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    # UNFORMATTED_VALUE (sheets.py) devolve numero de serie do Sheets/Excel
+    # (dias desde 1899-12-30) para celulas formatadas como Data. pd.to_datetime
+    # de um numero puro conta nanossegundos desde 1970, nao dias desde 1899 —
+    # sem isto a coluna virava silenciosamente timestamps de 1970 e todo filtro
+    # de data deixava de casar com qualquer linha.
+    numerico = pd.to_numeric(s, errors="coerce")
+    if numerico.notna().mean() > 0.5:
+        return pd.to_datetime(numerico, unit="D", origin="1899-12-30", errors="coerce")
     return pd.to_datetime(s, dayfirst=bool(params.get("dayfirst", True)), errors="coerce")
 
 
