@@ -188,6 +188,7 @@ def execute_plan(
     # colunas diretas ao lado de agregações) usavam o mesmo bloco duplicado.
     # Agora é um caminho só: _grouped_agg.
     implicit_gb = [col for _, col in direct_cols if col in df.columns]
+    agregado_unico = False
 
     if gb_cols:
         df_out = _grouped_agg(df, gb_cols, aggs, direct_cols, roles)
@@ -196,17 +197,67 @@ def execute_plan(
     else:
         # ── AGREGADO ÚNICO sobre a base filtrada ──────────────────────────
         # Um número só, sobre a base inteira depois do where.
+        agregado_unico = True
         row: Dict[str, Any] = {}
         for alias, func, col in aggs:
             row[alias] = _scalar_agg(df, func, col, roles)
         df_out = pd.DataFrame([row])
 
     # ── ORDER BY ─────────────────────────────────────────────────────────────
+    # `df_out` já é o resultado agregado, então as colunas dele são os aliases —
+    # não necessariamente os nomes de origem. Um order_by que cita a coluna de
+    # origem de algo renomeado no select ainda é ordenável; é o que o mapa
+    # resolve, em vez de tratar como ausente.
+    saida_de: Dict[str, str] = {}
+    for alias, raw in direct_cols:
+        saida_de.setdefault(raw, alias)
+    for alias, _func, raw in aggs:
+        saida_de.setdefault(raw, alias)
+
     for order in plan.get("order_by", []):
-        col = _strip_table(str(order.get("col", "")))
-        asc = str(order.get("dir", "asc")).lower() == "asc"
-        if col in df_out.columns:
-            df_out = df_out.sort_values(by=col, ascending=asc, na_position="last")
+        # A forma string ("order_by": ["total"]) é aceita pelo `extractColumns`
+        # (_shared/query_plan.ts:112-114, o `else addCol(cols, o)`), mesmo o
+        # prompt do Agente A documentando só a forma objeto. Era outro
+        # `.get()` sobre string: AttributeError, 500 mudo, a mesma causa que o
+        # `select` teve — uma linha ao lado.
+        if isinstance(order, str):
+            col, asc = _strip_table(order), True
+        elif isinstance(order, dict):
+            col = _strip_table(str(order.get("col", "")))
+            asc = str(order.get("dir", "asc")).lower() == "asc"
+        else:
+            raise ExecutorError(
+                f"Item de 'order_by' invalido: esperava string ou objeto, "
+                f"veio {type(order).__name__}."
+            )
+
+        if not col:
+            raise ExecutorError(
+                "Item de 'order_by' sem 'col': nao da para saber por que "
+                "coluna ordenar."
+            )
+
+        alvo = col if col in df_out.columns else saida_de.get(col)
+
+        if alvo is None:
+            if agregado_unico:
+                # Uma linha só: ordenar não quer dizer nada. Recusar o plano
+                # por causa de um order_by inócuo seria pior do que ignorá-lo.
+                logger.info(
+                    "order_by por '%s' ignorado: o resultado tem uma linha so.",
+                    col,
+                )
+                continue
+            # Ignorar em silêncio era o furo: o usuário pede "os 5 maiores",
+            # a ordenação é descartada, o limit corta 5 quaisquer e a resposta
+            # volta errada com cara de certa. É o mesmo motivo pelo qual o
+            # where levanta MissingColumnError em vez de virar "sem filtro".
+            raise MissingColumnError(
+                f"Coluna '{col}' pedida em order_by nao esta no resultado. "
+                f"Disponiveis: {', '.join(map(str, df_out.columns))}."
+            )
+
+        df_out = df_out.sort_values(by=alvo, ascending=asc, na_position="last")
 
     # ── LIMIT ────────────────────────────────────────────────────────────────
     limit = plan.get("limit", 200)
