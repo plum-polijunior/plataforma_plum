@@ -1,7 +1,15 @@
 -- =========================================================================
--- SSO POR DOMÍNIO — liga polijunior.com.br → organização "Bernardo Lmtd"
+-- SSO POR DOMÍNIO — liga polijunior.com.br → organização "Machado Lmtd"
 -- =========================================================================
--- Data: 2026-08-08
+-- Data: 2026-08-08 (nome da organização corrigido em 2026-08-10)
+--
+-- ⚠️ CORREÇÃO 2026-08-10. A primeira versão deste arquivo procurava a
+-- organização "Bernardo Lmtd", que não existe — o nome no banco é
+-- "Machado Lmtd". O bloco DO falhava alto (como projetado), a aplicação
+-- real foi feita com o nome certo, mas o bloco de verificação repetia o
+-- literal errado em três lugares e acusava FALTANDO num banco correto:
+-- passavam só os itens que não tocam em `organizations.name`. O nome agora
+-- vive em UM lugar de cada lado (`v_nome_org` e o CTE `alvo`).
 --
 -- Pré-requisito: 20260722120000 (control plane de SSO) e 20260722130000
 -- (join_mode) já aplicadas.
@@ -17,7 +25,7 @@
 --
 -- Ou seja: a Porta 2 do `handle_new_user` nunca chegou a rotear ninguém.
 -- Esta migration é a decisão de produto que destrava isso, escolhendo a
--- "Bernardo Lmtd" como a organização dona do domínio.
+-- "Machado Lmtd" como a organização dona do domínio.
 --
 -- ⚠️ SUPERSEDE UMA ASSERÇÃO ANTERIOR. O bloco de verificação da
 -- 20260722130000 (linha 449) afirma "Todas as orgs em join_mode = share_id".
@@ -26,13 +34,13 @@
 --
 -- ⚠️ TRÊS CONSEQUÊNCIAS QUE PRECISAM ESTAR CLARAS ANTES DE RODAR
 --
---   1. A "Bernardo Lmtd" DEIXA de aceitar código de convite. A Porta 1 do
+--   1. A "Machado Lmtd" DEIXA de aceitar código de convite. A Porta 1 do
 --      `handle_new_user` (20260722130000:294) exige `join_mode='share_id'`.
 --      Com a org em 'dominio', o `join_code` dela para de funcionar para
 --      cadastros novos. As outras organizações seguem intactas.
 --
 --   2. TODO cadastro novo com e-mail @polijunior.com.br passa a cair na
---      "Bernardo Lmtd" — inclusive pessoas que deveriam entrar nas outras
+--      "Machado Lmtd" — inclusive pessoas que deveriam entrar nas outras
 --      três organizações que usam esse mesmo domínio. Era exatamente isso
 --      que a 20260722130000 evitava. Só faz sentido se as outras três
 --      estiverem inativas ou em consolidação (R-05, isolamento de tenant).
@@ -49,8 +57,9 @@
 
 DO $$
 DECLARE
-  -- ÚNICO PONTO A EDITAR se o nome no banco estiver grafado diferente.
-  v_nome_org  CONSTANT TEXT := 'Bernardo Lmtd';
+  -- Se o nome no banco estiver grafado diferente, edite AQUI e no CTE
+  -- `alvo` do bloco de verificação, lá embaixo — são os dois únicos pontos.
+  v_nome_org  CONSTANT TEXT := 'Machado Lmtd';
   v_dominio   CONSTANT TEXT := 'polijunior.com.br';
 
   v_org_id    UUID;
@@ -132,38 +141,55 @@ END $$;
 -- -------------------------------------------------------------------------
 -- Verificação
 -- -------------------------------------------------------------------------
-SELECT item, CASE WHEN ok THEN 'OK' ELSE 'FALTANDO' END AS situacao
-FROM (VALUES
-  ('Organizacao Bernardo Lmtd em join_mode = dominio',
-   EXISTS (SELECT 1 FROM public.organizations
-            WHERE lower(btrim(name)) = 'bernardo lmtd'
-              AND join_mode = 'dominio')),
+-- O alvo (nome + domínio) aparece UMA vez, na subquery `a` abaixo, e alimenta
+-- tanto os testes quanto os rótulos. Antes da correção de 2026-08-10 o nome estava
+-- repetido em três literais que ninguém sincronizou com `v_nome_org`, e a
+-- verificação acusava FALTANDO num banco correto.
+--
+-- LEITURA DO RESULTADO: se falharem SÓ os três itens que citam o nome da
+-- organização e passarem os outros quatro, o vínculo está funcionando — o
+-- errado é o literal aqui, não o banco. Se falhar "Dominio ... verificado"
+-- ou "resolve_org_from_identity devolve bound", aí sim o roteamento não
+-- acontece.
+SELECT t.item, CASE WHEN t.ok THEN 'OK' ELSE 'FALTANDO' END AS situacao
+FROM (
+  SELECT 'Machado Lmtd'::text      AS nome,   -- ← o outro ponto a editar
+         'polijunior.com.br'::text AS dominio
+) AS a
+CROSS JOIN LATERAL (VALUES
+  ('Organizacao ' || a.nome || ' em join_mode = dominio',
+   EXISTS (SELECT 1 FROM public.organizations o
+            WHERE lower(btrim(o.name)) = lower(btrim(a.nome))
+              AND o.join_mode = 'dominio')),
 
-  ('Dominio polijunior.com.br cadastrado e verificado',
-   EXISTS (SELECT 1 FROM public.organization_domains
-            WHERE domain = 'polijunior.com.br' AND verified = true)),
+  ('Dominio ' || a.dominio || ' cadastrado e verificado',
+   EXISTS (SELECT 1 FROM public.organization_domains od
+            WHERE od.domain = a.dominio AND od.verified = true)),
 
-  ('Dominio aponta para a Bernardo Lmtd',
+  ('Dominio aponta para a ' || a.nome,
    EXISTS (SELECT 1 FROM public.organization_domains od
              JOIN public.organizations o ON o.id = od.organization_id
-            WHERE od.domain = 'polijunior.com.br'
-              AND lower(btrim(o.name)) = 'bernardo lmtd')),
+            WHERE od.domain = a.dominio
+              AND lower(btrim(o.name)) = lower(btrim(a.nome)))),
 
   ('Dominio fora da denylist',
-   NOT EXISTS (SELECT 1 FROM public.public_email_domains
-                WHERE domain = 'polijunior.com.br')),
+   NOT EXISTS (SELECT 1 FROM public.public_email_domains p
+                WHERE p.domain = a.dominio)),
 
   ('Exatamente uma organizacao em modo dominio',
    (SELECT count(*) FROM public.organizations WHERE join_mode = 'dominio') = 1),
 
   -- Exercita a função de verdade, com o mesmo `hd` que o Google manda.
   ('resolve_org_from_identity devolve bound',
-   (SELECT o_result FROM public.resolve_org_from_identity(
-       'alguem@polijunior.com.br', 'polijunior.com.br', NULL)) = 'bound'),
+   (SELECT r.o_result FROM public.resolve_org_from_identity(
+       'alguem@' || a.dominio, a.dominio, NULL) AS r) = 'bound'),
 
-  ('resolve_org_from_identity aponta para a Bernardo Lmtd',
-   (SELECT o.name FROM public.resolve_org_from_identity(
-       'alguem@polijunior.com.br', 'polijunior.com.br', NULL) AS res
-      JOIN public.organizations o ON o.id = res.o_org_id) ILIKE 'bernardo lmtd')
+  -- lower(btrim()) e não ILIKE: o ILIKE de antes deixava passar despercebido
+  -- um espaço nas pontas do nome, ao contrário dos outros dois testes.
+  ('resolve_org_from_identity aponta para a ' || a.nome,
+   (SELECT lower(btrim(o.name))
+      FROM public.resolve_org_from_identity(
+             'alguem@' || a.dominio, a.dominio, NULL) AS res
+      JOIN public.organizations o ON o.id = res.o_org_id) = lower(btrim(a.nome)))
 ) AS t(item, ok)
-ORDER BY ok, item;
+ORDER BY t.ok, t.item;
