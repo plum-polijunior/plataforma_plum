@@ -108,39 +108,63 @@ há garantia visual no dropdown de qual é qual — os dois aparecem só pelo ca
 
 ### Como verificar D
 
-Um `SELECT` solto só mostra resultado pra quem está com a aba do SQL Editor aberta no
-momento em que roda — não fica registrado em lugar nenhum depois disso. Pra virar um log de
-verdade (visível em Supabase → Logs → Postgres Logs, revisável depois, do jeito que os
-`console.log` de `ai-plum-chat`/`ai-agents` já são observabilidade permanente neste
-projeto), envolver a mesma consulta num bloco `DO` com `RAISE NOTICE` por linha:
+⚠️ **Correção de 2026-08-10.** A primeira versão desta seção mandava envolver a consulta num
+bloco `DO` com `RAISE NOTICE`, alegando que isso apareceria em Supabase → Logs → Postgres
+Logs. **Isso não funciona e foi testado**: `log_min_messages` do Postgres vale `warning` por
+padrão, e `NOTICE` fica *abaixo* desse corte — a mensagem só é enviada ao cliente, nunca
+escrita no log do servidor. E o SQL Editor do Supabase não exibe mensagens `NOTICE` na aba
+de resultados. Resultado prático: a consulta rodou, as mensagens foram emitidas, e foram
+descartadas nas duas pontas. Nenhum log em lugar nenhum.
+
+Rode a consulta direta e leia a grade de resultados — é o caminho certo aqui:
+
+```sql
+SELECT d.id            AS dataset_id,
+       d.name,
+       d.status,
+       d.created_at,
+       d.organization_id,
+       r.id            AS admin_role_id,
+       r.name          AS admin_role_name,
+       coalesce(array_length(rp.allowed_columns, 1), 0) AS qtd_colunas_liberadas,
+       rp.allowed_columns
+FROM datasets d
+LEFT JOIN roles r
+  ON r.organization_id = d.organization_id
+ AND lower(btrim(r.name)) = 'admin'
+LEFT JOIN role_permissions rp
+  ON rp.dataset_id = d.id
+ AND rp.role_id    = r.id
+WHERE d.name ILIKE '%produ%'
+ORDER BY d.created_at;
+```
+
+Duas diferenças em relação à versão anterior, além de largar o `DO`: `roles` entra como
+`LEFT JOIN` em vez de subconsulta escalar (a subconsulta estouraria com *"more than one row
+returned by a subquery"* justamente no cenário da hipótese B, que é um dos que se quer
+enxergar), e `qtd_colunas_liberadas` deixa óbvio de bater contra a contagem de colunas do
+`schema_metadata`.
+
+Se aparecer mais de uma linha, a base cujo `id` bate com o que o front está de fato mandando
+em `execute_plan` (ver diagnóstico abaixo) é a que importa.
+
+Se ainda assim quiser deixar registro no log do Postgres (Supabase → Logs → Postgres, URL
+direta `/project/rjwidarrsykufuifzunu/logs/postgres-logs`), o `DO` só funciona trocando a
+severidade — `RAISE WARNING` passa nos dois cortes (cliente e servidor), `RAISE NOTICE` não
+passa em nenhum:
 
 ```sql
 DO $$
-DECLARE
-  rec RECORD;
+DECLARE rec RECORD;
 BEGIN
-  FOR rec IN
-    SELECT d.id, d.name, d.status, d.created_at, d.organization_id,
-           rp.allowed_columns
-    FROM datasets d
-    LEFT JOIN role_permissions rp
-      ON rp.dataset_id = d.id
-     AND rp.role_id = (
-       SELECT r.id FROM roles r
-       WHERE r.organization_id = d.organization_id
-         AND lower(btrim(r.name)) = 'admin'
-     )
-    WHERE d.name ILIKE '%produ%'
-    ORDER BY d.created_at
-  LOOP
-    RAISE NOTICE 'dataset_id=% name=% status=% created_at=% org_id=% allowed_columns=%',
-      rec.id, rec.name, rec.status, rec.created_at, rec.organization_id, rec.allowed_columns;
+  FOR rec IN SELECT d.id, d.name, d.status, d.created_at LOOP
+    RAISE WARNING '[diag-rbac] dataset_id=% name=% status=%', rec.id, rec.name, rec.status;
   END LOOP;
 END $$;
 ```
 
-Se aparecer mais de uma linha nos `NOTICE`, a base cujo `id` bate com o que o front está de
-fato mandando em `execute_plan` (ver diagnóstico abaixo) é a que importa.
+Mas para esta investigação isso é desnecessário: o `SELECT` acima responde D na hora, e o
+registro durável de verdade é o log da Edge Function abaixo.
 
 ## Diagnóstico recomendado (resolve D e qualquer hipótese nova de uma vez)
 
@@ -150,7 +174,8 @@ nada** antes de retornar — ao contrário do caminho de sucesso, que loga
 hipótese sobre "qual coluna faltou e em qual dataset/cargo" teve que ser reconstruída às
 cegas a partir do texto da pergunta, sem ver o dado real.
 
-Adicionar um log ali fecha a investigação de forma definitiva, sem mais hipóteses:
+**Aplicado em 2026-08-10** (`ai-plum-chat/index.ts`, dentro do `if (!veredito.allowed)`).
+Fecha a investigação de forma definitiva, sem mais hipóteses:
 
 ```ts
 const veredito = authorizePlan(plan as QueryPlan, allowedColumns);
