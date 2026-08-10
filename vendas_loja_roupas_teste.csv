@@ -1,0 +1,41 @@
+﻿Código do Pedido;Data da Venda;Cliente;CPF;Produto;Categoria;Tamanho;Cor;Quantidade;Preço Unitário (R$);Desconto (%);Valor Total (R$);Custo Unitário (R$);Forma de Pagamento;Parcelas;Vendedor(a);Loja / Filial;Canal de Venda;Status do Pedido
+PED-1001;05/01/2026;Maria Silva;123.456.789-01;Camiseta Básica;Camisetas;M;Branco;2;R$ 49,90;0%;R$ 99,80;R$ 18,50;PIX;1;Ana Paula Souza;Loja Centro;Loja Física;Concluído
+PED-1002;05/01/2026;JOÃO PEDRO SANTOS;987.654.321-09;Calça Jeans Skinny;Calças;42;Azul Escuro;1;R$ 189,90;10%;R$ 170,91;R$ 72,00;Cartão de Crédito;3;CARLOS EDUARDO LIMA;Loja Shopping Norte;Loja Física;Concluído
+PED-1003;06/01/2026;ana beatriz oliveira;456.789.123-45;Vestido Midi Floral;Vestidos;P;Verde;1;R$ 259,90;0%;R$ 259,90;R$ 98,00;Cartão de Crédito;6;mariana costa;E-commerce;Site;Concluído
+PED-1004;06/01/2026;Ricardo Mendes;321.654.987-12;Jaqueta Jeans;Jaquetas;G;Azul Claro;1;R$ 329,00;15%;R$ 279,65;R$ 130,00;Boleto;1;Roberto Alves;Loja Shopping Sul;Loja Física;Concluído
+PED-1005;07/01/2026;Fernanda Lima;;Blusa de Tricô;Blusas;M;Bege;3;R$ 129,90;5%;R$ 370,22;R$ 52,00;PIX;1;Juliana Ferreira;E-commerce;Instagram;Concluído
+PED-1006;07/01/2026;Lucas Martins;789.123.456-78;Short Sarja;Shorts;40;Caqui;2;R$ 89,90;0%;R$ 179,80;R$ 34,00;Dinheiro;1;Ana Paula Souza;Loja Centro;Loja Física;Concluído
+PED-1007;08/01/2026;PATRICIA GOMES;147.258.369-00;Camisa Social;Camisas;M;Branco;1;R$ 199,90;0%;R$ 199,90;R$ 79,00;Cartão de Débito;1;CARLOS EDUARDO LIMA;Loja Shopping Norte;Loja Física;Trocado
+PED-1008;08/01/2026;Bruno Carvalho;258.369.147-11;Tênis Casual;Calçados;42;Preto;1;R$ 399,90;20%;R$ 319,92;R$ 165,00;Cartão de Crédito;10;Roberto Alves;Loja Shopping Sul;Loja Física;Concluído
+PED-1009;09/01/2026;Camila Rocha;369.147.258-22;Saia Plissada;Saias;P;Rosa;1;R$ 149,90;0%;R$ 149,90;R$ 58,00;PIX;1;mariana costa;E-commerce;WhatsApp;Cancelado
+PED-1010;09/01/2026;Thiago Barbosa;159.357.486-33;Moletom Canguru;Moletons;GG;Cinza;1;R$ 219,90;10%;R$ 197,91;R$ 88,00;Cartão de Crédito;4;Juliana Ferreira;Loja Centro;Loja Física;Concluído
+PED-1011;12/01/2026;Larissa Nunes;753.951.852-44;Legging Fitness;Fitness;M;Preto;2;R$ 119,90;0%;R$ 239,80;R$ 42,00;PIX;1;Ana Paula Souza;E-commerce;Site;Concluído
+PED-1012;12/01/2026;GUSTAVO PEREIRA;852.741.963-55;Blazer Alfaiataria;Blazers;G;Marinho;1;R$ 549,00;5%;R$ 521,55;R$ 230,00;Cartão de Crédito;8;CARLOS EDUARDO LIMA;Loja Shopping Norte;Loja Física;Concluído
+PED-1013;13/01/2026;isabela freitas;963.852.741-66;Bolsa Tote;Acessórios;Único;Caramelo;1;R$ 279,90;0%;R$ 279,90;R$ 112,00;Boleto;1;Roberto Alves;E-commerce;Marketplace;Pendente
+PED-1014;13/01/2026;Rafael Dias;741.852.963-77;Cinto de Couro;Acessórios;90;Marrom;1;R$ 99,90;0%;R$ 99,90;R$ 38,00;Dinheiro;1;mariana costa;Loja Centro;Loja Física;Concluído
+PED-1015;14/01/2026;Beatriz Almeida;951.753.852-88;Pijama Longo;Pijamas;M;Lilás;2;R$ 139,90;15%;R$ 237,83;R$ 55,00;PIX;1;Juliana Ferreira;E-commerce;Instagram;Concluído
+PED-1016;14/01/2026;Marcelo Ribeiro;357.159.486-99;Camiseta Básica;Camisetas;GG;Preto;4;R$ 49,90;10%;R$ 179,64;R$ 18,50;Cartão de Débito;1;Ana Paula Souza;Loja Shopping Sul;Loja Física;Concluído
+PED-1017;15/01/2026;VANESSA CARDOSO;486.357.159-10;Vestido Midi Floral;Vestidos;M;Azul;1;R$ 259,90;0%;R$ 259,90;R$ 98,00;Cartão de Crédito;5;CARLOS EDUARDO LIMA;E-commerce;Site;Trocado
+PED-1018;15/01/2026;Diego Fernandes;624.813.579-21;Sapatênis;Calçados;41;Branco;1;R$ 289,90;0%;R$ 289,90;R$ 118,00;PIX;1;Roberto Alves;Loja Centro;Loja Física;Concluído
+PED-1019;16/01/2026;Priscila Moraes;135.792.468-32;Sutiã Renda;Íntimo;M;Nude;2;R$ 79,90;0%;R$ 159,80;R$ 28,00;Cartão de Débito;1;mariana costa;Loja Shopping Norte;Loja Física;Concluído
+PED-1020;16/01/2026;Eduardo Pinto;246.813.579-43;Cueca Boxer;Íntimo;G;Sortido;3;R$ 39,90;0%;R$ 119,70;R$ 14,00;Dinheiro;1;Juliana Ferreira;Loja Centro;Loja Física;Concluído
+PED-1021;19/01/2026;Aline Teixeira;579.246.813-54;Jaqueta Jeans;Jaquetas;P;Preto;1;R$ 329,00;0%;R$ 329,00;R$ 130,00;Cartão de Crédito;6;Ana Paula Souza;E-commerce;WhatsApp;Concluído
+PED-1022;19/01/2026;FELIPE ARAÚJO;813.579.246-65;Tênis Casual;Calçados;43;Branco;1;R$ 399,90;10%;R$ 359,91;R$ 165,00;Boleto;1;CARLOS EDUARDO LIMA;Loja Shopping Sul;Loja Física;Pendente
+PED-1023;20/01/2026;natalia campos;468.135.792-76;Blusa de Tricô;Blusas;P;Off White;1;R$ 129,90;0%;R$ 129,90;R$ 52,00;PIX;1;Roberto Alves;E-commerce;Instagram;Concluído
+PED-1024;20/01/2026;Henrique Duarte;792.468.135-87;Calça Jeans Skinny;Calças;40;Preto;2;R$ 189,90;5%;R$ 360,81;R$ 72,00;Cartão de Crédito;3;mariana costa;Loja Shopping Norte;Loja Física;Concluído
+PED-1025;21/01/2026;Sabrina Lopes;;Boné Aba Reta;Acessórios;Único;Verde Militar;1;R$ 69,90;0%;R$ 69,90;R$ 24,00;Dinheiro;1;Juliana Ferreira;Loja Centro;Loja Física;Concluído
+PED-1026;21/01/2026;RODRIGO CASTRO;321.987.654-98;Moletom Canguru;Moletons;M;Vinho;1;R$ 219,90;0%;R$ 219,90;R$ 88,00;Cartão de Débito;1;Ana Paula Souza;Loja Shopping Sul;Loja Física;Cancelado
+PED-1027;22/01/2026;Tatiane Ramos;654.321.987-09;Legging Fitness;Fitness;P;Roxo;1;R$ 119,90;20%;R$ 95,92;R$ 42,00;PIX;1;CARLOS EDUARDO LIMA;E-commerce;Site;Concluído
+PED-1028;22/01/2026;Vitor Hugo Melo;987.321.654-10;Camisa Social;Camisas;G;Azul Claro;2;R$ 199,90;0%;R$ 399,80;R$ 79,00;Cartão de Crédito;4;Roberto Alves;Loja Shopping Norte;Loja Física;Concluído
+PED-1029;23/01/2026;carolina vieira;159.486.357-21;Saia Plissada;Saias;M;Preto;1;R$ 149,90;10%;R$ 134,91;R$ 58,00;Cartão de Débito;1;mariana costa;Loja Centro;Loja Física;Concluído
+PED-1030;23/01/2026;LEANDRO BATISTA;486.159.357-32;Meia Kit 3 Pares;Acessórios;39-42;Sortido;5;R$ 34,90;0%;R$ 174,50;R$ 11,00;PIX;1;Juliana Ferreira;E-commerce;Marketplace;Concluído
+PED-1031;26/01/2026;Juliana Prado;357.486.159-43;Vestido Midi Floral;Vestidos;GG;Vermelho;1;R$ 259,90;25%;R$ 194,93;R$ 98,00;Cartão de Crédito;3;Ana Paula Souza;Loja Shopping Sul;Loja Física;Concluído
+PED-1032;26/01/2026;Otávio Nogueira;753.486.159-54;Blazer Alfaiataria;Blazers;M;Cinza;1;R$ 549,00;0%;R$ 549,00;R$ 230,00;Boleto;1;CARLOS EDUARDO LIMA;E-commerce;Site;Pendente
+PED-1033;27/01/2026;renata siqueira;159.753.486-65;Bolsa Tote;Acessórios;Único;Preto;1;R$ 279,90;10%;R$ 251,91;R$ 112,00;PIX;1;Roberto Alves;Loja Centro;Loja Física;Concluído
+PED-1034;27/01/2026;MARCOS ANTONIO REIS;486.753.159-76;Short Sarja;Shorts;44;Azul Marinho;3;R$ 89,90;5%;R$ 256,22;R$ 34,00;Cartão de Débito;1;mariana costa;Loja Shopping Norte;Loja Física;Concluído
+PED-1035;28/01/2026;Elaine Cristina Souza;753.159.486-87;Pijama Longo;Pijamas;GG;Azul;1;R$ 139,90;0%;R$ 139,90;R$ 55,00;Dinheiro;1;Juliana Ferreira;Loja Centro;Loja Física;Trocado
+PED-1036;28/01/2026;Anderson Luiz Pires;159.486.753-98;Sapatênis;Calçados;44;Marrom;1;R$ 289,90;15%;R$ 246,42;R$ 118,00;Cartão de Crédito;6;Ana Paula Souza;E-commerce;WhatsApp;Concluído
+PED-1037;29/01/2026;Bianca Monteiro;486.159.753-09;Camiseta Básica;Camisetas;P;Rosa;2;R$ 49,90;0%;R$ 99,80;R$ 18,50;PIX;1;CARLOS EDUARDO LIMA;E-commerce;Instagram;Concluído
+PED-1038;29/01/2026;WILSON TAVARES;753.486.951-10;Cinto de Couro;Acessórios;95;Preto;2;R$ 99,90;0%;R$ 199,80;R$ 38,00;Cartão de Débito;1;Roberto Alves;Loja Shopping Sul;Loja Física;Concluído
+PED-1039;30/01/2026;Simone Barros;951.486.753-21;Sutiã Renda;Íntimo;G;Preto;1;R$ 79,90;10%;R$ 71,91;R$ 28,00;PIX;1;mariana costa;E-commerce;Site;Concluído
+PED-1040;30/01/2026;Gabriel Fonseca;486.951.753-32;Jaqueta Jeans;Jaquetas;M;Azul Escuro;1;R$ 329,00;0%;R$ 329,00;R$ 130,00;Cartão de Crédito;5;Juliana Ferreira;Loja Shopping Norte;Loja Física;Concluído
