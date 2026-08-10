@@ -80,11 +80,36 @@ function walkWhere(node: unknown, into: Set<string>, depth = 0): void {
 }
 
 /**
- * Todas as colunas que um Query Plan referencia, em qualquer posição.
+ * Os nomes que o `select` **cria** (o `as` de cada expressão nomeada).
+ *
+ * Não são colunas de origem: `{"expr":{"agg":"count","col":"estudo"},"as":"quantidade"}`
+ * lê `estudo` da planilha e batiza o resultado de `quantidade`. Nenhuma planilha
+ * tem uma coluna `quantidade`, e nenhum `allowed_columns` pode conter uma.
+ */
+function selectAliases(plan: QueryPlan): Set<string> {
+  const aliases = new Set<string>();
+  for (const item of plan.select ?? []) {
+    if (!item || typeof item !== "object") continue;
+    const as = (item as Record<string, unknown>).as;
+    if (typeof as !== "string") continue;
+    const a = stripTable(as.trim());
+    if (a) aliases.add(a);
+  }
+  return aliases;
+}
+
+/**
+ * Todas as colunas de ORIGEM que um Query Plan referencia — as que serão lidas
+ * da planilha e, por isso, as que o RBAC precisa autorizar.
  *
  * As seis posições possíveis: `target_columns`, `select` (expressão string),
  * `select` (expressão objeto com `col`), `where` (recursivo), `group_by` e
  * `order_by`. Se alguma escapar, uma coluna proibida atravessa a checagem.
+ *
+ * `order_by` é a única com dois espaços de nomes, porque é a única que o
+ * executor resolve DEPOIS da agregação (`query_engine/pandas_executor.py`,
+ * bloco ORDER BY): ali as colunas do frame já são os aliases do `select`. Ver
+ * `selectAliases` e o comentário no laço correspondente.
  */
 export function extractColumns(plan: QueryPlan | null | undefined): Set<string> {
   const cols = new Set<string>();
@@ -107,11 +132,32 @@ export function extractColumns(plan: QueryPlan | null | undefined): Set<string> 
 
   walkWhere(plan.where, cols);
 
+  // `group_by` é aplicado ANTES da agregação, sobre o frame de origem, então
+  // aqui um nome é sempre coluna de verdade. Continua estrito de propósito: um
+  // alias em `group_by` seria uma coluna real sendo lida, e dispensá-lo abriria
+  // exatamente o bypass que este arquivo existe para fechar.
   for (const c of plan.group_by ?? []) addCol(cols, c);
 
+  // `order_by` é o oposto: roda depois da agregação, sobre o frame de saída,
+  // cujas colunas são os aliases. Ordenar por um alias não lê nada da planilha
+  // — o valor já foi derivado de colunas que passaram por esta mesma checagem.
+  //
+  // Tratar o alias como coluna de origem barrava plano legítimo. Em 2026-08-10,
+  // "quais estudos tem?" gerou `order_by: [{col:"quantidade"}]` sobre o alias do
+  // próprio `count`, e um Admin com todas as 7 colunas liberadas recebeu "sua
+  // pergunta usa uma coluna que seu cargo nao pode ver" — porque `quantidade`
+  // era exigida em `allowed_columns`, onde ela não pode estar. Era também a
+  // causa real de `investigacao-rbac-admin-colunas-negadas.md`, cujas hipóteses
+  // A–D procuravam desalinhamento de dado que não existia.
+  //
+  // Excluir o alias corrige duas coisas de uma vez: `required` vira o conjunto
+  // que o executor consegue de fato carregar da planilha. Pedir `quantidade` ao
+  // `sheets.py` seria `MissingColumnError` mesmo com o RBAC liberado.
+  const aliases = selectAliases(plan);
   for (const o of plan.order_by ?? []) {
-    if (o && typeof o === "object") addCol(cols, (o as Record<string, unknown>).col);
-    else addCol(cols, o);
+    const bruto = o && typeof o === "object" ? (o as Record<string, unknown>).col : o;
+    if (typeof bruto === "string" && aliases.has(stripTable(bruto.trim()))) continue;
+    addCol(cols, bruto);
   }
 
   return cols;

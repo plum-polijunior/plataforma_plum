@@ -165,6 +165,21 @@ async function handleExecutePlan(
   // tirar uma coluna do plano mudaria o significado do número sem ninguém notar.
   const veredito = authorizePlan(plan as QueryPlan, allowedColumns);
   if (!veredito.allowed) {
+    // Era o único branch de `execute_plan` que retornava calado, e isso custou
+    // caro: `investigacao-rbac-admin-colunas-negadas.md` levantou quatro
+    // hipóteses sobre desalinhamento de dado (dataset duplicado, role_id errado,
+    // NBSP em allowed_columns) porque não havia como ver QUAL coluna faltou. A
+    // causa real era um alias de agregação em order_by, visível de imediato aqui.
+    console.error(
+      "[execute_plan] RBAC negou colunas",
+      JSON.stringify({
+        datasetId,
+        roleId: profile.role_id,
+        colunasNegadas: veredito.forbidden,
+        colunasNecessarias: veredito.required,
+        allowedColumns,
+      }),
+    );
     return json({
       result: {
         status: "forbidden",
