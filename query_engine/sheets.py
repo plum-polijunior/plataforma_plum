@@ -105,7 +105,38 @@ def build_service(service_account_info: dict):
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
-def _translate(exc: Exception, sheet_id: str) -> SheetError:
+def _titulos_das_abas(service, sheet_id: str) -> List[str]:
+    """
+    Os nomes das abas da planilha, para o erro poder dizer o que existe.
+
+    Best-effort de propósito: roda só no caminho de erro, e se ela mesma falhar
+    a mensagem continua melhor do que era antes. Nunca levanta.
+    """
+    try:
+        resp = (
+            service.spreadsheets()
+            .get(spreadsheetId=sheet_id, fields="sheets.properties.title")
+            .execute()
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Nao consegui listar as abas de %s", sheet_id[:8])
+        return []
+
+    titulos = []
+    for s in resp.get("sheets") or []:
+        t = (s.get("properties") or {}).get("title")
+        if t:
+            titulos.append(str(t))
+    return titulos
+
+
+def _translate(
+    exc: Exception,
+    sheet_id: str,
+    *,
+    service=None,
+    tab: Optional[str] = None,
+) -> SheetError:
     """
     Erro do Google vira frase que o usuário final entende.
 
@@ -129,6 +160,27 @@ def _translate(exc: Exception, sheet_id: str) -> SheetError:
             "O Google recusou por excesso de leituras neste minuto. "
             "Tente de novo em instantes."
         )
+    if status == 400:
+        # Nome de aba errado é 400 ("Unable to parse range"), não 404. Sem este
+        # branch caía na frase genérica de erro inesperado, e em 2026-08-10 isso
+        # custou uma investigação inteira: `datasets.google_sheet_tab` estava no
+        # default 'Sheet1' (nenhum código do front escreve esse campo) numa
+        # planilha cuja aba tem outro nome, e a única pista era "nao consegui ler
+        # a planilha agora".
+        #
+        # A checagem de `sheets` vazio em `get_meta` já tinha a frase certa, mas
+        # é inalcançável: o Google recusa o range antes de responder 200.
+        logger.warning(
+            "Sheets recusou a requisicao (400) na planilha %s, aba %r: %s",
+            sheet_id[:8], tab, exc,
+        )
+        alvo = f"A aba '{tab}' nao existe nessa planilha." if tab else (
+            "A planilha recusou a faixa pedida."
+        )
+        abas = _titulos_das_abas(service, sheet_id) if service is not None else []
+        if abas:
+            return SheetError(f"{alvo} Abas disponiveis: {', '.join(abas)}.")
+        return SheetError(f"{alvo} Confira o nome da aba na configuracao da base.")
     logger.exception("Falha inesperada lendo a planilha %s", sheet_id)
     return SheetError("Nao consegui ler a planilha agora.")
 
@@ -161,7 +213,7 @@ def get_meta(service, sheet_id: str, tab: str) -> SheetMeta:
             .execute()
         )
     except Exception as exc:  # noqa: BLE001
-        raise _translate(exc, sheet_id) from exc
+        raise _translate(exc, sheet_id, service=service, tab=tab) from exc
 
     sheets = resp.get("sheets") or []
     if not sheets:
@@ -222,7 +274,7 @@ def _fetch_columns_uncached(
             .execute()
         )
     except Exception as exc:  # noqa: BLE001
-        raise _translate(exc, sheet_id) from exc
+        raise _translate(exc, sheet_id, service=service, tab=tab) from exc
 
     logger.info(
         "Sheets: 1 batchGet para %d coluna(s) da planilha %s (cache miss)",

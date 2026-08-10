@@ -15,10 +15,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from query_engine.sheets import (  # noqa: E402
+    SERVICE_ACCOUNT_EMAIL,
     SheetError,
     _col_letter,
     _quoted_sheet,
     _ranges_for,
+    _translate,
 )
 
 
@@ -86,3 +88,88 @@ class TestRangesFor:
         ranges, nomes = _ranges_for(self.HEADERS, {"regiao"}, "Sheet1")
         assert nomes == ["regiao"]
         assert len(ranges) == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tradução de erro do Google
+#
+# Aba errada é 400 ("Unable to parse range"), não 404. Sem tratar esse status a
+# frase que chegava ao usuário era "Nao consegui ler a planilha agora." — a
+# genérica de erro inesperado. Em 2026-08-10 isso escondeu a causa real (o campo
+# `datasets.google_sheet_tab` no default 'Sheet1' numa planilha cuja aba tem
+# outro nome) atrás de uma mensagem que não dava nenhuma pista.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class _Resp:
+    def __init__(self, status):
+        self.status = status
+
+
+class _ErroGoogle(Exception):
+    """Imita o `HttpError` do googleapiclient no que importa: `.resp.status`."""
+
+    def __init__(self, status, msg="Unable to parse range: Sheet1!1:1"):
+        super().__init__(msg)
+        self.resp = _Resp(status)
+
+
+class _ServicoComAbas:
+    """Devolve os títulos das abas, como o `spreadsheets.get` real devolveria."""
+
+    def __init__(self, titulos, falha=False):
+        self._titulos = titulos
+        self._falha = falha
+
+    def spreadsheets(self):
+        return self
+
+    def get(self, **_kwargs):
+        return self
+
+    def execute(self):
+        if self._falha:
+            raise RuntimeError("sem acesso nem para listar")
+        return {"sheets": [{"properties": {"title": t}} for t in self._titulos]}
+
+
+class TestTranslate:
+    def test_400_nomeia_a_aba_e_lista_as_que_existem(self):
+        servico = _ServicoComAbas(["tabela-de-estudos", "notas"])
+        erro = _translate(_ErroGoogle(400), "1nxcqq", service=servico, tab="Sheet1")
+        msg = str(erro)
+        assert "Sheet1" in msg
+        assert "tabela-de-estudos" in msg
+        assert "notas" in msg
+        # A genérica não pode sobreviver aqui: era ela que escondia a causa.
+        assert "Nao consegui ler a planilha agora" not in msg
+
+    def test_400_ainda_e_util_quando_nem_listar_as_abas_funciona(self):
+        # O fallback não pode virar a mensagem genérica de novo: mesmo sem a
+        # lista, dizer QUAL aba falhou já resolve o caso na configuração.
+        servico = _ServicoComAbas([], falha=True)
+        erro = _translate(_ErroGoogle(400), "1nxcqq", service=servico, tab="Sheet1")
+        msg = str(erro)
+        assert "Sheet1" in msg
+        assert "Nao consegui ler a planilha agora" not in msg
+
+    def test_400_sem_service_nao_explode(self):
+        # `_translate` é chamado de dois lugares; nenhum pode virar 500 por
+        # causa da própria tradução do erro.
+        erro = _translate(_ErroGoogle(400), "1nxcqq", tab="Sheet1")
+        assert "Sheet1" in str(erro)
+
+    def test_403_continua_dizendo_o_email_da_conta_de_servico(self):
+        erro = _translate(_ErroGoogle(403), "1nxcqq", tab="Sheet1")
+        assert SERVICE_ACCOUNT_EMAIL in str(erro)
+
+    def test_404_e_429_nao_mudaram(self):
+        assert "apagada" in str(_translate(_ErroGoogle(404), "x", tab="Sheet1"))
+        assert "excesso" in str(_translate(_ErroGoogle(429), "x", tab="Sheet1"))
+
+    def test_status_desconhecido_continua_na_generica(self):
+        # 500 do Google não é problema de configuração: a frase genérica está
+        # certa ali, e trocá-la mandaria o usuário conferir a aba sem motivo.
+        assert "Nao consegui ler a planilha agora" in str(
+            _translate(_ErroGoogle(500), "x", tab="Sheet1")
+        )
