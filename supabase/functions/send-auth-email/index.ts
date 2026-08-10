@@ -10,7 +10,12 @@ interface EmailPayload {
 }
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const SITE_URL = 'https://plum-polijunior.com.br';
+// Onde a aplicação roda de fato. `plum-polijunior.com.br` é o domínio de
+// e-mail/marketing (verificado no Resend para o `from` abaixo, servido pela
+// Hostinger) e NÃO atende a plataforma — apontar os botões para lá levava o
+// usuário a um site sem aplicação. Precisa bater com o Site URL configurado
+// em Authentication → URL Configuration, senão o callback do SSO diverge.
+const SITE_URL = 'https://plataforma-plum-gules.vercel.app';
 
 // Escapa conteúdo vindo do payload antes de interpolar no HTML
 const esc = (valor?: string) =>
