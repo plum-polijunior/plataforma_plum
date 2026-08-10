@@ -433,12 +433,41 @@ def _eval_where(
     df: pd.DataFrame, node: Dict[str, Any], roles: Optional[Dict[str, str]] = None
 ) -> pd.Series:
     roles = roles or {}
+    # `node.get` num tipo que nao e dict vira AttributeError, que nao e
+    # ExecutorError: escaparia do except do main.py e viraria 500 mudo â€” a
+    # mesma falha que a string crua em `select` causava (test_formas_de_plano).
+    if not isinstance(node, dict):
+        raise ExecutorError(
+            f"Filtro 'where' invalido: esperado objeto, veio {type(node).__name__}."
+        )
     op = str(node.get("op", "")).lower()
 
     if op in ("and", "or"):
-        args = node.get("args", [])
-        if not args:
-            return pd.Series([True] * len(df), index=df.index)
+        args = node.get("args")
+        # Um `and`/`or` sem operando NAO pode virar tudo-verdadeiro: isso desliga
+        # o filtro inteiro e devolve a conta sobre a tabela toda com o rotulo do
+        # recorte que o usuario pediu â€” o mesmo numero-errado-com-etiqueta-
+        # convincente que `_eval_single` recusa logo abaixo, e que o `order_by`
+        # descartado calado produzia antes de c47b742. O `where` e justamente a
+        # parte do plano deixada fora do `response_schema` do Gemini
+        # (`ai-plum-chat/index.ts`), entao a chave errada ou ausente e uma saida
+        # que o LLM alcanca sozinho; `authorizePlan` tambem nao barra, porque um
+        # no sem operando nao tem coluna nenhuma pra extrair.
+        if not isinstance(args, list) or not args:
+            logger.error(
+                "Filtro '%s' sem operandos utilizaveis em 'args' (recebido: %r). "
+                "No completo: %r", op, args, node,
+            )
+            raise ExecutorError(
+                f"Filtro '{op}' veio sem condicoes em 'args'. Um filtro vazio "
+                f"devolveria a base inteira com o rotulo do recorte pedido."
+            )
+        for a in args:
+            if not isinstance(a, dict):
+                raise ExecutorError(
+                    f"Condicao invalida dentro de '{op}': esperado objeto, "
+                    f"veio {type(a).__name__}."
+                )
         masks = [_eval_where(df, a, roles) for a in args]
         result = masks[0]
         for m in masks[1:]:

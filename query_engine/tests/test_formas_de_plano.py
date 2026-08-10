@@ -251,3 +251,81 @@ def test_order_by_inocuo_no_agregado_unico_e_ignorado(estudos):
     }
     saida = execute_plan(plano, estudos)
     assert saida["rows"] == [{"total": 16}]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WHERE — o mesmo tudo-verdadeiro, no ramo vizinho de `_eval_where`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.invariante
+@pytest.mark.parametrize(
+    "no_de_filtro",
+    [
+        {"op": "and", "args": []},                     # lista vazia
+        {"op": "and"},                                 # sem a chave
+        {"op": "and", "args": None},                   # null
+        {"op": "or", "args": []},                      # vale pros dois
+        # chave errada — o `where` é a parte do plano deixada FORA do
+        # response_schema do Gemini (ai-plum-chat/index.ts), então é
+        # exatamente onde o LLM inventa nome de campo sozinho.
+        {"op": "and", "conditions": [{"left": "regiao", "op": "=", "right": "Sul"}]},
+    ],
+    ids=["args_vazio", "sem_args", "args_null", "or_vazio", "chave_errada"],
+)
+def test_and_or_sem_operando_nao_pode_desligar_o_filtro(vendas, no_de_filtro):
+    """
+    Um `and`/`or` sem operando devolvia Series([True]*len(df)) — o filtro sumia
+    e a conta rodava sobre a tabela inteira, devolvendo o total da base com o
+    rótulo do recorte que o usuário pediu. "Quantas vendas no Sul?" → 12.
+
+    É a mesma falha que `_eval_single` recusa vinte linhas abaixo (coluna
+    ausente) e que o `order_by` descartado calado produzia antes de c47b742.
+    Número errado com etiqueta convincente é pior que erro na tela.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": no_de_filtro,
+    }
+    with pytest.raises(ExecutorError) as erro:
+        execute_plan(plano, vendas)
+    # a mensagem tem que dizer o que fazer, não só que falhou
+    assert "args" in str(erro.value)
+
+
+def test_and_com_operandos_de_verdade_continua_filtrando(vendas):
+    """A recusa acima não pode ter pegado o caminho legítimo junto."""
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": {
+            "op": "and",
+            "args": [
+                {"left": "regiao", "op": "=", "right": "Sul"},
+                {"left": "faturamento", "op": ">", "right": 50},
+            ],
+        },
+    }
+    assert execute_plan(plano, vendas)["rows"] == [{"total": 6}]
+
+
+def test_condicao_nao_objeto_dentro_de_and_falha_como_erro_do_executor(vendas):
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": {"op": "and", "args": ["regiao = Sul"]},
+    }
+    with pytest.raises(ExecutorError):
+        execute_plan(plano, vendas)
+
+
+def test_where_que_nao_e_objeto_falha_como_erro_do_executor(vendas):
+    """`node.get` numa string é AttributeError → 500 mudo, não ExecutorError."""
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": "regiao = 'Sul'",
+    }
+    with pytest.raises(ExecutorError):
+        execute_plan(plano, vendas)
