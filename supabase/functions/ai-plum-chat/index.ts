@@ -176,6 +176,11 @@ async function handleExecutePlan(
     // inexistente nunca está em allowed_columns, então cai aqui igual. Sem
     // distinguir as duas no log, um erro de planejamento fica indistinguível
     // de um erro de permissão.
+    //
+    // Nota de 2026-08-10, depois de `ed3c007`: a segunda causa era, na prática,
+    // alias de agregação em `order_by` — e essa não chega mais aqui, porque o
+    // `extractColumns` deixou de exigir alias do próprio plano. `inexistentesNoSchema`
+    // não perdeu utilidade: ainda pega o Agente A inventando nome de coluna.
     const colunasDoSchema = Object.keys(
       (dataset.schema_metadata as { columns?: Record<string, unknown> } | null)?.columns ?? {},
     );

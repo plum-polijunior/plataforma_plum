@@ -60,6 +60,113 @@ describe("extractColumns — cobertura de posição", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// order_by sobre alias do select
+//
+// `order_by` roda depois da agregação, sobre o frame de saída, então ali um nome
+// pode ser um alias criado pelo próprio `select` em vez de coluna de origem.
+// Exigir esse alias em `allowed_columns` barrava plano legítimo: era a causa de
+// `investigacao-rbac-admin-colunas-negadas.md`, que procurou desalinhamento de
+// dado por quatro hipóteses sem achar, porque o problema estava aqui.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("extractColumns — alias de agregação em order_by", () => {
+  // O plano exato que o Agente A gerou para "quais estudos tem?" em 2026-08-10.
+  const planoReal = {
+    from: "producao",
+    target_columns: ["estudo"],
+    select: ["estudo", { expr: { agg: "count", col: "estudo" }, as: "quantidade" }],
+    group_by: ["estudo"],
+    order_by: [{ col: "quantidade", dir: "desc" }],
+    limit: 200,
+  };
+
+  it("não exige o alias do count como coluna de origem", () => {
+    expect(extractColumns(planoReal)).toEqual(new Set(["estudo"]));
+  });
+
+  it("aprova o plano real com as colunas que o Admin tem de fato", () => {
+    // As 7 colunas reais de `tabela-de-estudos.csv` em produção.
+    const r = authorizePlan(planoReal, [
+      "nome_do_estudo",
+      "bacia",
+      "estudo",
+      "empresa",
+      "natureza_da_aquisicao",
+      "data_conclusao",
+      "titularidade",
+    ]);
+    expect(r.allowed).toBe(true);
+    expect(r.forbidden).toEqual([]);
+    // `required` é o que o executor vai pedir ao sheets.py. Um alias aqui seria
+    // MissingColumnError mesmo com o RBAC liberado — não existe na planilha.
+    expect(r.required).toEqual(["estudo"]);
+  });
+
+  it("também dispensa o alias na forma string de order_by", () => {
+    const plan = {
+      select: [{ expr: { agg: "sum", col: "faturamento" }, as: "total" }],
+      order_by: ["total"],
+    };
+    expect(extractColumns(plan)).toEqual(new Set(["faturamento"]));
+  });
+
+  it("alias que repete o nome de uma coluna real não some do required", () => {
+    // O `as` coincide com a coluna de origem. Ela continua exigida, porque o
+    // `expr.col` a referencia de verdade — quem manda é o conjunto, não a ordem.
+    const plan = {
+      select: [{ expr: { agg: "sum", col: "faturamento" }, as: "faturamento" }],
+      order_by: [{ col: "faturamento", dir: "desc" }],
+    };
+    expect(extractColumns(plan)).toEqual(new Set(["faturamento"]));
+  });
+});
+
+describe("extractColumns — o alias NÃO é atalho para coluna proibida", () => {
+  const permitidas = ["faturamento", "regiao", "data_venda"];
+
+  it("alias declarado no select não libera group_by pela mesma palavra", () => {
+    // `group_by` é aplicado ANTES da agregação, sobre o frame de origem: ali
+    // `margem_lucro` é leitura de coluna real, não referência ao resultado.
+    // Se a dispensa de alias vazasse para cá, seria bypass de RBAC.
+    const plan = {
+      select: [{ expr: { agg: "count", col: "regiao" }, as: "margem_lucro" }],
+      group_by: ["margem_lucro"],
+    };
+    const r = authorizePlan(plan, permitidas);
+    expect(r.allowed).toBe(false);
+    expect(r.forbidden).toContain("margem_lucro");
+  });
+
+  it("order_by por coluna proibida continua barrado quando não é alias", () => {
+    const plan = {
+      select: [{ expr: { agg: "count", col: "regiao" }, as: "quantidade" }],
+      order_by: [{ col: "margem_lucro", dir: "desc" }],
+    };
+    const r = authorizePlan(plan, permitidas);
+    expect(r.allowed).toBe(false);
+    expect(r.forbidden).toEqual(["margem_lucro"]);
+  });
+
+  it("alias não libera a mesma palavra em target_columns nem no where", () => {
+    const posicoes = [
+      {
+        select: [{ expr: { agg: "count", col: "regiao" }, as: "margem_lucro" }],
+        target_columns: ["margem_lucro"],
+      },
+      {
+        select: [{ expr: { agg: "count", col: "regiao" }, as: "margem_lucro" }],
+        where: { left: "margem_lucro", op: ">", right: 0 },
+      },
+    ];
+    for (const plan of posicoes) {
+      const r = authorizePlan(plan, permitidas);
+      expect(r.allowed, `${JSON.stringify(plan)} deveria ser barrada`).toBe(false);
+      expect(r.forbidden).toContain("margem_lucro");
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Recursão do where
 // ─────────────────────────────────────────────────────────────────────────────
 

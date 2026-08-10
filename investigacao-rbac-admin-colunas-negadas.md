@@ -5,6 +5,51 @@ o motivo do refugo?"**, dataset `producao`, usuário com cargo Admin. Resposta d
 
 > Sua pergunta usa uma coluna que seu cargo nao pode ver.
 
+---
+
+## ⭐ RESOLVIDO em 2026-08-10 — era bug de código, não desalinhamento de dado
+
+**Nenhuma** das hipóteses abaixo era a causa. Todas procuravam dado errado no banco
+(dataset duplicado, `role_id` apontando pro cargo errado, NBSP em `allowed_columns`);
+o banco estava certo o tempo todo.
+
+A causa é `extractColumns` (`_shared/query_plan.ts`) tratar todo `order_by[].col` como
+coluna de origem. Reproduzido com "quais estudos tem?" na base `tabela-de-estudos.csv`,
+onde o Agente A gerou:
+
+```json
+"select":  ["estudo", {"expr":{"agg":"count","col":"estudo"},"as":"quantidade"}],
+"order_by":[{"col":"quantidade","dir":"desc"}]
+```
+
+`quantidade` não é coluna de planilha — é o alias que o próprio `select` criou para o
+`count`. O RBAC exigia esse alias em `allowed_columns`, onde ele não pode estar, então
+o plano era negado **para qualquer cargo**, inclusive um com acesso total. Confirmado
+por `SELECT` em produção: o Admin tinha as 7 colunas da base liberadas, `estudo` entre
+elas.
+
+A pergunta original deste doc ("dia 30 de março, qual foi o motivo do refugo?") cai no
+mesmo lugar: um "os maiores motivos de refugo" gera `order_by` sobre o alias da
+agregação do mesmo jeito.
+
+**Correção:** PR #5, commit `ed3c007`. `order_by` é a única posição que o executor
+resolve depois da agregação (`pandas_executor.py`, bloco ORDER BY), quando as colunas do
+frame já são os aliases — lá o alias do próprio plano deixa de ser exigido. `group_by`,
+`where`, `target_columns` e `select` rodam antes, sobre o frame de origem, e continuam
+estritos; três testes fixam essa fronteira, porque dispensar alias em `group_by` seria
+bypass de RBAC de verdade.
+
+O log recomendado na seção "Diagnóstico recomendado" (abaixo) **foi aplicado** no mesmo
+commit, e é o que faltava: com ele, esse diagnóstico levaria um minuto em vez de quatro
+hipóteses. Publicado em `ai-plum-chat` (v38) e `dashboard-execute` (v28) — as duas
+funções que empacotam o `query_plan.ts`.
+
+O que sobra de lição, e não é pequeno: a análise ficou quatro hipóteses no lado do dado
+porque a mensagem de erro não distinguia "sua permissão está incompleta" de "o plano
+pediu algo que não é coluna". Eram falhas diferentes com o mesmo texto.
+
+---
+
 ## De onde vem essa mensagem exatamente
 
 É o texto literal de `supabase/functions/ai-plum-chat/index.ts:171`, o branch `forbidden`
@@ -41,12 +86,17 @@ backfill. **Descartada.**
 **C) A migration rodou no projeto/ambiente errado** (Supabase local ou de teste, não o
 projeto de produção `rjwidarrsykufuifzunu`). **Descartada.**
 
-## Hipótese ainda em aberto
+## Hipótese que ficou em aberto — e também estava errada
 
 **D) `producao` tem mais de uma linha em `datasets`** (duplicata de um re-upload/reconexão
 anterior), e o dropdown do chat (`PlumChat.tsx`, `selectedDatasetId`) está mandando pro
 `execute_plan` um `dataset_id` **diferente** daquele cuja `role_permissions` foi conferida
 na hipótese A.
+
+> **Descartada em 2026-08-10.** A causa era o alias de agregação em `order_by` (ver o bloco
+> RESOLVIDO no topo). O raciocínio abaixo sobre `DatabasePipeline.tsx` criar linha nova em
+> `datasets` a cada upload que não bata com um rascunho continua factualmente correto e vale
+> como observação sobre duplicação de base — só não é o que causou este erro.
 
 Isso é plausível porque `DatabasePipeline.tsx` (linhas 86-138) só reaproveita um dataset
 já existente quando encontra um **rascunho** (`status = 'processing'`) com o cabeçalho

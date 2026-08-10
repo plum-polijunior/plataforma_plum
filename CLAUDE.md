@@ -96,6 +96,9 @@ infra/aws/
   provision.sh               cria ECR, SSM, IAM roles, OIDC do GitHub (idempotente)
 src/lib/
   google-sheets.ts           utilidades de URL/ID de planilha, com teste (vitest)
+testes/chat/                 roteiros de validação MANUAL do chat (não é o CI — ver README lá)
+  teste-chat-*.md            perguntas em português com gabarito calculado fora do Plum
+  bases/                     os .csv/.xlsx que alimentam os roteiros
 docs/
   PRD-PLUM2.0.md             visão/roadmap — NÃO é o schema real
   SSO-DOMINIO.md             especificação do SSO por domínio
