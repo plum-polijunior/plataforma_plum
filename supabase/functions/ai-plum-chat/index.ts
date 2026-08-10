@@ -125,7 +125,7 @@ async function handleExecutePlan(
 
   const { data: dataset, error: datasetErr } = await supabase
     .from("datasets")
-    .select("id, organization_id, google_sheet_id, google_sheet_tab, schema_metadata")
+    .select("id, name, organization_id, google_sheet_id, google_sheet_tab, schema_metadata")
     .eq("id", datasetId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
@@ -165,6 +165,31 @@ async function handleExecutePlan(
   // tirar uma coluna do plano mudaria o significado do número sem ninguém notar.
   const veredito = authorizePlan(plan as QueryPlan, allowedColumns);
   if (!veredito.allowed) {
+    // Era o único branch de execute_plan sem log nenhum: a mensagem para o
+    // usuário não diz qual coluna faltou nem em qual base, então toda
+    // investigação de RBAC tinha que reconstruir isso às cegas.
+    //
+    // A separação abaixo importa porque este branch tem DUAS causas que o
+    // usuário lê com a mesma frase ("uma coluna que seu cargo nao pode ver"):
+    // a coluna existe na planilha e o cargo não a enxerga (RBAC de verdade),
+    // ou o Agente A citou um nome que não existe no schema_metadata — e nome
+    // inexistente nunca está em allowed_columns, então cai aqui igual. Sem
+    // distinguir as duas no log, um erro de planejamento fica indistinguível
+    // de um erro de permissão.
+    const colunasDoSchema = Object.keys(
+      (dataset.schema_metadata as { columns?: Record<string, unknown> } | null)?.columns ?? {},
+    );
+    console.error("[execute_plan] RBAC negou colunas", JSON.stringify({
+      datasetId: dataset.id,
+      datasetName: dataset.name,
+      roleId: profile.role_id,
+      colunasNecessarias: veredito.required,
+      colunasNegadas: veredito.forbidden,
+      inexistentesNoSchema: veredito.forbidden.filter((c) => !colunasDoSchema.includes(c)),
+      existemMasSemPermissao: veredito.forbidden.filter((c) => colunasDoSchema.includes(c)),
+      allowedColumns,
+      colunasDoSchema,
+    }));
     return json({
       result: {
         status: "forbidden",
