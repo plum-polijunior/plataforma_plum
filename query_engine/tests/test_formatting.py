@@ -186,3 +186,60 @@ def test_type_desconhecido_cai_em_role_text():
         {"col": {"type": "tipo_que_nao_existe", "params": {}}}
     )
     assert roles["col"] == "text"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# `ano` — a coluna que `numero_inteiro` e `data` erram de jeitos opostos
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+ANOS_SUJOS = ["2005", "2000", "01/12/2005", "2015", ""]
+
+
+def test_ano_le_ano_puro_e_data_completa_no_mesmo_frame():
+    """
+    O caso real de `tabela-de-estudos.csv`: 38 células com o ano puro e uma com
+    a data completa. As duas precisam virar o mesmo inteiro de ano.
+    """
+    df = pd.DataFrame({"data_conclusao": ANOS_SUJOS})
+    saida = apply_formatting_rules(df, {"data_conclusao": _regra("ano")})
+
+    assert list(saida["data_conclusao"][:4]) == [2005, 2000, 2005, 2015]
+    assert pd.isna(saida["data_conclusao"][4])
+
+
+def test_ano_resolve_serial_do_sheets():
+    """
+    UNFORMATTED_VALUE devolve serial para célula formatada como Data. 38687 é
+    2005-12-01 — o mesmo registro do teste acima, se o usuário tiver formatado
+    a célula. Precisa dar 2005 igual, não 1970 nem 1905.
+    """
+    df = pd.DataFrame({"ano": [38687, "2005", 2015]})
+    saida = apply_formatting_rules(df, {"ano": _regra("ano")})
+    assert list(saida["ano"]) == [2005, 2005, 2015]
+
+
+def test_ano_nao_repete_os_erros_de_numero_inteiro_nem_de_data():
+    """
+    Fixa lado a lado por que o type existe. Se algum dia `ano` passar a se
+    comportar como um dos dois, este teste cai.
+    """
+    df = pd.DataFrame({"c": ANOS_SUJOS[:4]})
+
+    # numero_inteiro: perde a data completa (vira NA e some das contagens)
+    como_inteiro = apply_formatting_rules(df, {"c": _regra("numero_inteiro")})["c"]
+    assert pd.isna(como_inteiro[2])
+
+    # data: lê o ano puro como serial do Sheets e devolve 1905
+    como_data = apply_formatting_rules(df, {"c": _regra("data")})["c"]
+    assert como_data[0].year == 1905
+
+    # ano: acerta os dois
+    como_ano = apply_formatting_rules(df, {"c": _regra("ano")})["c"]
+    assert list(como_ano) == [2005, 2000, 2005, 2015]
+
+
+def test_ano_tem_papel_proprio_e_nao_number():
+    """O papel separado é o que permite recusar sum/avg sobre ano."""
+    assert TYPE_TO_ROLE["ano"] == "ano"
+    assert roles_from_formatting_rules({"c": _regra("ano")}) == {"c": "ano"}

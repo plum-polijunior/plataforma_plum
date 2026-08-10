@@ -251,3 +251,156 @@ def test_order_by_inocuo_no_agregado_unico_e_ignorado(estudos):
     }
     saida = execute_plan(plano, estudos)
     assert saida["rows"] == [{"total": 16}]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WHERE — o mesmo tudo-verdadeiro, no ramo vizinho de `_eval_where`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.invariante
+@pytest.mark.parametrize(
+    "no_de_filtro",
+    [
+        {"op": "and", "args": []},                     # lista vazia
+        {"op": "and"},                                 # sem a chave
+        {"op": "and", "args": None},                   # null
+        {"op": "or", "args": []},                      # vale pros dois
+        # chave errada — o `where` é a parte do plano deixada FORA do
+        # response_schema do Gemini (ai-plum-chat/index.ts), então é
+        # exatamente onde o LLM inventa nome de campo sozinho.
+        {"op": "and", "conditions": [{"left": "regiao", "op": "=", "right": "Sul"}]},
+    ],
+    ids=["args_vazio", "sem_args", "args_null", "or_vazio", "chave_errada"],
+)
+def test_and_or_sem_operando_nao_pode_desligar_o_filtro(vendas, no_de_filtro):
+    """
+    Um `and`/`or` sem operando devolvia Series([True]*len(df)) — o filtro sumia
+    e a conta rodava sobre a tabela inteira, devolvendo o total da base com o
+    rótulo do recorte que o usuário pediu. "Quantas vendas no Sul?" → 12.
+
+    É a mesma falha que `_eval_single` recusa vinte linhas abaixo (coluna
+    ausente) e que o `order_by` descartado calado produzia antes de c47b742.
+    Número errado com etiqueta convincente é pior que erro na tela.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": no_de_filtro,
+    }
+    with pytest.raises(ExecutorError) as erro:
+        execute_plan(plano, vendas)
+    # a mensagem tem que dizer o que fazer, não só que falhou
+    assert "args" in str(erro.value)
+
+
+def test_and_com_operandos_de_verdade_continua_filtrando(vendas):
+    """A recusa acima não pode ter pegado o caminho legítimo junto."""
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": {
+            "op": "and",
+            "args": [
+                {"left": "regiao", "op": "=", "right": "Sul"},
+                {"left": "faturamento", "op": ">", "right": 50},
+            ],
+        },
+    }
+    assert execute_plan(plano, vendas)["rows"] == [{"total": 6}]
+
+
+def test_condicao_nao_objeto_dentro_de_and_falha_como_erro_do_executor(vendas):
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": {"op": "and", "args": ["regiao = Sul"]},
+    }
+    with pytest.raises(ExecutorError):
+        execute_plan(plano, vendas)
+
+
+def test_where_que_nao_e_objeto_falha_como_erro_do_executor(vendas):
+    """`node.get` numa string é AttributeError → 500 mudo, não ExecutorError."""
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "where": "regiao = 'Sul'",
+    }
+    with pytest.raises(ExecutorError):
+        execute_plan(plano, vendas)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ANO — dimensão, não medida
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def acervo():
+    """8 registros em 4 anos — 2005 aparece 3 vezes, é o pico."""
+    return {
+        "producao": pd.DataFrame(
+            {
+                "ano": pd.array([2000, 2001, 2001, 2005, 2005, 2005, 2015, 2015],
+                                dtype="Int64"),
+                "estudo": [f"e{i}" for i in range(8)],
+            }
+        )
+    }
+
+
+ROLES_ANO = {"ano": "ano", "estudo": "text"}
+
+
+@pytest.mark.parametrize("func", ["sum", "avg", "mean"])
+def test_sum_e_avg_sobre_ano_sao_recusados(acervo, func):
+    """
+    A média de uma coluna de anos (2004.42, no caso real) é um número que o
+    pandas calcula de bom grado e que não significa nada — e chega ao Agente C
+    indistinguível de um resultado legítimo. Diferente do percentual, aqui não
+    dá pra trocar por avg: avg É o problema.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": func, "col": "ano"}, "as": "x"}],
+    }
+    with pytest.raises(ExecutorError) as erro:
+        execute_plan(plano, acervo, column_roles=ROLES_ANO)
+    assert "ano" in str(erro.value)
+
+
+@pytest.mark.parametrize(
+    "func,esperado", [("min", 2000), ("max", 2015), ("count", 8)]
+)
+def test_min_max_count_sobre_ano_continuam_valendo(acervo, func, esperado):
+    """"Estudo mais antigo" e "mais recente" são perguntas legítimas."""
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": func, "col": "ano"}, "as": "x"}],
+    }
+    saida = execute_plan(plano, acervo, column_roles=ROLES_ANO)
+    assert saida["rows"] == [{"x": esperado}]
+
+
+def test_agrupar_por_ano_continua_valendo(acervo):
+    """"Quantos por ano" é o uso principal da coluna."""
+    plano = {
+        "from": "producao",
+        "select": ["ano", {"expr": {"agg": "count", "col": "estudo"}, "as": "n"}],
+        "group_by": ["ano"],
+        "order_by": [{"col": "n", "dir": "desc"}],
+        "limit": 1,
+    }
+    saida = execute_plan(plano, acervo, column_roles=ROLES_ANO)
+    assert saida["rows"] == [{"ano": 2005, "n": 3}]
+
+
+def test_filtrar_por_ano_continua_numerico(acervo):
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "estudo"}, "as": "n"}],
+        "where": {"left": "ano", "op": ">", "right": 2010},
+    }
+    saida = execute_plan(plano, acervo, column_roles=ROLES_ANO)
+    assert saida["rows"] == [{"n": 2}]

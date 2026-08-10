@@ -69,6 +69,10 @@ def _is_text(col: str, roles: Dict[str, str]) -> bool:
     return roles.get(col) == "text"
 
 
+def _is_ano(col: str, roles: Dict[str, str]) -> bool:
+    return roles.get(col) == "ano"
+
+
 def execute_plan(
     plan: Dict[str, Any],
     tables: Dict[str, pd.DataFrame],
@@ -162,6 +166,18 @@ def execute_plan(
                     "Coluna '%s' e percentual: trocando sum por avg.", col
                 )
                 func = "avg"
+            # Ano e dimensao, nao medida. Aqui NAO da pra trocar por avg como no
+            # percentual: a media dos anos e justamente o numero sem sentido do
+            # problema (avg de uma coluna 2000..2015 devolve 2004.42, que parece
+            # uma resposta). min/max/count continuam valendo — "ano mais antigo"
+            # e "quantos por ano" sao perguntas legitimas.
+            if func in ("sum", "avg", "mean") and _is_ano(col, roles):
+                raise ExecutorError(
+                    f"'{func}' sobre a coluna de ano '{col}' nao produz um "
+                    f"numero com significado. Ano serve para agrupar, filtrar "
+                    f"ou pegar o menor/maior — para contar registros use "
+                    f"count sobre outra coluna."
+                )
             alias = alias or f"{func}_{col}"
             aggs.append((alias, func, col))
         else:
@@ -433,12 +449,41 @@ def _eval_where(
     df: pd.DataFrame, node: Dict[str, Any], roles: Optional[Dict[str, str]] = None
 ) -> pd.Series:
     roles = roles or {}
+    # `node.get` num tipo que nao e dict vira AttributeError, que nao e
+    # ExecutorError: escaparia do except do main.py e viraria 500 mudo — a
+    # mesma falha que a string crua em `select` causava (test_formas_de_plano).
+    if not isinstance(node, dict):
+        raise ExecutorError(
+            f"Filtro 'where' invalido: esperado objeto, veio {type(node).__name__}."
+        )
     op = str(node.get("op", "")).lower()
 
     if op in ("and", "or"):
-        args = node.get("args", [])
-        if not args:
-            return pd.Series([True] * len(df), index=df.index)
+        args = node.get("args")
+        # Um `and`/`or` sem operando NAO pode virar tudo-verdadeiro: isso desliga
+        # o filtro inteiro e devolve a conta sobre a tabela toda com o rotulo do
+        # recorte que o usuario pediu — o mesmo numero-errado-com-etiqueta-
+        # convincente que `_eval_single` recusa logo abaixo, e que o `order_by`
+        # descartado calado produzia antes de c47b742. O `where` e justamente a
+        # parte do plano deixada fora do `response_schema` do Gemini
+        # (`ai-plum-chat/index.ts`), entao a chave errada ou ausente e uma saida
+        # que o LLM alcanca sozinho; `authorizePlan` tambem nao barra, porque um
+        # no sem operando nao tem coluna nenhuma pra extrair.
+        if not isinstance(args, list) or not args:
+            logger.error(
+                "Filtro '%s' sem operandos utilizaveis em 'args' (recebido: %r). "
+                "No completo: %r", op, args, node,
+            )
+            raise ExecutorError(
+                f"Filtro '{op}' veio sem condicoes em 'args'. Um filtro vazio "
+                f"devolveria a base inteira com o rotulo do recorte pedido."
+            )
+        for a in args:
+            if not isinstance(a, dict):
+                raise ExecutorError(
+                    f"Condicao invalida dentro de '{op}': esperado objeto, "
+                    f"veio {type(a).__name__}."
+                )
         masks = [_eval_where(df, a, roles) for a in args]
         result = masks[0]
         for m in masks[1:]:
@@ -594,6 +639,49 @@ def _fmt_data(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     return via_serial.where(numerico.notna(), via_texto)
 
 
+# Faixa que conta como "ano ja escrito por extenso". O serial do Sheets para
+# qualquer data moderna e muito maior (2005-12-01 = 38687), entao ele cai no
+# ramo de baixo e e resolvido como data — que e exatamente o que queremos.
+# Colisao residual conhecida: serial 1000..9999 e uma data entre 1902 e 1927,
+# que seria lida como ano. Numa coluna que o Agente 3 classificou como `ano`
+# isso e improvavel, e o erro seria visivel (um "ano" de 1902), nao silencioso.
+_ANO_MIN, _ANO_MAX = 1000, 9999
+
+
+def _fmt_ano(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
+    """
+    Coluna de ano: devolve sempre o inteiro do ano, venha ele como ano puro
+    ("2005", 2005) ou como data completa ("01/12/2005", ou o serial do Sheets).
+
+    Existe porque `numero_inteiro` e `data` erram esta coluna de jeitos opostos,
+    e nenhum dos dois avisa (visto na base `tabela-de-estudos`, 38 celulas com
+    `2005` e uma com `01/12/2005`):
+
+      - `numero_inteiro` manda a data completa para `NaN`: o registro some de
+        todo filtro e de todo agrupamento por ano. Em `tabela-de-estudos` isso
+        inverte a resposta de "qual o ano com mais estudos" (2005 perde 1 e
+        empata com 2001, e o `limit 1` responde 2001).
+      - `data` faz o contrario: o ano puro `2005` e numerico, entao
+        `_fmt_data` o le como serial do Sheets e devolve 1905-06-27. A coluna
+        inteira vira 1905 e toda ordenacao por tempo passa a mentir.
+
+    A decisao aqui e por linha, como em `_fmt_data`, e pela mesma razao: a
+    mesma coluna tem as duas coisas.
+    """
+    numerico = pd.to_numeric(s, errors="coerce")
+    ano = numerico.where(numerico.between(_ANO_MIN, _ANO_MAX))
+
+    faltando = ano.isna()
+    if faltando.any():
+        # Sobrou o que nao e ano puro: data em texto ou serial do Sheets.
+        # `_fmt_data` ja decide entre os dois por linha — reusar evita ter
+        # duas regras de leitura de data divergindo com o tempo.
+        via_data = _fmt_data(s.where(faltando), params)
+        ano = ano.fillna(via_data.dt.year)
+
+    return ano.astype("Int64")
+
+
 def _fmt_texto_trim_maiusculas(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     return s.astype(str).str.strip().str.upper()
 
@@ -635,6 +723,7 @@ _FORMATTERS: Dict[str, Callable[[pd.Series, Dict[str, Any]], pd.Series]] = {
     "numero_inteiro": _fmt_numero_inteiro,
     "percentual": _fmt_percentual,
     "data": _fmt_data,
+    "ano": _fmt_ano,
     "texto_trim_maiusculas": _fmt_texto_trim_maiusculas,
     "texto_trim_minusculas": _fmt_texto_trim_minusculas,
     "documento_cpf_cnpj": _fmt_documento_cpf_cnpj,
@@ -650,6 +739,10 @@ TYPE_TO_ROLE: Dict[str, str] = {
     "numero_inteiro": "number",
     "percentual": "percent",
     "data": "date",
+    # `ano` tem papel proprio, e nao "number", porque ano e DIMENSAO e nao
+    # medida: somar ou tirar media de anos produz um numero que o executor
+    # calcula de bom grado e que nao significa nada (ver `_is_ano`).
+    "ano": "ano",
     "texto_trim_maiusculas": "text",
     "texto_trim_minusculas": "text",
     "documento_cpf_cnpj": "text",
