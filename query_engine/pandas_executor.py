@@ -126,8 +126,33 @@ def execute_plan(
     aggs: list = []          # (alias, func, raw_col)
 
     for item in select_items:
-        expr = item.get("expr")
-        alias = item.get("as")
+        # Duas formas válidas de item, ambas documentadas no prompt do Agente A
+        # ("cada item pode ser uma string (coluna direta) ou objeto") e ambas já
+        # tratadas por `extractColumns` (_shared/query_plan.ts):
+        #   "faturamento"                                  ← coluna direta
+        #   {"expr": ..., "as": ...}                       ← expressão nomeada
+        # A string crua caía num `item.get("expr")` e virava AttributeError, que
+        # não é ExecutorError: escapava do `except` do main.py e virava 500, e a
+        # pergunta do usuário morria com "Nao consegui calcular isso agora".
+        # Um interpretador que aceita a forma e outro que não é a divergência
+        # que o query_plan.ts existe para evitar.
+        if isinstance(item, str):
+            expr, alias = item, None
+        elif isinstance(item, dict):
+            expr = item.get("expr")
+            alias = item.get("as")
+        else:
+            raise ExecutorError(
+                f"Item de 'select' invalido: esperava string ou objeto, "
+                f"veio {type(item).__name__}."
+            )
+
+        if expr is None:
+            raise ExecutorError(
+                "Item de 'select' sem 'expr': nao da para saber que coluna "
+                "ou agregacao ele pede."
+            )
+
         if isinstance(expr, dict):
             func = str(expr.get("agg", "sum")).lower()
             col = _strip_table(str(expr.get("col", "")))
@@ -232,6 +257,10 @@ def _grouped_agg(
             f"Coluna(s) de agrupamento nao encontrada(s): {', '.join(missing)}."
         )
 
+    # A cópia é o que permite `_coerce_numeric_for_agg` escrever coluna sem
+    # cair em SettingWithCopy: `df` aqui costuma ser a fatia `df[mask]` que o
+    # where produziu, não um frame próprio.
+    df = df.copy()
     _coerce_numeric_for_agg(df, aggs, roles)
     g = df.groupby(gb_cols, dropna=False)
 

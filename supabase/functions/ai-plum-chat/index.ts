@@ -239,6 +239,21 @@ async function handleExecutePlan(
 // Agentes Z / A / C — proxy para o Gemini
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Schema estrito do veredito do Agente Z. Com `response_schema` o Gemini
+// decodifica dentro da gramática do schema, então não consegue emitir aspas
+// ou vírgulas soltas. Em 2026-08-10 um `{..., "assunto": "Estudos Técnicos" " }`
+// derrubou a pergunta inteira no guard — e o veredito nem era de bloqueio,
+// era PERMITIDO.
+const SCHEMA_GUARD = {
+  type: "OBJECT",
+  properties: {
+    status: { type: "STRING", enum: ["PERMITIDO", "BLOQUEADO", "INVIAVEL"] },
+    message: { type: "STRING", nullable: true },
+    assunto: { type: "STRING", nullable: true },
+  },
+  required: ["status"],
+};
+
 async function handleAgente(
   action: "guard" | "plan_query" | "synthesize_answer",
   prompt: string,
@@ -306,43 +321,88 @@ Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, e
 
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`;
 
-  const res = await fetch(geminiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ parts: [{ text: userPrompt }] }],
-      generationConfig: {
-        temperature: action === "plan_query" ? 0.0 : 0.2,
-        response_mime_type: action === "guard" || action === "plan_query"
-          ? "application/json"
-          : "text/plain",
-      },
-    }),
+  const esperaJson = action === "guard" || action === "plan_query";
+
+  // Só o guard usa schema. O Query Plan tem união de tipos em "select" e
+  // recursão em "where"; prender ele num response_schema distorceria o plano,
+  // o que é pior do que uma falha de sintaxe — ali a rede é a retentativa.
+  let usarSchema = action === "guard";
+
+  const corpo = (correcao?: string) => ({
+    system_instruction: { parts: [{ text: systemInstruction }] },
+    contents: [{ parts: [{ text: correcao ? `${userPrompt}\n\n${correcao}` : userPrompt }] }],
+    generationConfig: {
+      temperature: action === "plan_query" ? 0.0 : 0.2,
+      response_mime_type: esperaJson ? "application/json" : "text/plain",
+      ...(usarSchema ? { response_schema: SCHEMA_GUARD } : {}),
+    },
   });
 
-  const data = await res.json();
+  // Duas tentativas quando a resposta precisa ser JSON. Perder a pergunta
+  // inteira porque o modelo emitiu um caractere a mais é caro demais, e a
+  // retentativa não relaxa nenhuma checagem — só pede a mesma resposta de novo.
+  const maxTentativas = esperaJson ? 2 : 1;
+  let textoInvalido = "";
 
-  if (!res.ok) {
-    console.error("ERRO DA API DO GEMINI (ai-plum-chat):", JSON.stringify(data, null, 2));
-    return json({ error: data.error?.message || "Erro na API do Google Gemini" }, 400);
-  }
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    const correcao = tentativa === 1 ? undefined : [
+      "A resposta anterior foi DESCARTADA por não ser JSON sintaticamente válido:",
+      textoInvalido,
+      "Devolva exatamente o mesmo conteúdo, agora como JSON válido: sem markdown,",
+      "sem texto fora do objeto, sem aspas ou vírgulas sobrando.",
+    ].join("\n");
 
-  const generatedText = data.candidates[0].content.parts[0].text;
-  let finalResponse: unknown = generatedText;
+    const res = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo(correcao)),
+    });
 
-  if (action === "guard" || action === "plan_query") {
+    const data = await res.json();
+
+    if (!res.ok) {
+      // O response_schema é endurecimento, não pode ser o que derruba o guard:
+      // se esta versão da API recusar o campo, desliga e repete sem ele — o
+      // comportamento volta a ser exatamente o de antes desta mudança.
+      if (usarSchema && res.status === 400) {
+        console.error(
+          "Gemini recusou o response_schema; repetindo sem ele:",
+          JSON.stringify(data),
+        );
+        usarSchema = false;
+        tentativa--; // o pedido nem chegou a ser avaliado; não gasta tentativa
+        continue;
+      }
+      console.error("ERRO DA API DO GEMINI (ai-plum-chat):", JSON.stringify(data, null, 2));
+      return json({ error: data.error?.message || "Erro na API do Google Gemini" }, 400);
+    }
+
+    // Resposta sem candidato (bloqueio de safety, corte de token) não pode
+    // virar TypeError — vira texto vazio e cai no mesmo caminho de falha.
+    const generatedText: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+    if (!esperaJson) {
+      console.log(`[${action}]`, JSON.stringify(generatedText));
+      return json({ result: generatedText });
+    }
+
     try {
-      finalResponse = parseGeminiJson(generatedText);
+      const finalResponse = parseGeminiJson(generatedText);
+      if (tentativa > 1) {
+        console.log(`[${action}] recuperado na tentativa ${tentativa}.`);
+      }
+      console.log(`[${action}]`, JSON.stringify(finalResponse));
+      return json({ result: finalResponse });
     } catch {
-      console.error("Falha ao parsear JSON retornado pelo Gemini:", generatedText);
-      return json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502);
+      textoInvalido = generatedText;
+      console.error(
+        `Falha ao parsear JSON retornado pelo Gemini [${action}, tentativa ${tentativa}/${maxTentativas}]:`,
+        generatedText,
+      );
     }
   }
 
-  console.log(`[${action}]`, JSON.stringify(finalResponse));
-
-  return json({ result: finalResponse });
+  return json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

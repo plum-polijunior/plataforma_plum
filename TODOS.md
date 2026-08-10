@@ -285,3 +285,46 @@ ponta múltiplas vezes sem 403 em nenhuma camada (ver os logs de Lambda capturad
 O que restava de "não encontrado" no chat era outra causa — investigada e documentada em
 `docs/fases dashboard/2026-08-08-fase-3-e2e-do-chat-e-remocao-do-k-anonimato.md` — e o usuário
 confirmou o chat funcionando ao final da sessão. Item fechado.
+
+---
+
+## 9. Migrar o endereço público para `plum-polijunior.com.br`
+
+**O quê:** hoje a plataforma é servida pela URL autogerada da Vercel,
+`https://plataforma-plum-gules.vercel.app`. O endereço definitivo deveria ser
+`plum-polijunior.com.br`. Migrar significa: adicionar o domínio no projeto da Vercel,
+apontar o DNS para lá, e então trocar **três** lugares que precisam concordar entre si.
+
+**Os três lugares (têm que mudar juntos, senão o SSO quebra):**
+
+1. Supabase → Authentication → URL Configuration → **Site URL**
+2. Supabase → Authentication → URL Configuration → **Redirect URLs** (a allowlist)
+3. `supabase/functions/send-auth-email/index.ts` → constante `SITE_URL`, usada nos 4 botões
+   dos e-mails transacionais
+
+**Por quê não agora:** `plum-polijunior.com.br` **não aponta para a Vercel**. Verificado em
+2026-08-09: o apex e o `www` respondem `Server: hcdn` (Hostinger), com IPs distintos entre si,
+enquanto `plataforma-plum-gules.vercel.app` responde `Server: Vercel`. Ou seja, o domínio
+bonito serve outro site. Apontar o Site URL para ele hoje faria o callback do OAuth cair numa
+página sem aplicação — o SSO quebraria de novo, com outro sintoma.
+
+**Contexto — como isso apareceu:** um login por SSO estava terminando em
+`http://localhost:3000/#access_token=...` com `ERR_CONNECTION_REFUSED`. Causa: o Site URL
+nunca saiu do padrão de fábrica do Supabase (`http://localhost:3000`), e como o `redirectTo`
+pedido pelo `Auth.tsx` não estava na allowlist, o Supabase descartava o `redirectTo` e caía no
+Site URL. Ao investigar, apareceu a divergência de domínio: o `SITE_URL` do `send-auth-email`
+apontava para `plum-polijunior.com.br`, então os 4 botões dos e-mails ("Acessar o Plum",
+"Aceitar Convite", "Ver solicitação") levavam para a Hostinger, não para o produto. Isso já
+estava quebrado antes e ninguém tinha notado. A correção de 2026-08-09 alinhou os três lugares
+na URL da Vercel, que é a que funciona hoje.
+
+**Cuidado ao migrar:** `plum-polijunior.com.br` é o domínio verificado no Resend, usado no
+`from: 'Plum <contato@plum-polijunior.com.br>'` (`send-auth-email:182`). Esse campo é do
+remetente de e-mail e **não deve** mudar junto — ele já está certo. O que muda é só para onde
+os links apontam.
+
+**Risco de não fazer:** a URL da Vercel é derivada do nome do projeto. Se alguém renomear o
+projeto na Vercel, ela muda e o SSO quebra de novo, silenciosamente, do mesmo jeito.
+
+**Depende de / bloqueado por:** decidir o que acontece com o site que está hoje na Hostinger
+nesse domínio (fica num subdomínio? sai?), e uma janela para a propagação de DNS.
