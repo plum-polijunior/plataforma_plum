@@ -316,16 +316,20 @@ const Auth = () => {
                 </TabsList>
 
                 {/* Criar organização é raro (uma vez na vida da empresa) —
-                    fica como link secundário, não como opção do mesmo peso
-                    que "Entrar" (que acontece milhares de vezes). */}
-                <Button
-                  type="button"
-                  variant="link"
-                  onClick={() => setActiveTab("criar")}
-                  className="text-base text-muted-foreground hover:text-primary"
-                >
-                  Sua empresa ainda não usa o Plum? Crie uma organização agora!
-                </Button>
+                    fica abaixo do "Entrar" (que acontece milhares de vezes),
+                    com o mesmo estilo do "Entrar no Plum" do Header. */}
+                <div className="inline-block group relative bg-gradient-to-b from-primary/20 to-primary/5 p-px rounded-2xl backdrop-blur-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+                  <Button
+                    type="button"
+                    variant="hero"
+                    onClick={() => setActiveTab("criar")}
+                    className="group"
+                  >
+                    <span className="opacity-90 group-hover:opacity-100 transition-opacity">
+                      Sua empresa ainda não usa o Plum? Crie uma organização agora!
+                    </span>
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -370,11 +374,9 @@ const Auth = () => {
                           </Button>
                         </form>
 
-                        <div className="text-center mt-6">
-                          <Button type="button" variant="link" onClick={() => setLoginMode("new")} className="text-muted-foreground hover:text-primary">
-                            Primeiro acesso
-                          </Button>
-                        </div>
+                        <Button type="button" onClick={() => setLoginMode("new")} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6">
+                          Primeiro acesso
+                        </Button>
                       </>
                     ) : (
                       <>
