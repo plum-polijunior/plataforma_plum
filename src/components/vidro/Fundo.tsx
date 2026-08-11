@@ -58,6 +58,13 @@ function montarFeixes(w: number, h: number): Feixe[] {
  *
  * Nada aqui é interativo — todas as camadas são `pointer-events: none`, e o
  * `prefers-reduced-transparency` esconde o conjunto inteiro (ver `vidro.css`).
+ *
+ * ⚠️ ESTE ARQUIVO É MOVIMENTO DECORATIVO, que o `DESIGN.md` §1 proíbe em App UI
+ * ("só transição de estado, ≤150ms, nada decorativo") — as manchas correm em
+ * laço de 46s, 61s e 53s, sem fim. E é ele que põe gradiente atrás de número,
+ * o item 1 da lista de reprovação automática da §10. Vive só na rota `/vidro`,
+ * e é a parte da proposta que mais depende de uma decisão explícita antes de ir
+ * para qualquer lugar. Ver `docs/direcao-vidro.md` §1.
  */
 export function Fundo({ tema }: { tema: Tema }) {
   const canvas = useRef<HTMLCanvasElement>(null);

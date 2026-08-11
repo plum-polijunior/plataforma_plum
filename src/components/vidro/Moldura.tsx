@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
  * protótipo. `vidro` escolhe a superfície: `base` leva o gradiente da marca por
  * baixo (cromo — rail, cabeçalho, painel do agente) e `alto` é vidro puro
  * (conteúdo — cards e tabelas).
+ *
+ * ⚠️ NÃO COPIE ISTO PARA UMA TELA DE PRODUTO SEM DECISÃO ANTES. Este componente
+ * é as duas coisas que o `DESIGN.md` §1 proíbe em App UI de uma vez: vidro
+ * ("fundo plano, sem gradiente, sem glow, sem vidro") e sombra ("nenhuma —
+ * separação por hairline de 1px"). Ele existe só para a proposta da rota
+ * `/vidro`; usar em tela real exige revisar a §1 antes. Ver
+ * `docs/direcao-vidro.md` §1.
  */
 type Como =
   | "rail"

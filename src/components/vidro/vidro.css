@@ -6,6 +6,15 @@
  * `/vidro`. O `src/index.css` não foi tocado: `:root` continua sendo o claro da
  * Direção A e `.dark` continua sendo o opt-in da landing.
  *
+ * ⚠️ E CONTRARIA O `DESIGN.md` DE PROPÓSITO, em quatro pontos: a §1 pede, para
+ * App UI, fundo "plano, sem gradiente, sem glow, sem vidro" (aqui todo painel é
+ * `backdrop-filter`), sombra "nenhuma" (aqui são três níveis, `--sombra-1/2/3`)
+ * e movimento "só transição de estado, nada decorativo" (aqui as manchas correm
+ * em laço de 46s); a §10 abre a lista de reprovação automática com "gradiente
+ * ou glow atrás de número", que é o que a faixa de KPIs faz. Nenhum token deste
+ * arquivo deve migrar para uma tela de produto sem que a §1 e a §10 sejam
+ * revisadas antes. Balanço completo em `docs/direcao-vidro.md` §1.
+ *
  * Por que um arquivo CSS num repositório Tailwind: quatro coisas aqui não têm
  * utilitário equivalente e virariam valor arbitrário ilegível ou simplesmente
  * não existiriam —
