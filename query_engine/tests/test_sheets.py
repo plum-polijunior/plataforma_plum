@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from query_engine import sheets as sheets_mod  # noqa: E402
 from query_engine.sheets import (  # noqa: E402
     SERVICE_ACCOUNT_EMAIL,
     SheetError,
@@ -21,6 +22,8 @@ from query_engine.sheets import (  # noqa: E402
     _quoted_sheet,
     _ranges_for,
     _translate,
+    mapa_de_abas,
+    resolver_aba,
 )
 
 
@@ -173,3 +176,99 @@ class TestTranslate:
         assert "Nao consegui ler a planilha agora" in str(
             _translate(_ErroGoogle(500), "x", tab="Sheet1")
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolução da aba pelo gid
+#
+# O banco guarda o gid (estável a rename) e a API do Sheets só aceita nome de
+# aba em range, então a tradução acontece no executor. `google_sheet_tab` fica
+# como caminho legado, para linhas sem gid.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class _ServicoComGids:
+    """`spreadsheets.get(fields=sheets.properties(sheetId,title))` fingido."""
+
+    def __init__(self, abas):
+        self._abas = abas          # {gid: titulo}
+        self.chamadas = 0
+
+    def spreadsheets(self):
+        return self
+
+    def get(self, **_kwargs):
+        return self
+
+    def execute(self):
+        self.chamadas += 1
+        return {
+            "sheets": [
+                {"properties": {"sheetId": g, "title": t}} for g, t in self._abas.items()
+            ]
+        }
+
+
+class TestResolverAba:
+    def setup_method(self):
+        # Cache é global ao processo; sem limpar, um teste contamina o outro.
+        sheets_mod._abas_cache.clear()
+
+    ABAS = {991333939: "tabela-de-estudos", 0: "Sheet1", 42: "notas"}
+
+    def test_gid_tem_precedencia_sobre_o_nome_gravado(self):
+        # O caso real: banco com 'Sheet1' (o default que ninguém escreveu) e gid
+        # apontando para a aba de verdade. Sem precedência do gid, o range sai
+        # 'Sheet1'!... e o Google responde 400.
+        servico = _ServicoComGids(self.ABAS)
+        assert resolver_aba(servico, "1nx", "Sheet1", 991333939) == "tabela-de-estudos"
+
+    def test_gid_zero_e_aba_valida_e_nao_cai_no_legado(self):
+        # `if not tab_gid` aqui devolveria 'nome-errado' em vez de resolver.
+        servico = _ServicoComGids(self.ABAS)
+        assert resolver_aba(servico, "1nx", "nome-errado", 0) == "Sheet1"
+
+    def test_sem_gid_usa_o_nome_gravado_e_nao_chama_o_google(self):
+        # Linha legada (ID colado sozinho, ou base anterior à migration).
+        servico = _ServicoComGids(self.ABAS)
+        assert resolver_aba(servico, "1nx", "Vendas 2026", None) == "Vendas 2026"
+        assert servico.chamadas == 0
+
+    def test_gid_que_nao_existe_mais_e_erro_nomeando_as_abas(self):
+        # Nunca cair no `tab`: leria uma aba que ninguém escolheu e devolveria
+        # numero de outro recorte. R-08 — validação alerta, nunca corrige.
+        servico = _ServicoComGids(self.ABAS)
+        with pytest.raises(SheetError) as exc:
+            resolver_aba(servico, "1nx", "Sheet1", 555)
+        msg = str(exc.value)
+        assert "555" in msg
+        assert "tabela-de-estudos" in msg
+        assert "Reconecte" in msg
+
+    def test_gid_e_nome_concordando_resolve_igual(self):
+        servico = _ServicoComGids(self.ABAS)
+        assert resolver_aba(servico, "1nx", "notas", 42) == "notas"
+
+    def test_mapa_de_abas_e_cacheado_por_planilha(self):
+        # Uma requisição por planilha a cada 15 min, não uma por pergunta: sem o
+        # cache, cada card do dashboard dobraria a conta de chamadas contra o
+        # limite de 60/min do Google.
+        servico = _ServicoComGids(self.ABAS)
+        mapa_de_abas(servico, "1nx")
+        mapa_de_abas(servico, "1nx")
+        resolver_aba(servico, "1nx", "Sheet1", 42)
+        assert servico.chamadas == 1
+
+    def test_planilha_sem_aba_nenhuma_nao_explode(self):
+        servico = _ServicoComGids({})
+        with pytest.raises(SheetError) as exc:
+            resolver_aba(servico, "1nx", "Sheet1", 7)
+        assert "nenhuma" in str(exc.value)
+
+    def test_aba_com_espaco_resolvida_por_gid_gera_faixa_valida(self):
+        # Integra com _quoted_sheet: resolver por gid pode devolver nome com
+        # espaço, e ali é onde a notação A1 exige aspas.
+        servico = _ServicoComGids({9: "Vendas 2026"})
+        titulo = resolver_aba(servico, "1nx", "Sheet1", 9)
+        ranges, _ = _ranges_for(["regiao"], {"regiao"}, titulo)
+        assert ranges == ["'Vendas 2026'!A2:A"]

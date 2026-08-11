@@ -72,7 +72,15 @@ class ExecutionPayload(BaseModel):
     """
 
     sheet_id: str
+    # Nome da aba. Só é usado quando `tab_gid` é nulo: nome é apelido mutável, e
+    # por muito tempo este campo ficou no default 'Sheet1' porque nada no front
+    # escrevia nele. Mantido para as linhas que não têm gid (ID colado sozinho,
+    # ou base anterior à migration 20260811000000).
     tab: str = "Sheet1"
+    # Identificador numérico da aba, estável a rename. Tem PRECEDÊNCIA sobre
+    # `tab`. `0` é válido (primeira aba), então o padrão é None e não 0 — e
+    # nenhuma checagem daqui em diante pode usar a verdade do número.
+    tab_gid: Optional[int] = None
     plans: List[PlanRequest]
     allowed_columns: List[str]
     # {coluna: {"type": <enum fechado>, "params": {...}}} — vem do Agente 3/3.1

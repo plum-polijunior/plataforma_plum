@@ -123,7 +123,9 @@ Deno.serve(async (req: Request) => {
   // ── 2. O dataset é desta organização? ────────────────────────────────────
   const { data: dataset } = await supabase
     .from("datasets")
-    .select("id, organization_id, google_sheet_id, google_sheet_tab, schema_metadata")
+    .select(
+      "id, organization_id, google_sheet_id, google_sheet_tab, google_sheet_gid, schema_metadata",
+    )
     .eq("id", body.dataset_id)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
@@ -225,6 +227,10 @@ Deno.serve(async (req: Request) => {
   const payload = {
     sheet_id: dataset.google_sheet_id,
     tab: dataset.google_sheet_tab ?? "Sheet1",
+    // Qual aba, pelo identificador estável — tem precedência sobre `tab` no
+    // executor. `?? null` e não `|| null`: gid 0 é a primeira aba, valor
+    // legítimo que `||` transformaria em null. Mesma nota em ai-plum-chat.
+    tab_gid: dataset.google_sheet_gid ?? null,
     plans: paraExecutar.map(({ card, required }) => ({
       card_id: card.id,
       plan: card.query_plan,

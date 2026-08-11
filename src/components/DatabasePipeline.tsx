@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
 import * as XLSX from "xlsx";
-import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
+import { extrairSheetRef, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
 
 interface DatabasePipelineProps {
   organizationId: string;
@@ -407,8 +407,13 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     // O ID é a fonte da verdade: a API do Google exige o ID, não a URL.
     // Extrair aqui, na escrita, faz o erro aparecer enquanto a pessoa ainda
     // está com o link na mão, em vez de semanas depois quando um card quebrar.
-    const sheetId = extrairSheetId(sheetUrlToSave);
-    if (!sheetId) {
+    //
+    // O `gid` vem no mesmo passo, e é o que identifica a ABA. Ele era
+    // descartado até 2026-08-10, e por isso `google_sheet_tab` nunca saía do
+    // default 'Sheet1': toda base cujos dados não estivessem numa aba com esse
+    // nome exato falhava na primeira pergunta.
+    const ref = extrairSheetRef(sheetUrlToSave);
+    if (!ref) {
       toast({
         title: "Link da planilha inválido",
         description: ERRO_LINK_INVALIDO,
@@ -435,8 +440,9 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           name: fileName || "Nova Planilha",
           status: "active",
           schema_metadata: schemaMetadata as any,
-          google_sheet_id: sheetId,         // fonte da verdade: a API do Google exige o ID
+          google_sheet_id: ref.id,          // fonte da verdade: a API do Google exige o ID
           google_sheet_url: sheetUrlToSave, // só para exibir na tela de bases
+          google_sheet_gid: ref.gid,        // qual ABA — estável a rename, ao contrário do nome
           sketch: null // Limpa o rascunho
         })
         .eq('id', datasetId);
