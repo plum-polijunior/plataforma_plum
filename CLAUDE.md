@@ -436,6 +436,24 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   componente**. O Python espelha a mesma função; ver §3 e a dívida em §8.
 - Alias `@/` → `src/`. Componentes shadcn em `src/components/ui/` — preferir compor a editar.
 - Cores só via CSS variables do tema (`hsl(var(--primary))`), nunca hex solto.
+- ⭐ **Duas superfícies, dois temas, e o `:root` é o do produto.** Desde 2026-08-12 (Direção A)
+  `:root` é o tema **claro** do ambiente interno, com a marca `#7A2F56`; `.dark` guarda os
+  valores escuros de antes e é **opt-in da landing** — `Index.tsx` e `NotFound.tsx` pedem
+  `className="dark"` na raiz do JSX. O `<html class="dark">` fixo saiu do `index.html`.
+  Não inverta isso: o Radix renderiza `Dialog`/`Select`/`Popover` em portal no `body`, fora da
+  árvore do layout, então um wrapper claro no app daria a todo diálogo do produto o tema errado.
+  Todo token novo precisa existir **nos dois blocos** — a landing usa os mesmos primitivos
+  (`ui/button.tsx`). Ver `docs/2026-08-12-direcao-a-no-app.md`.
+- ⚠️ **Hairline é `border-border`, sem opacidade.** `border-border/20` era o padrão no tema
+  escuro e **desaparece no claro** (`--border` já é `#EBE3E7`, L 91%). Para o hover mais forte
+  existe `border-line-hover`. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.
+- **Paleta de série do dashboard: medida, não escolhida.** `cores.ts` tem uma faixa de
+  luminosidade **por matiz** (não global) porque no claro os tetos vão de 32% a 65% — o verde
+  carrega o coeficiente 0,7152 da luminância WCAG. O sinal do desvio de matiz aponta para o
+  vizinho **menos** luminoso, o oposto do que valia no escuro: no claro ele reforça o
+  escurecimento em vez de cancelar a rampa. `i = 0` é o maior valor e recebe o tom **escuro**.
+  `src/lib/contraste-serie.test.ts` trava contraste, ΔE e sentido da rampa — mexeu em constante,
+  rode `npm test`.
 - Toasts via `sonner` / `use-toast`. Dados remotos via `@tanstack/react-query` quando houver
   cache a compartilhar; `useEffect` + `supabase` direto no resto do código atual.
 - `is_org_admin()` é case-insensitive desde a migration 140000 — no front, comparar cargo
@@ -584,4 +602,5 @@ própria sessão ou digite `/`.
 | `docs/fases dashboard/` | Um arquivo por fase, com resumo estruturado por task |
 | `docs/2026-08-11-entrada-e-guardiao-do-dashboard.md` | Tela de entrada (pouso em `/inicio`, hierarquia, validação) e o Agente Z-dash — inclui o custo de cota aceito e as pendências de deploy/validação |
 | `docs/2026-08-11-formato-da-resposta-do-chat.md` | Por que o `**` aparecia na tela (typography instalado e nunca registrado) e o contrato de formato do Agente C — traz o prompt **literal antes e depois**, a matriz de reversão e o `ezbr_sha256` anterior |
+| `docs/2026-08-12-direcao-a-no-app.md` | A Direção A portada para o app: o mecanismo `:root` claro × `.dark` na landing (e por que não o contrário), o mapa de tokens, as **cinco medições** que a paleta de série exigiu no claro, e a saída de emergência de uma palavra |
 | `infra/aws/PASSO-A-PASSO.md` | Como subir o executor |
