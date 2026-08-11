@@ -16,6 +16,18 @@ import { useOrgAccess } from "@/hooks/use-org-access";
 import { useDashboardCards } from "@/hooks/use-dashboard-cards";
 import { CardDashboard } from "@/components/dashboard/CardDashboard";
 import { NovoCardDialog } from "@/components/dashboard/NovoCardDialog";
+import { EditarCardDialog } from "@/components/dashboard/EditarCardDialog";
+import type { AcoesCard } from "@/components/dashboard/AcoesDoCard";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { CardNaTela } from "@/components/dashboard/tipos";
 import { idadeLegivel } from "@/components/dashboard/formato";
@@ -114,6 +126,8 @@ export default function Inicio() {
   // motivo — ficaria "calculado agora" com o dado já de meia hora. Meio minuto
   // é o passo mais grosso que ainda acerta a virada de "agora" para "há 1 min".
   const [criando, setCriando] = useState(false);
+  const [editando, setEditando] = useState<CardNaTela | null>(null);
+  const [apagando, setApagando] = useState<CardNaTela | null>(null);
   const [tique, setTique] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTique((t) => t + 1), 30_000);
@@ -123,6 +137,61 @@ export default function Inicio() {
   // O resultado mais antigo entre os cards. Um card degradado puxa a idade da
   // página para cima, que é o comportamento certo: a página não pode se dizer
   // mais fresca do que o seu pior dado.
+  /**
+   * Trocar a posição com o vizinho DENTRO DO MESMO GRUPO.
+   *
+   * `position` é global por base, mas a tela renderiza números e gráficos em
+   * faixas separadas. Mover contra a lista global faria um KPI "pular" um
+   * gráfico sem sair do lugar na tela — o usuário clicaria de novo achando que
+   * não funcionou. A vizinhança que importa é a que ele enxerga.
+   */
+  async function moverCard(card: CardNaTela, direcao: -1 | 1) {
+    const grupo = cards.filter((c) =>
+      card.viz === "kpi" ? c.viz === "kpi" : c.viz !== "kpi",
+    );
+    const i = grupo.findIndex((c) => c.id === card.id);
+    const vizinho = grupo[i + direcao];
+    if (!vizinho) return;
+
+    const { data: posicoes } = await supabase
+      .from("dashboard_cards")
+      .select("id, position")
+      .in("id", [card.id, vizinho.id]);
+
+    const pA = posicoes?.find((p) => p.id === card.id)?.position ?? 0;
+    const pB = posicoes?.find((p) => p.id === vizinho.id)?.position ?? 0;
+
+    // Duas escritas, não uma transação: se a segunda falhar, os dois cards
+    // ficam com a mesma posição — a ordem entre eles fica indefinida, mas
+    // nenhum card se perde e um novo clique conserta.
+    await supabase.from("dashboard_cards").update({ position: pB }).eq("id", card.id);
+    await supabase.from("dashboard_cards").update({ position: pA }).eq("id", vizinho.id);
+    recarregar();
+  }
+
+  async function apagarCard(card: CardNaTela) {
+    const { error } = await supabase.from("dashboard_cards").delete().eq("id", card.id);
+    if (error) console.error("Falha ao apagar card:", error);
+    setApagando(null);
+    recarregar();
+  }
+
+  function acoesDe(card: CardNaTela): AcoesCard {
+    const grupo = cards.filter((c) =>
+      card.viz === "kpi" ? c.viz === "kpi" : c.viz !== "kpi",
+    );
+    const i = grupo.findIndex((c) => c.id === card.id);
+    return {
+      onEditar: () => setEditando(card),
+      onApagar: () => setApagando(card),
+      // `true` força o recálculo, pulando o cache de snapshot.
+      onRecalcular: () => recarregar(true),
+      onMover: (d) => moverCard(card, d),
+      podeMoverAntes: i > 0,
+      podeMoverDepois: i >= 0 && i < grupo.length - 1,
+    };
+  }
+
   const idadeMaisAntiga = useMemo(() => {
     const datas = cards
       .map((c) => c.calculadoEm)
@@ -220,7 +289,7 @@ export default function Inicio() {
       ) : cards.length === 0 && estado === "pronto" ? (
         <SemCard />
       ) : (
-        <GradeDeCards cards={cards} />
+        <GradeDeCards cards={cards} acoesDe={acoesDe} />
       )}
 
       {baseId && organizationId && (
@@ -233,6 +302,33 @@ export default function Inicio() {
           onPublicado={() => recarregar()}
         />
       )}
+
+      <EditarCardDialog
+        card={editando}
+        onFechar={() => setEditando(null)}
+        onSalvo={() => recarregar()}
+      />
+
+      <AlertDialog open={Boolean(apagando)} onOpenChange={(v) => (v ? null : setApagando(null))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar "{apagando?.titulo}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O card sai da página inicial de toda a organização. O histórico de
+              cálculos dele também é apagado. A planilha não é tocada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => apagando && apagarCard(apagando)}
+            >
+              Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -257,7 +353,13 @@ export default function Inicio() {
  * O primeiro KPI é a figura herói (`DESIGN.md` §5): ocupa o dobro da largura e
  * usa corpo maior. É o único ponto focal da tela.
  */
-function GradeDeCards({ cards }: { cards: CardNaTela[] }) {
+function GradeDeCards({
+  cards,
+  acoesDe,
+}: {
+  cards: CardNaTela[];
+  acoesDe?: (card: CardNaTela) => AcoesCard;
+}) {
   const numeros = cards.filter((c) => c.viz === "kpi");
   const graficos = cards.filter((c) => c.viz !== "kpi");
 
@@ -276,7 +378,7 @@ function GradeDeCards({ cards }: { cards: CardNaTela[] }) {
               key={card.id}
               className={`min-w-[9.5rem] ${i === 0 ? "flex-[2]" : "flex-1"}`}
             >
-              <CardDashboard card={card} compacto heroi={i === 0} />
+              <CardDashboard card={card} compacto heroi={i === 0} acoes={acoesDe?.(card)} />
             </div>
           ))}
         </div>
@@ -285,7 +387,7 @@ function GradeDeCards({ cards }: { cards: CardNaTela[] }) {
       {graficos.length > 0 && (
         <div className="grid items-start gap-4 lg:grid-cols-2">
           {graficos.map((card) => (
-            <CardDashboard key={card.id} card={card} />
+            <CardDashboard key={card.id} card={card} acoes={acoesDe?.(card)} />
           ))}
         </div>
       )}

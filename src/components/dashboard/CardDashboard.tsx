@@ -22,6 +22,7 @@
  */
 
 import { Lock } from "lucide-react";
+import { AcoesDoCard, type AcoesCard } from "./AcoesDoCard";
 import type { CardNaTela } from "./tipos";
 import { idadeLegivel } from "./formato";
 import { VizKpi } from "./VizKpi";
@@ -38,9 +39,11 @@ interface Props {
    * boiando no meio de área vazia.
    */
   compacto?: boolean;
+  /** Ausente na prévia do diálogo: ali o card ainda não existe para ser gerido. */
+  acoes?: AcoesCard;
 }
 
-export function CardDashboard({ card, heroi = false, compacto = false }: Props) {
+export function CardDashboard({ card, heroi = false, compacto = false, acoes }: Props) {
   const idade = idadeLegivel(card.calculadoEm);
 
   // A idade só aparece no card quando ele DIVERGE do resto da página: um
@@ -62,9 +65,12 @@ export function CardDashboard({ card, heroi = false, compacto = false }: Props) 
       // valores alinham embaixo, e a diferença de corpo entre o herói e os
       // outros deixa de virar degrau.
       <article className="flex h-full flex-col rounded-xl border border-border/20 bg-card px-4 py-3.5 transition-colors duration-150 hover:border-border/40 motion-reduce:transition-none">
-        <h2 className="truncate text-xs text-muted-foreground" title={card.titulo}>
-          {card.titulo}
-        </h2>
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="truncate text-xs text-muted-foreground" title={card.titulo}>
+            {card.titulo}
+          </h2>
+          {acoes && <AcoesDoCard acoes={acoes} titulo={card.titulo} />}
+        </div>
         <div className="mt-auto pt-3">
           <Corpo card={card} heroi={heroi} compacto />
         </div>
@@ -83,11 +89,12 @@ export function CardDashboard({ card, heroi = false, compacto = false }: Props) 
         <h2 className="truncate text-sm font-semibold text-foreground" title={card.titulo}>
           {card.titulo}
         </h2>
-        {mostrarIdade && (
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            calculado {idade}
-          </span>
-        )}
+        <div className="flex shrink-0 items-start gap-1">
+          {mostrarIdade && (
+            <span className="pt-0.5 text-[11px] text-muted-foreground">calculado {idade}</span>
+          )}
+          {acoes && <AcoesDoCard acoes={acoes} titulo={card.titulo} />}
+        </div>
       </header>
 
       <div className="flex-1 px-4 py-4">

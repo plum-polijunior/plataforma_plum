@@ -69,7 +69,7 @@ export function useDashboardCards(datasetId: string | null) {
   const [cards, setCards] = useState<CardNaTela[]>([]);
   const [estado, setEstado] = useState<EstadoGrade>("carregando");
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (force = false) => {
     if (!datasetId) return;
     setEstado("carregando");
 
@@ -111,7 +111,10 @@ export function useDashboardCards(datasetId: string | null) {
 
       // ── 2. Os números ─────────────────────────────────────────────────────
       const { data, error } = await supabase.functions.invoke("dashboard-execute", {
-        body: { dataset_id: datasetId },
+        // `force` pula o cache de snapshot na Edge Function. Sem ele, dentro
+        // do TTL o botão de recalcular devolveria o mesmo número e pareceria
+        // quebrado — o navegador não pode apagar snapshot, de propósito.
+        body: { dataset_id: datasetId, force },
       });
 
       if (error) {
