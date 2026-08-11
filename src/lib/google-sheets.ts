@@ -20,22 +20,63 @@ const PADRAO_ID = /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/;
 const PADRAO_ID_CRU = /^[a-zA-Z0-9_-]{20,}$/;
 
 /**
- * Devolve o ID, ou null quando o texto não é um link de planilha reconhecível.
- * Nunca lança: quem chama decide o que fazer com o null, e a decisão é
- * diferente no onboarding e na tela de edição.
+ * O `gid` identifica a ABA dentro da planilha. Aparece como `#gid=123` (o mais
+ * comum) ou `?gid=123`, e a URL real do Google costuma trazer os dois.
  */
-export function extrairSheetId(entrada: string | null | undefined): string | null {
+const PADRAO_GID = /[?#&]gid=(\d+)/;
+
+/** Planilha + aba. `gid` é null quando o texto não carrega essa informação. */
+export interface SheetRef {
+  id: string;
+  gid: number | null;
+}
+
+/**
+ * Devolve `{id, gid}`, ou null quando o texto não é um link de planilha
+ * reconhecível. Nunca lança: quem chama decide o que fazer com o null, e a
+ * decisão é diferente no onboarding e na tela de edição.
+ *
+ * Por que o `gid` importa, e por que ele é gravado em vez do nome da aba: a
+ * API do Google exige o NOME da aba no range (`'Vendas'!A2:A`), mas o nome é
+ * apelido mutável. Guardar o nome funciona até alguém renomear a aba, e aí a
+ * base quebra sem ninguém mexer nela. O `gid` é atribuído na criação da aba e
+ * não muda com rename, então é ele que a gente guarda; o executor traduz para
+ * o nome no momento da leitura.
+ *
+ * Antes desta função, o `gid` era simplesmente descartado aqui. A consequência
+ * medida em produção: `datasets.google_sheet_tab` nunca saía do default
+ * `'Sheet1'`, e toda base cujos dados não estivessem numa aba com esse nome
+ * exato falhava na primeira pergunta — com "Nao consegui ler a planilha agora",
+ * que não dizia nada sobre a causa. Ver
+ * `supabase/migrations/20260811000000_google_sheet_gid.sql`.
+ */
+export function extrairSheetRef(entrada: string | null | undefined): SheetRef | null {
   if (!entrada) return null;
   const texto = entrada.trim();
   if (!texto) return null;
 
-  const casou = texto.match(PADRAO_ID);
-  if (casou?.[1]) return casou[1];
+  const gidCasou = texto.match(PADRAO_GID);
+  // `gid=0` é a primeira aba, e é um valor legítimo. Comparar com null (e não
+  // testar a verdade do número) é o que impede a primeira aba de toda planilha
+  // de ser tratada como "sem aba definida".
+  const gid = gidCasou?.[1] != null ? Number.parseInt(gidCasou[1], 10) : null;
 
-  // Alguém pode colar só o ID. Aceitar é mais gentil que recusar.
-  if (PADRAO_ID_CRU.test(texto)) return texto;
+  const casou = texto.match(PADRAO_ID);
+  if (casou?.[1]) return { id: casou[1], gid };
+
+  // Alguém pode colar só o ID. Aceitar é mais gentil que recusar — mas aí não
+  // há aba nenhuma na entrada, e a base vai depender de `google_sheet_tab`.
+  if (PADRAO_ID_CRU.test(texto)) return { id: texto, gid: null };
 
   return null;
+}
+
+/**
+ * Só o ID. Mantida porque é o que a maior parte do código pede, e porque
+ * trocar todos os chamadores de uma vez seria mudança maior que a necessária.
+ */
+export function extrairSheetId(entrada: string | null | undefined): string | null {
+  return extrairSheetRef(entrada)?.id ?? null;
 }
 
 /** Mensagem única para as duas telas, para o usuário não ver textos diferentes. */

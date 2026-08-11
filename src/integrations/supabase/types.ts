@@ -77,7 +77,14 @@ export type Database = {
           // Ver migration 20260806230000_dashboard_cards.sql, bloco 4.
           google_sheet_id: string | null
           google_sheet_url: string | null
+          // Nome da aba. Só é usado quando `google_sheet_gid` é nulo — nome é
+          // apelido mutável, e um rename da aba quebraria a base em silêncio.
           google_sheet_tab: string
+          // Identificador numérico da aba, estável a rename. Tem precedência
+          // sobre `google_sheet_tab` no executor. **`0` é válido** (primeira
+          // aba): qualquer `if (!gid)` aqui trata a primeira aba como ausente.
+          // Ver migration 20260811000000_google_sheet_gid.sql.
+          google_sheet_gid: number | null
           schema_metadata: Json | null
           sketch: Json | null
           status: string | null
@@ -90,6 +97,7 @@ export type Database = {
           google_sheet_id?: string | null
           google_sheet_url?: string | null
           google_sheet_tab?: string
+          google_sheet_gid?: number | null
           schema_metadata?: Json | null
           sketch?: Json | null
           status?: string | null
@@ -102,6 +110,7 @@ export type Database = {
           google_sheet_id?: string | null
           google_sheet_url?: string | null
           google_sheet_tab?: string
+          google_sheet_gid?: number | null
           schema_metadata?: Json | null
           sketch?: Json | null
           status?: string | null
