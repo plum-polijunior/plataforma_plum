@@ -178,33 +178,36 @@ async function verificarEscopo(pergunta: string): Promise<string | null> {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
         if (usarSchema && res.status === 400) {
-          console.warn("[verificar_escopo] Gemini recusou o response_schema; repetindo sem ele.");
+          console.error(
+            "[gerar_card/z-dash] Gemini recusou o response_schema; repetindo sem ele:",
+            JSON.stringify(data),
+          );
           usarSchema = false;
           continue;
         }
-        console.warn("[verificar_escopo] Gemini nao respondeu ok, seguindo:", res.status);
+        console.warn("[gerar_card/z-dash] Gemini nao respondeu ok, seguindo:", JSON.stringify(data));
         return null;
       }
 
-      const data = await res.json();
       const texto: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       const veredito = parseGeminiJson(texto) as { status?: string; motivo?: string | null };
 
-      if (veredito?.status === "BLOQUEADO") {
-        // Só o `motivo` que o modelo escreveu vai para o log. A pergunta crua
-        // fica de fora de propósito: é texto livre digitado sem pensar, e a D4
-        // (ver cabeçalho de `NovoCardDialog.tsx`) já decidiu não guardar isso
-        // nem no banco — não faria sentido reintroduzi-la pelo log.
-        console.log("[verificar_escopo] BLOQUEADO:", JSON.stringify({ motivo: veredito.motivo ?? null }));
-        return MENSAGEM_FORA_DE_ESCOPO;
-      }
+      if (!usarSchema) console.log("[gerar_card/z-dash] respondido sem response_schema.");
 
-      console.log("[verificar_escopo] PERMITIDO");
-      return null;
+      // Uma linha com o veredito inteiro, como o chat faz com a resposta de
+      // cada agente. O objeto tem só `status` e `motivo`, ambos escritos pelo
+      // modelo — a pergunta crua fica de fora de propósito: é texto livre
+      // digitado sem pensar, e a D4 (ver cabeçalho de `NovoCardDialog.tsx`) já
+      // decidiu não guardar isso nem no banco.
+      console.log("[gerar_card/z-dash]", JSON.stringify(veredito));
+
+      return veredito?.status === "BLOQUEADO" ? MENSAGEM_FORA_DE_ESCOPO : null;
     } catch (err) {
-      console.warn("[verificar_escopo] falhou, seguindo:", err);
+      console.warn("[gerar_card/z-dash] falhou, seguindo:", err);
       return null;
     } finally {
       // No `finally` e não depois do `fetch`: quando o `fetch` rejeita por erro
@@ -344,7 +347,7 @@ async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Re
 
     const data = await res.json();
     if (!res.ok) {
-      console.error("[gerar_card] erro do Gemini:", JSON.stringify(data));
+      console.error("[gerar_card/tarsila] erro do Gemini:", JSON.stringify(data));
       // Cota estourada chega aqui. Vale uma mensagem que diga o que fazer, em
       // vez de repassar o texto do Google cru para o usuário final.
       const msg = String(data?.error?.message ?? "");
@@ -374,11 +377,15 @@ async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Re
     const texto: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     try {
       const card = parseGeminiJson(texto);
-      console.log("[gerar_card]", JSON.stringify(card));
+      // Uma linha com o card inteiro que o agente devolveu — é o que permite
+      // reconstruir depois por que um card saiu como saiu, já que a pergunta
+      // de origem não é guardada em lugar nenhum (D4).
+      if (tentativa > 1) console.log(`[gerar_card/tarsila] recuperado na tentativa ${tentativa}.`);
+      console.log("[gerar_card/tarsila]", JSON.stringify(card));
       return json({ card });
     } catch {
       textoInvalido = texto;
-      console.error(`[gerar_card] JSON invalido (tentativa ${tentativa}/2):`, texto);
+      console.error(`[gerar_card/tarsila] JSON invalido (tentativa ${tentativa}/2):`, texto);
     }
   }
 
