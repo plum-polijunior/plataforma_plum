@@ -460,3 +460,41 @@ passou a devolver R$ 2.387,92.
 **Depende de / bloqueado por:** decisão de quem cuida do onboarding (`ai-agents` /
 `DatabasePipeline.tsx`). A saída 1 é a única que pega o caso de verdade, e é justamente a que
 exige trabalho no pipeline de importação.
+
+
+---
+
+## 13. A escala do percentual é ambígua, e hoje quem chuta é a tela
+
+**O quê:** o executor devolve percentual como está na planilha, e há duas origens
+legítimas para a mesma ideia de "10%":
+
+| Origem | O executor recebe |
+|---|---|
+| Célula formatada como porcentagem no Sheets | `0.1` (fração) |
+| Texto `"10%"` numa célula comum | `10` (pontos) — `_fmt_percentual` tira o `%` |
+
+Nada no `formatting_rule` distingue as duas: o `type` informa **que** é percentual,
+não em **que escala**. É a mesma família da dívida do `query_engine/urgent.md`.
+
+**Medido em 2026-08-11:** o card "Desconto médio" da base sintética mostrou **0,05%**
+onde o gabarito diz **5,00%**. O Sheets guardara os descontos como fração.
+
+**Mitigação aplicada, e é um chute:** `src/components/dashboard/formato.ts` assume
+fração quando o valor é `< 1` e multiplica por 100. Resolve o caso comum e **falha
+numa base cujos percentuais sejam todos abaixo de 1%** — 0,3% de taxa viraria 30%.
+
+**Por que a tela é o lugar errado:** ela vê um agregado, um número só. O executor vê
+a **coluna inteira**. Decidir a escala olhando 40 valores é qualitativamente mais
+confiável que olhar uma média — e ali dá para usar sinais melhores que magnitude,
+como todos os valores estarem no intervalo [0,1].
+
+**E o chat tem o mesmo problema, sem nem a mitigação:** perguntar "qual o desconto
+médio" devolve o número cru para o Agente C, que o repassa como veio.
+
+**Saída proposta:** `_fmt_percentual` (`query_engine/pandas_executor.py`) normaliza a
+coluna para pontos percentuais na ingestão. Aí o executor sempre emite uma escala só,
+o front só acrescenta o `%`, e a heurística morre — inclusive a do chat.
+
+**Depende de / bloqueado por:** é `query_engine`, compartilhado com o chat. Merece o
+mesmo cuidado da Fase 4: plano curto antes, e teste dos dois lados.

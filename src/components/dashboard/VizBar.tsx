@@ -39,6 +39,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { LinhaResultado } from "./tipos";
 import { formatarValor, unidadeDaColuna } from "./formato";
+import { corDaSerie } from "./cores";
 
 interface Props {
   colunas: string[];
@@ -47,6 +48,8 @@ interface Props {
   colunaOrigem?: string;
   /** `sum`, `count`, `avg`, `min`, `max`. Decide se parte-do-todo faz sentido. */
   agregacao?: string;
+  /** Posicao do card na grade, decide o matiz. Ver `cores.ts`. */
+  slotCor?: number;
 }
 
 /**
@@ -66,7 +69,7 @@ const BARRAS_PADRAO = 4;
 /** Só estas produzem um todo do qual as categorias são partes. */
 const AGREGACOES_SOMAVEIS = new Set(["sum", "count"]);
 
-export function VizBar({ colunas, linhas, colunaOrigem, agregacao }: Props) {
+export function VizBar({ colunas, linhas, colunaOrigem, agregacao, slotCor = 0 }: Props) {
   const [expandido, setExpandido] = useState(false);
 
   // Convenção do Query Plan: a dimensão do `group_by` vem primeiro, a medida
@@ -113,10 +116,6 @@ export function VizBar({ colunas, linhas, colunaOrigem, agregacao }: Props) {
       {visiveis.map((d, i) => {
         const fracao = Math.abs(d.valor) / referencia;
 
-        // Sequencial dentro do slot 1: luminosidade cheia no maior, descendo
-        // até um piso. O piso existe para a última barra continuar visível
-        // contra a superfície do card — escala que some não informa nada.
-        const luz = 56 - Math.min(i, 5) * 4.4;
 
         return (
           <div key={d.rotulo}>
@@ -142,7 +141,7 @@ export function VizBar({ colunas, linhas, colunaOrigem, agregacao }: Props) {
                 className="h-full rounded-r-[3px] transition-[width] duration-150 motion-reduce:transition-none"
                 style={{
                   width: `${Math.max(fracao * 100, 1.5)}%`,
-                  backgroundColor: `hsl(212 78% ${luz}%)`,
+                  backgroundColor: corDaSerie(slotCor, i, Math.min(visiveis.length, 6)),
                 }}
               />
             </div>

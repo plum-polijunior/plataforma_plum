@@ -29,8 +29,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import type { CardNaTela, TipoViz } from "@/components/dashboard/tipos";
-import { formasCompativeis } from "@/components/dashboard/formas";
+import type { CardNaTela, FormaVisual } from "@/components/dashboard/tipos";
+import { formasCompativeis, lerFormasSalvas, salvarFormas } from "@/components/dashboard/formas";
 import { idadeLegivel } from "@/components/dashboard/formato";
 import {
   Select,
@@ -48,7 +48,7 @@ interface BaseLiberada {
 }
 
 export default function Inicio() {
-  const { organizationId, roleId } = useOrgAccess();
+  const { organizationId, roleId, session } = useOrgAccess();
 
   const [bases, setBases] = useState<BaseLiberada[]>([]);
   const [baseId, setBaseId] = useState<string>("");
@@ -156,9 +156,26 @@ export default function Inicio() {
 
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<CardNaTela | null>(null);
-  // Preferência de leitura por card, só nesta sessão e só para esta pessoa.
-  // Não vai para o banco de propósito — ver o comentário em AcoesDoCard.
-  const [formaEscolhida, setFormaEscolhida] = useState<Record<string, TipoViz>>({});
+  // Preferência de leitura por card. Não vai para o banco de propósito — ver o
+  // comentário em `formas.ts`. Inicializada de forma preguiçosa a partir do
+  // localStorage: ler no corpo do componente rodaria a cada renderização.
+  const [formaEscolhida, setFormaEscolhida] = useState<Record<string, FormaVisual>>(() =>
+    lerFormasSalvas(session?.user.id),
+  );
+
+  // O usuário pode chegar antes da sessão resolver (o hook começa em
+  // "carregando"), e aí a leitura inicial acima devolveu {}. Reler quando o id
+  // aparece evita o caso de a preferência só voltar no segundo carregamento.
+  useEffect(() => {
+    if (session?.user.id) setFormaEscolhida(lerFormasSalvas(session.user.id));
+  }, [session?.user.id]);
+
+  // Grava a cada mudança, podando cards que não existem mais. Só depois de os
+  // cards carregarem: com a lista vazia, a poda apagaria tudo.
+  useEffect(() => {
+    if (!cards.length) return;
+    salvarFormas(session?.user.id, formaEscolhida, new Set(cards.map((c) => c.id)));
+  }, [formaEscolhida, cards, session?.user.id]);
   const [apagando, setApagando] = useState<CardNaTela | null>(null);
   const [tique, setTique] = useState(0);
   useEffect(() => {
@@ -436,7 +453,7 @@ function GradeDeCards({
   acoesDe?: (card: CardNaTela) => AcoesCard;
   /** Tela cheia: a grade ocupa a altura disponível e nada rola. */
   preencherTela?: boolean;
-  formaDe?: (card: CardNaTela) => TipoViz | undefined;
+  formaDe?: (card: CardNaTela) => FormaVisual | undefined;
 }) {
   // A separação segue a forma EFETIVA: trocar um KPI para tabela deve movê-lo
   // para a faixa de baixo, senão uma tabela apareceria espremida na tira de
@@ -477,8 +494,17 @@ function GradeDeCards({
           }
           style={preencherTela ? { gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` } : undefined}
         >
-          {graficos.map((card) => (
-            <CardDashboard key={card.id} card={card} acoes={acoesDe?.(card)} vizEfetiva={formaDe?.(card)} />
+          {graficos.map((card, i) => (
+            <CardDashboard
+              key={card.id}
+              card={card}
+              acoes={acoesDe?.(card)}
+              vizEfetiva={formaDe?.(card)}
+              // Posicao na grade, e nao posicao entre os que estao em uma dada
+              // forma: se dependesse disso, trocar a visualizacao de um card
+              // mudaria a cor de outro.
+              slotCor={i}
+            />
           ))}
         </div>
       )}
@@ -510,7 +536,7 @@ function TiraDeNumeros({
 }: {
   cards: CardNaTela[];
   acoesDe?: (card: CardNaTela) => AcoesCard;
-  formaDe?: (card: CardNaTela) => TipoViz | undefined;
+  formaDe?: (card: CardNaTela) => FormaVisual | undefined;
 }) {
   const porFileira = Math.min(cards.length <= 4 ? cards.length : Math.ceil(cards.length / 2), 4);
   const heroiDuplo = cards.length <= 3;

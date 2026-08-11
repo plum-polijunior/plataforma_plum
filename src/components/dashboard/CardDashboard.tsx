@@ -23,12 +23,13 @@
 
 import { Lock } from "lucide-react";
 import { AcoesDoCard, type AcoesCard } from "./AcoesDoCard";
-import type { CardNaTela, TipoViz } from "./tipos";
+import type { CardNaTela, FormaVisual } from "./tipos";
 import { idadeLegivel } from "./formato";
 import { VizKpi } from "./VizKpi";
 import { VizBar } from "./VizBar";
 import { VizTabela } from "./VizTabela";
 import { VizStackedBar } from "./VizStackedBar";
+import { VizPie } from "./VizPie";
 
 interface Props {
   card: CardNaTela;
@@ -50,10 +51,19 @@ interface Props {
    * leitura é da pessoa. Alguém que precisa de tabela por leitor de tela não
    * deveria trocar a visualização para todo mundo.
    */
-  vizEfetiva?: TipoViz;
+  vizEfetiva?: FormaVisual;
+  /** Posicao na grade: decide o matiz das series deste card (`cores.ts`). */
+  slotCor?: number;
 }
 
-export function CardDashboard({ card, heroi = false, compacto = false, acoes, vizEfetiva }: Props) {
+export function CardDashboard({
+  card,
+  heroi = false,
+  compacto = false,
+  acoes,
+  vizEfetiva,
+  slotCor = 0,
+}: Props) {
   const idade = idadeLegivel(card.calculadoEm);
 
   // A idade só aparece no card quando ele DIVERGE do resto da página: um
@@ -82,7 +92,7 @@ export function CardDashboard({ card, heroi = false, compacto = false, acoes, vi
           {acoes && <AcoesDoCard acoes={acoes} titulo={card.titulo} />}
         </div>
         <div className="mt-auto pt-3">
-          <Corpo card={card} heroi={heroi} compacto viz={vizEfetiva} />
+          <Corpo card={card} heroi={heroi} compacto viz={vizEfetiva} slotCor={slotCor} />
         </div>
         {mostrarIdade && (
           <p className="mt-1.5 text-[11px] text-muted-foreground">calculado {idade}</p>
@@ -113,7 +123,7 @@ export function CardDashboard({ card, heroi = false, compacto = false, acoes, vi
           o que a tela cheia existe para evitar. Fora da tela cheia a altura e
           natural e isto nunca dispara. */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <Corpo card={card} heroi={heroi} viz={vizEfetiva} />
+        <Corpo card={card} heroi={heroi} viz={vizEfetiva} slotCor={slotCor} />
       </div>
     </article>
   );
@@ -124,11 +134,13 @@ function Corpo({
   heroi,
   compacto = false,
   viz,
+  slotCor = 0,
 }: {
   card: CardNaTela;
   heroi: boolean;
   compacto?: boolean;
-  viz?: TipoViz;
+  viz?: FormaVisual;
+  slotCor?: number;
 }) {
   if (card.estado === "carregando") return <Esqueleto compacto={compacto} />;
 
@@ -195,6 +207,17 @@ function Corpo({
       />
     );
   }
+  if (forma === "pie") {
+    return (
+      <VizPie
+        colunas={card.colunas}
+        linhas={card.linhas}
+        colunaOrigem={card.colunaOrigem}
+        agregacao={card.agregacao}
+        slotCor={slotCor}
+      />
+    );
+  }
   if (forma === "stacked_bar") {
     return (
       <VizStackedBar
@@ -202,6 +225,7 @@ function Corpo({
         linhas={card.linhas}
         colunaOrigem={card.colunaOrigem}
         agregacao={card.agregacao}
+        slotCor={slotCor}
       />
     );
   }
@@ -212,6 +236,7 @@ function Corpo({
         linhas={card.linhas}
         colunaOrigem={card.colunaOrigem}
         agregacao={card.agregacao}
+        slotCor={slotCor}
       />
     );
   }

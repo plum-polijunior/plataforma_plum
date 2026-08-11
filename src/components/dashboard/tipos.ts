@@ -15,7 +15,22 @@ export type EstadoCard =
   | "forbidden" // o cargo não vê alguma coluna do plano
   | "error";
 
+/** O que o banco aceita em `dashboard_cards.viz` (CHECK da migration). */
 export type TipoViz = "kpi" | "line" | "bar" | "stacked_bar" | "meter" | "table";
+
+/**
+ * O que a TELA sabe desenhar. É maior que `TipoViz` de propósito.
+ *
+ * `pie` existe só aqui: o `CHECK` do banco não a aceita, e não deve mesmo — o
+ * `DESIGN.md` §10 a proíbe como representação PUBLICADA. Mas o alternador
+ * "Ver como" não grava nada, então uma pessoa pode olhar de pizza sem que isso
+ * vire o padrão da organização.
+ *
+ * Manter os dois tipos separados é o que impede a pizza de vazar para um
+ * `INSERT`: qualquer caminho que escreve no banco exige `TipoViz`, e o
+ * compilador recusa `pie` ali.
+ */
+export type FormaVisual = TipoViz | "pie";
 
 /** Uma linha do resultado: objeto por nome de coluna.
  *  Vem de `df_out.to_dict(orient="records")` (`pandas_executor.py:287`). */

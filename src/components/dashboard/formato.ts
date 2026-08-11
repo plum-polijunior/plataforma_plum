@@ -45,8 +45,29 @@ export function unidadeDaColuna(nomeColuna: string | undefined): Unidade {
  */
 export function formatarValor(valor: number, unidade: Unidade): string {
   if (unidade === "percentual") {
+    // ── A ESCALA DO PERCENTUAL É AMBÍGUA, E ISTO É UM CHUTE INFORMADO ───────
+    //
+    // O executor devolve o número como ele está na planilha, e há duas origens
+    // legítimas para a MESMA ideia de "10%":
+    //
+    //   célula formatada como porcentagem no Sheets → 0.1   (fração)
+    //   texto "10%" numa célula comum               → 10    (pontos)
+    //
+    // Nada no `formatting_rule` diz qual é: o `type` informa QUE é percentual,
+    // não em QUE escala. É a mesma dívida que `query_engine/urgent.md` registra.
+    //
+    // O corte: abaixo de 1 assume-se fração. É `< 1` e não `<= 1` de propósito
+    // — uma média de exatamente 1,0 é comum em coluna de pontos (1% médio) e
+    // rara em coluna de fração (exigiria todas as linhas em 100%).
+    //
+    // ONDE ISTO FALHA, e não é hipotético: uma base cujos percentuais sejam
+    // todos abaixo de 1% (0,3% de taxa, por exemplo) seria multiplicada por 100
+    // e mostraria 30%. O conserto certo é no executor, que enxerga a COLUNA
+    // INTEIRA em vez de um agregado — decidir a escala com 40 valores à vista é
+    // outra coisa. Ver `TODOS.md` #13.
+    const emPontos = Math.abs(valor) < 1 ? valor * 100 : valor;
     // Percentual nunca é compactado: "12,9 mil %" não existe.
-    return `${valor.toLocaleString("pt-BR", {
+    return `${emPontos.toLocaleString("pt-BR", {
       minimumFractionDigits: 1,
       maximumFractionDigits: 2,
     })}%`;

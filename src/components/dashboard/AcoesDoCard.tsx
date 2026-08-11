@@ -21,14 +21,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { TipoViz } from "./tipos";
+import type { FormaVisual } from "./tipos";
 import { ROTULO_VIZ } from "./formas";
 
 export interface AcoesCard {
   /** Formas que não distorcem ESTE resultado. Vazio esconde a seção. */
-  formas: TipoViz[];
-  formaAtual: TipoViz;
-  onTrocarForma: (viz: TipoViz) => void;
+  formas: FormaVisual[];
+  formaAtual: FormaVisual;
+  onTrocarForma: (viz: FormaVisual) => void;
   onEditar: () => void;
   onApagar: () => void;
   onRecalcular: () => void;
@@ -63,7 +63,7 @@ export function AcoesDoCard({ acoes, titulo }: { acoes: AcoesCard; titulo: strin
             </DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={acoes.formaAtual}
-              onValueChange={(v) => acoes.onTrocarForma(v as TipoViz)}
+              onValueChange={(v) => acoes.onTrocarForma(v as FormaVisual)}
             >
               {acoes.formas.map((f) => (
                 <DropdownMenuRadioItem key={f} value={f}>
