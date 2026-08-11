@@ -778,11 +778,13 @@ def _eval_single(
 # Execução com Regras de Formatação (Agente 3 & 3.1)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Series:
-    """
-    Limpa um número em formato PT-BR: remove 'R$', espaços, opcionalmente '%',
-    o ponto de milhar, e troca a vírgula decimal por ponto.
-    """
+def _eh_numero(v: object) -> bool:
+    """Número de verdade (não texto, não booleano)."""
+    return isinstance(v, (int, float, np.number)) and not isinstance(v, bool)
+
+
+def _limpar_texto_ptbr(s: pd.Series, *, strip_percent: bool) -> pd.Series:
+    """A limpeza textual: 'R$ 1.234,56' -> 1234.56."""
     text = s.astype(str)
     text = text.str.replace("R$", "", regex=False)
     if strip_percent:
@@ -791,6 +793,46 @@ def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Serie
     text = text.str.replace(".", "", regex=False)
     text = text.str.replace(",", ".", regex=False)
     return pd.to_numeric(text, errors="coerce")
+
+
+def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Series:
+    """
+    Limpa um número em formato PT-BR: remove 'R$', espaços, opcionalmente '%',
+    o ponto de milhar, e troca a vírgula decimal por ponto.
+
+    ⚠️ Valor que JÁ É NÚMERO não passa pela limpeza textual, e isto não é
+    otimização — é correção. `sheets.load_columns` lê com
+    `valueRenderOption=UNFORMATTED_VALUE`, então célula numérica chega como
+    número Python de verdade, e a limpeza tratava o ponto DECIMAL dele como
+    separador de milhar:
+
+        2.5   -> astype(str) -> "2.5"   -> tira "." -> "25"    (x10)
+        90.0  -> "90.0"                 ->           "900"     (x10)
+        0.155 -> "0.155"                ->           "0155"    (x1000)
+
+    Ou seja: toda coluna de dinheiro nativa da planilha vinha multiplicada por
+    10^(casas decimais). Os testes nunca pegaram porque todos alimentam string
+    ("R$ 1.234,56"), que é justamente o caminho que funciona.
+
+    A decisão é por TIPO e não por "dá pra converter": em pt-BR a string
+    "1.234" significa mil duzentos e trinta e quatro, enquanto o número 1.234
+    significa um vírgula dois três quatro. Só o tipo distingue os dois, e
+    tentar `pd.to_numeric` primeiro leria a string errado.
+
+    A mesma coluna pode misturar os dois casos linha a linha (célula digitada
+    como texto ao lado de célula formatada como número), então a escolha é por
+    linha — mesmo padrão que `_fmt_data` já usa para serial vs texto.
+    """
+    if pd.api.types.is_numeric_dtype(s):
+        return pd.to_numeric(s, errors="coerce")
+
+    eh_num = s.map(_eh_numero).fillna(False).astype(bool)
+    if not eh_num.any():
+        return _limpar_texto_ptbr(s, strip_percent=strip_percent)
+
+    via_numero = pd.to_numeric(s.where(eh_num), errors="coerce")
+    via_texto = _limpar_texto_ptbr(s.where(~eh_num), strip_percent=strip_percent)
+    return via_numero.where(eh_num, via_texto)
 
 
 def _fmt_moeda_brl(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
@@ -802,7 +844,33 @@ def _fmt_numero_decimal(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
 
 
 def _fmt_numero_inteiro(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
-    return _parse_ptbr_number(s).astype("Int64")
+    """
+    O `.round()` antes do cast não é preciosismo: `astype("Int64")` sobre um
+    valor fracionário levanta `TypeError` ("cannot safely cast non-equivalent
+    float64 to int64"), que NÃO é `ExecutorError` — escaparia do `except` do
+    `main.py` e viraria 500 mudo, com a pergunta do usuário morrendo em
+    "Nao consegui calcular isso agora".
+
+    Era inalcançável enquanto a limpeza textual comia o ponto decimal (0.15
+    virava 15, inteiro por acidente). Com o número nativo preservado, deixou de
+    ser: `demo_riosulense` tem `percent_peso_nao_conformes` tipado como
+    `numero_inteiro`, e percentual nativo do Sheets chega como 0.15.
+
+    Arredondar em silêncio seria a outra metade do erro, então a perda fica
+    registrada: o `type` veio de um LLM olhando 5 linhas de amostra, e coluna
+    com decimal real tipada como inteiro é sinal de que ele errou.
+    """
+    numeros = _parse_ptbr_number(s)
+    # `notna()` importa: `NaN % 1` é `NaN`, e `NaN != 0` é True — sem isso toda
+    # célula vazia era contada como decimal e o aviso disparava à toa.
+    fracionarios = int((((numeros % 1) != 0) & numeros.notna()).sum())
+    if fracionarios:
+        logger.warning(
+            "Coluna tipada como numero_inteiro tem %d valor(es) com casa "
+            "decimal; arredondando. O 'type' do Agente 3 provavelmente "
+            "deveria ser numero_decimal.", fracionarios,
+        )
+    return numeros.round().astype("Int64")
 
 
 def _fmt_percentual(s: pd.Series, params: Dict[str, Any]) -> pd.Series:

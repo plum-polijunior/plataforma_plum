@@ -243,3 +243,89 @@ def test_ano_tem_papel_proprio_e_nao_number():
     """O papel separado é o que permite recusar sum/avg sobre ano."""
     assert TYPE_TO_ROLE["ano"] == "ano"
     assert roles_from_formatting_rules({"c": _regra("ano")}) == {"c": "ano"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Célula que chega da planilha JÁ como número
+#
+# O buraco que estes testes fecham, achado em 2026-08-11: TODOS os testes acima
+# alimentam string ("R$ 1.234,56"), que é exatamente o caminho que funcionava.
+# Mas `sheets.load_columns` lê com `valueRenderOption=UNFORMATTED_VALUE`, então
+# célula numérica chega como número Python de verdade — e a limpeza textual
+# tratava o ponto DECIMAL dele como separador de milhar:
+#
+#     2.5  -> astype(str) -> "2.5"  -> tira "." -> "25"   (x10)
+#     0.155                                     -> "0155" (x1000)
+#
+# Toda coluna de dinheiro nativa da planilha vinha multiplicada por 10 elevado
+# ao número de casas decimais. Um teste com string nunca pegaria isso.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_moeda_nativa_da_planilha_nao_e_multiplicada_por_dez():
+    """O caso que produziu receita 100x maior antes da correção."""
+    df = pd.DataFrame({"preco": [2.50, 8.00, 90.00, 1234.56]})
+    out = apply_formatting_rules(df, {"preco": _regra("moeda_brl")})
+    assert list(out["preco"]) == [2.50, 8.00, 90.00, 1234.56]
+
+
+def test_numero_decimal_nativo_preserva_as_casas():
+    df = pd.DataFrame({"nota": [7.5, 0.155, 10.0]})
+    out = apply_formatting_rules(df, {"nota": _regra("numero_decimal")})
+    assert list(out["nota"]) == [7.5, 0.155, 10.0]
+
+
+def test_inteiro_nativo_com_buraco_nao_vira_lixo():
+    """
+    Coluna de inteiros com uma célula vazia vira float64 no pandas (100 -> 100.0),
+    e era aí que o inteiro também se corrompia: "100.0" -> "1000".
+    """
+    df = pd.DataFrame({"qtd": [100, 50, None, 20]})
+    out = apply_formatting_rules(df, {"qtd": _regra("numero_inteiro")})
+    assert list(out["qtd"].dropna()) == [100, 50, 20]
+
+
+def test_texto_ptbr_continua_funcionando():
+    """A correção não pode custar o caminho que já estava certo."""
+    df = pd.DataFrame({"faturamento": ["R$ 1.234,56", "R$ 10,00"]})
+    out = apply_formatting_rules(df, {"faturamento": _regra("moeda_brl")})
+    assert list(out["faturamento"]) == [1234.56, 10.00]
+
+
+def test_numero_e_texto_misturados_na_mesma_coluna():
+    """
+    Célula digitada como texto ao lado de célula formatada como número, na mesma
+    coluna — acontece de verdade (ver `_fmt_data`, que já tratava o análogo para
+    data). A decisão é por LINHA: em pt-BR a STRING "1.234" vale 1234, e o
+    NÚMERO 1.234 vale 1,234. Só o tipo distingue.
+    """
+    df = pd.DataFrame({"v": [2.50, "R$ 1.234,56", "1.000", 8.0]}, dtype=object)
+    out = apply_formatting_rules(df, {"v": _regra("moeda_brl")})
+    assert list(out["v"]) == [2.50, 1234.56, 1000.0, 8.0]
+
+
+def test_numero_inteiro_com_fracionario_arredonda_e_avisa(caplog):
+    """
+    `astype("Int64")` sobre fracionário levanta TypeError, que não é
+    ExecutorError: escaparia do `except` do main.py e viraria 500 mudo.
+
+    Ficou alcançável ao preservar o número nativo — `demo_riosulense` tem
+    `percent_peso_nao_conformes` tipado como `numero_inteiro`, e percentual
+    nativo do Sheets chega como 0.15.
+    """
+    df = pd.DataFrame({"p": [0.15, 0.87, 1.0, None]})
+    with caplog.at_level("WARNING"):
+        out = apply_formatting_rules(df, {"p": _regra("numero_inteiro")})
+
+    assert list(out["p"].dropna()) == [0, 1, 1]
+    assert "numero_inteiro" in caplog.text
+    assert "arredondando" in caplog.text
+
+
+def test_numero_inteiro_sem_fracionario_nao_avisa(caplog):
+    """Célula vazia não é decimal: `NaN % 1` é `NaN`, e `NaN != 0` é True."""
+    df = pd.DataFrame({"qtd": [100, 50, None, 20]})
+    with caplog.at_level("WARNING"):
+        out = apply_formatting_rules(df, {"qtd": _regra("numero_inteiro")})
+
+    assert list(out["qtd"].dropna()) == [100, 50, 20]
+    assert "arredondando" not in caplog.text
