@@ -362,3 +362,54 @@ merece uma janela própria e não pode pegar carona numa fase de dashboard.
 
 **Depende de / bloqueado por:** nada técnico. Só de alguém abrir a allowlist do Supabase na
 mesma janela em que troca as rotas, e testar um login por SSO depois.
+
+---
+
+## 11. `sheets.py` compara o cabeçalho CRU contra o nome normalizado
+
+**O quê:** `_ranges_for` (`query_engine/sheets.py`) casa as colunas pedidas contra o cabeçalho
+da planilha por comparação **literal**:
+
+```python
+for idx, h in enumerate(headers):
+    if h in faltando:      # h vem cru, só com .strip()
+```
+
+E o docstring da própria função, três linhas acima, afirma o contrário:
+
+> *"A comparação é feita no nome **normalizado** do cabeçalho, do mesmo jeito que o onboarding
+> normaliza ao montar o schema_metadata."*
+
+**O comentário descreve a intenção; o código não a implementa.** É assim que isto sobreviveu:
+quem lê o docstring conclui que está resolvido.
+
+**Por quê importa:** o onboarding normaliza para `snake_case` ao montar o `schema_metadata`
+(`DatabasePipeline.tsx`), mas **o Plum nunca escreve na planilha do cliente** (invariante R-01).
+Então o cabeçalho continua sendo `Status do Pedido`, `Valor Total (R$)`, `Vendedor(a)` — e o
+executor procura `status_do_pedido`, `valor_total_r`, `vendedor_a`. Nunca casa.
+
+**Alcance:** toda planilha com cabeçalho legível por humano. Isso inclui **qualquer Google
+Sheets em português** e **todo CSV/XLSX importado com cabeçalho original**. As bases que hoje
+funcionam funcionam por coincidência: o arquivo de origem já estava em `snake_case`.
+
+**Como foi encontrado:** na Etapa 0 da Fase 4 do dashboard (2026-08-10), subindo
+`testes/chat/bases/vendas_loja_roupas_teste.csv` para o Sheets. Resposta do executor, HTTP 200:
+
+> `"A planilha nao tem a(s) coluna(s): status_do_pedido, valor_total_r."`
+
+Contornado renomeando a linha 1 da planilha à mão para os nomes normalizados.
+
+**NÃO é o mesmo bug do `gid` da aba,** corrigido em `a334d99` — aquele era *qual aba ler*, este
+é *qual coluna casar dentro da aba*. Confirmado em 2026-08-11, depois daquele merge, que
+`_ranges_for` continua comparando cru.
+
+**Contras de consertar:** a normalização precisa ser **exatamente** a mesma do front, que hoje
+vive em TypeScript (`DatabasePipeline.tsx`). Duas implementações da mesma regra em linguagens
+diferentes divergem — é a mesma armadilha que `_shared/query_plan.ts` documenta para o Query
+Plan. Uma saída melhor seria o onboarding gravar também o nome ORIGINAL de cada coluna no
+`schema_metadata`, e o executor casar por ele: aí não existe normalização em dois lugares,
+existe um mapa gravado uma vez.
+
+**Depende de / bloqueado por:** decisão de quem cuida do `query_engine` sobre qual das duas
+saídas seguir. Enquanto isso, **o onboarding deveria avisar** quando o cabeçalho da planilha
+não bate com o schema — hoje o erro só aparece na primeira pergunta, muito depois.

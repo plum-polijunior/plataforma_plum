@@ -10,11 +10,13 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { LayoutDashboard, Database, PlugZap, RotateCw } from "lucide-react";
+import { LayoutDashboard, Database, PlugZap, RotateCw, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgAccess } from "@/hooks/use-org-access";
 import { useDashboardCards } from "@/hooks/use-dashboard-cards";
 import { CardDashboard } from "@/components/dashboard/CardDashboard";
+import { NovoCardDialog } from "@/components/dashboard/NovoCardDialog";
+import { Button } from "@/components/ui/button";
 import type { CardNaTela } from "@/components/dashboard/tipos";
 import { idadeLegivel } from "@/components/dashboard/formato";
 import {
@@ -29,6 +31,7 @@ interface BaseLiberada {
   id: string;
   name: string;
   created_at: string;
+  schema_metadata: unknown;
 }
 
 export default function Inicio() {
@@ -77,7 +80,7 @@ export default function Inicio() {
 
         const { data } = await supabase
           .from("datasets")
-          .select("id, name, created_at")
+          .select("id, name, created_at, schema_metadata")
           .eq("organization_id", organizationId)
           .eq("status", "active")
           .in("id", idsLiberados)
@@ -110,6 +113,7 @@ export default function Inicio() {
   // Sem isto o rótulo só mudaria quando a página re-renderizasse por outro
   // motivo — ficaria "calculado agora" com o dado já de meia hora. Meio minuto
   // é o passo mais grosso que ainda acerta a virada de "agora" para "há 1 min".
+  const [criando, setCriando] = useState(false);
   const [tique, setTique] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTique((t) => t + 1), 30_000);
@@ -170,6 +174,13 @@ export default function Inicio() {
           </Select>
         )}
 
+        {baseId && (
+          <Button size="sm" className="h-9" onClick={() => setCriando(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Novo card
+          </Button>
+        )}
+
         {cards.length > 0 && (
           <button
             type="button"
@@ -210,6 +221,17 @@ export default function Inicio() {
         <SemCard />
       ) : (
         <GradeDeCards cards={cards} />
+      )}
+
+      {baseId && organizationId && (
+        <NovoCardDialog
+          aberto={criando}
+          onFechar={() => setCriando(false)}
+          datasetId={baseId}
+          organizationId={organizationId}
+          schemaMetadata={bases.find((b) => b.id === baseId)?.schema_metadata}
+          onPublicado={() => recarregar()}
+        />
       )}
     </div>
   );
