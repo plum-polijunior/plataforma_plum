@@ -50,8 +50,12 @@ import type { CardNaTela, TipoViz } from "./tipos";
 // justamente para rodar igual no Deno, no Node do vitest e aqui no navegador.
 import { extractColumns, type QueryPlan } from "../../../supabase/functions/_shared/query_plan";
 
-/** O enum do CHECK da tabela. Nesta fase o MVP oferece dois (decisão D2). */
-const VIZ_PERMITIDOS: TipoViz[] = ["kpi", "bar"];
+/**
+ * O que o front sabe desenhar hoje. `line` e `meter` estão no CHECK da tabela
+ * mas não aqui: sem agrupamento por período e sem onde guardar uma meta, os
+ * dois renderizariam vazio. O agente também não os oferece.
+ */
+const VIZ_PERMITIDOS: TipoViz[] = ["kpi", "bar", "stacked_bar", "table"];
 
 interface CardGerado {
   title?: string;

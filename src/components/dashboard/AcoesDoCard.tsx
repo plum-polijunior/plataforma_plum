@@ -15,11 +15,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { TipoViz } from "./tipos";
+import { ROTULO_VIZ } from "./formas";
 
 export interface AcoesCard {
+  /** Formas que não distorcem ESTE resultado. Vazio esconde a seção. */
+  formas: TipoViz[];
+  formaAtual: TipoViz;
+  onTrocarForma: (viz: TipoViz) => void;
   onEditar: () => void;
   onApagar: () => void;
   onRecalcular: () => void;
@@ -43,6 +52,29 @@ export function AcoesDoCard({ acoes, titulo }: { acoes: AcoesCard; titulo: strin
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-52">
+        {/* "Ver como" é preferência de LEITURA, não edição: troca só para quem
+            está olhando e não é salva. O card é da organização; o jeito de ler
+            é de cada um — inclusive de quem precisa de tabela por leitor de
+            tela (`DESIGN.md` §9). */}
+        {acoes.formas.length > 1 && (
+          <>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              Ver como
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={acoes.formaAtual}
+              onValueChange={(v) => acoes.onTrocarForma(v as TipoViz)}
+            >
+              {acoes.formas.map((f) => (
+                <DropdownMenuRadioItem key={f} value={f}>
+                  {ROTULO_VIZ[f]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
         <DropdownMenuItem onClick={acoes.onRecalcular}>
           <RotateCw className="mr-2 h-4 w-4" />
           Recalcular agora

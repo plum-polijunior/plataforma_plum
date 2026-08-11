@@ -456,9 +456,9 @@ da última.
 2. Subir `testes/chat/bases/vendas_loja_roupas_teste.csv` para o Google Sheets (separador `;`; o
    arquivo tem BOM no cabeçalho — conferir se a primeira coluna importou como
    `Código do Pedido` e não com lixo na frente).
-3. Compartilhar a planilha com
+2. Compartilhar a planilha com
    `plum-polijunior@plataforma-plum.iam.gserviceaccount.com` como **Leitor**.
-4. **Renomear a aba para `Sheet1`.** Descoberto na execução (2026-08-10): o front
+3. **Renomear a aba para `Sheet1`.** Descoberto na execução (2026-08-10): o front
    **nunca grava `google_sheet_tab`** — `DatabasePipeline.tsx` grava
    `google_sheet_id` e `google_sheet_url` e mais nada, então a coluna fica no
    default `'Sheet1'` do banco. Ao subir um CSV, o Sheets batiza a aba com o nome do
@@ -466,7 +466,7 @@ da última.
    Bug de produção, não do teste: atinge todo Sheets em português (aba padrão
    "Página1") e todo CSV/XLSX importado. **Tem dono** — `origin/fix/gid-da-aba`,
    ainda não em `plataforma`. Aqui, renomear resolve.
-5. Criar uma **organização nova, dedicada a teste** (decisão do furo #2), e passar a
+4. Criar uma **organização nova, dedicada a teste** (decisão do furo #2), e passar a
    planilha pelo pipeline de importação normal (`/cfgdatabase`). Org nova, e não
    Babygoat/Machado Lmtd, por dois motivos: garante que nada nesta fase encosta em
    dado real, e dá um lugar limpo para criar o cargo sem permissão que a §8.2(4)

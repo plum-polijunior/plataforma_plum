@@ -37,10 +37,19 @@ import {
 } from "@/components/ui/select";
 import type { CardNaTela, TipoViz } from "./tipos";
 
-/** O enum do CHECK da tabela; o MVP oferece dois (decisão D2). */
+/**
+ * O que fica GRAVADO no card, ou seja, o padrão que toda a organização vê.
+ *
+ * `line` e `meter` não entram: `line` depende de agrupamento por período, que o
+ * executor ainda não faz, e `meter` precisa de uma meta, que não existe onde
+ * guardar. Oferecer qualquer um dos dois hoje seria publicar um card que não
+ * desenha nada.
+ */
 const VIZ: { valor: TipoViz; rotulo: string }[] = [
   { valor: "kpi", rotulo: "Número" },
   { valor: "bar", rotulo: "Barras" },
+  { valor: "stacked_bar", rotulo: "Parte do todo" },
+  { valor: "table", rotulo: "Tabela" },
 ];
 
 interface Props {

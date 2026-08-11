@@ -23,10 +23,12 @@
 
 import { Lock } from "lucide-react";
 import { AcoesDoCard, type AcoesCard } from "./AcoesDoCard";
-import type { CardNaTela } from "./tipos";
+import type { CardNaTela, TipoViz } from "./tipos";
 import { idadeLegivel } from "./formato";
 import { VizKpi } from "./VizKpi";
 import { VizBar } from "./VizBar";
+import { VizTabela } from "./VizTabela";
+import { VizStackedBar } from "./VizStackedBar";
 
 interface Props {
   card: CardNaTela;
@@ -41,9 +43,17 @@ interface Props {
   compacto?: boolean;
   /** Ausente na prévia do diálogo: ali o card ainda não existe para ser gerido. */
   acoes?: AcoesCard;
+  /**
+   * Forma escolhida por quem está OLHANDO, que sobrepõe a gravada no card.
+   *
+   * Não é salva de propósito: o card é da organização, mas a preferência de
+   * leitura é da pessoa. Alguém que precisa de tabela por leitor de tela não
+   * deveria trocar a visualização para todo mundo.
+   */
+  vizEfetiva?: TipoViz;
 }
 
-export function CardDashboard({ card, heroi = false, compacto = false, acoes }: Props) {
+export function CardDashboard({ card, heroi = false, compacto = false, acoes, vizEfetiva }: Props) {
   const idade = idadeLegivel(card.calculadoEm);
 
   // A idade só aparece no card quando ele DIVERGE do resto da página: um
@@ -72,7 +82,7 @@ export function CardDashboard({ card, heroi = false, compacto = false, acoes }: 
           {acoes && <AcoesDoCard acoes={acoes} titulo={card.titulo} />}
         </div>
         <div className="mt-auto pt-3">
-          <Corpo card={card} heroi={heroi} compacto />
+          <Corpo card={card} heroi={heroi} compacto viz={vizEfetiva} />
         </div>
         {mostrarIdade && (
           <p className="mt-1.5 text-[11px] text-muted-foreground">calculado {idade}</p>
@@ -97,8 +107,13 @@ export function CardDashboard({ card, heroi = false, compacto = false, acoes }: 
         </div>
       </header>
 
-      <div className="flex-1 px-4 py-4">
-        <Corpo card={card} heroi={heroi} />
+      {/* `min-h-0` + `overflow-y-auto`: quando a grade fixa a altura do card
+          (tela cheia), o conteudo mais longo rola DENTRO do card em vez de
+          esticar a grade e devolver a rolagem para a pagina — que e justamente
+          o que a tela cheia existe para evitar. Fora da tela cheia a altura e
+          natural e isto nunca dispara. */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <Corpo card={card} heroi={heroi} viz={vizEfetiva} />
       </div>
     </article>
   );
@@ -108,10 +123,12 @@ function Corpo({
   card,
   heroi,
   compacto = false,
+  viz,
 }: {
   card: CardNaTela;
   heroi: boolean;
   compacto?: boolean;
+  viz?: TipoViz;
 }) {
   if (card.estado === "carregando") return <Esqueleto compacto={compacto} />;
 
@@ -167,14 +184,38 @@ function Corpo({
 
   // `ok` e `stale` renderizam IGUAL: o número do degradado não é rebaixado.
   // A diferença mora só na pílula de idade do cabeçalho.
-  return card.viz === "bar" ? (
-    <VizBar
-      colunas={card.colunas}
-      linhas={card.linhas}
-      colunaOrigem={card.colunaOrigem}
-      agregacao={card.agregacao}
-    />
-  ) : (
+  const forma = viz ?? card.viz;
+
+  if (forma === "table") {
+    return (
+      <VizTabela
+        colunas={card.colunas}
+        linhas={card.linhas}
+        colunaOrigem={card.colunaOrigem}
+      />
+    );
+  }
+  if (forma === "stacked_bar") {
+    return (
+      <VizStackedBar
+        colunas={card.colunas}
+        linhas={card.linhas}
+        colunaOrigem={card.colunaOrigem}
+        agregacao={card.agregacao}
+      />
+    );
+  }
+  if (forma === "bar") {
+    return (
+      <VizBar
+        colunas={card.colunas}
+        linhas={card.linhas}
+        colunaOrigem={card.colunaOrigem}
+        agregacao={card.agregacao}
+      />
+    );
+  }
+  return (
     <VizKpi
       colunas={card.colunas}
       linhas={card.linhas}

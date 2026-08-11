@@ -9,8 +9,8 @@
  * gradiente, sem glow, sem sombra. Separação por hairline de 1px.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { LayoutDashboard, Database, PlugZap, RotateCw, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LayoutDashboard, Database, PlugZap, RotateCw, Plus, Maximize2, Minimize2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgAccess } from "@/hooks/use-org-access";
 import { useDashboardCards } from "@/hooks/use-dashboard-cards";
@@ -29,7 +29,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import type { CardNaTela } from "@/components/dashboard/tipos";
+import type { CardNaTela, TipoViz } from "@/components/dashboard/tipos";
+import { formasCompativeis } from "@/components/dashboard/formas";
 import { idadeLegivel } from "@/components/dashboard/formato";
 import {
   Select,
@@ -125,8 +126,39 @@ export default function Inicio() {
   // Sem isto o rótulo só mudaria quando a página re-renderizasse por outro
   // motivo — ficaria "calculado agora" com o dado já de meia hora. Meio minuto
   // é o passo mais grosso que ainda acerta a virada de "agora" para "há 1 min".
+  // Tela cheia de verdade (Fullscreen API), não só esconder a sidebar: o pedido
+  // era ver o dashboard sem o painel lateral E sem as abas do navegador. Pedir
+  // fullscreen NESTE elemento faz o navegador mostrar só ele — a sidebar some
+  // por consequência, sem precisar de estado global nem de mexer no layout.
+  const raiz = useRef<HTMLDivElement>(null);
+  const [telaCheia, setTelaCheia] = useState(false);
+
+  useEffect(() => {
+    // Ouvir o evento em vez de confiar no nosso próprio estado: dá para sair da
+    // tela cheia pelo Esc ou pelo botão do navegador, sem passar pelo nosso
+    // clique — e aí o ícone ficaria mentindo.
+    const aoMudar = () => setTelaCheia(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", aoMudar);
+    return () => document.removeEventListener("fullscreenchange", aoMudar);
+  }, []);
+
+  async function alternarTelaCheia() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await raiz.current?.requestFullscreen();
+    } catch (e) {
+      // Safari em iPhone não suporta, e alguns navegadores recusam sem gesto do
+      // usuário. Falhar em silêncio é melhor que um alerta: a página continua
+      // inteira, só não entrou em tela cheia.
+      console.warn("Tela cheia indisponível:", e);
+    }
+  }
+
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<CardNaTela | null>(null);
+  // Preferência de leitura por card, só nesta sessão e só para esta pessoa.
+  // Não vai para o banco de propósito — ver o comentário em AcoesDoCard.
+  const [formaEscolhida, setFormaEscolhida] = useState<Record<string, TipoViz>>({});
   const [apagando, setApagando] = useState<CardNaTela | null>(null);
   const [tique, setTique] = useState(0);
   useEffect(() => {
@@ -181,7 +213,11 @@ export default function Inicio() {
       card.viz === "kpi" ? c.viz === "kpi" : c.viz !== "kpi",
     );
     const i = grupo.findIndex((c) => c.id === card.id);
+    const formas = formasCompativeis(card);
     return {
+      formas,
+      formaAtual: formaEscolhida[card.id] ?? card.viz,
+      onTrocarForma: (v) => setFormaEscolhida((m) => ({ ...m, [card.id]: v })),
       onEditar: () => setEditando(card),
       onApagar: () => setApagando(card),
       // `true` força o recálculo, pulando o cache de snapshot.
@@ -204,8 +240,20 @@ export default function Inicio() {
   }, [cards, tique]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div
+      ref={raiz}
+      // Em tela cheia este elemento passa a ser a página inteira: sem o fundo e
+      // o `overflow-auto` próprios ele apareceria transparente e sem rolagem.
+      // Em tela cheia este elemento vira a página inteira. `flex-col` +
+      // `overflow-hidden` fazem dele um container de altura FIXA: o cabeçalho
+      // não encolhe e a grade recebe o que sobra, em vez de a página crescer.
+      className={`mx-auto w-full ${
+        telaCheia
+          ? "flex h-screen max-w-none flex-col overflow-hidden bg-background p-6"
+          : "max-w-6xl"
+      }`}
+    >
+      <header className={`flex shrink-0 flex-wrap items-start justify-between gap-4 ${telaCheia ? "mb-4" : "mb-8"}`}>
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Página Inicial</h1>
           {/* Frescor dito UMA vez, para a página inteira, em vez de repetido em
@@ -220,6 +268,10 @@ export default function Inicio() {
           </p>
         </div>
 
+        {/* Um grupo só, à direita: seletor e botões na mesma altura (h-9) e
+            com o mesmo raio. Antes eram três filhos soltos do `justify-between`,
+            então o espaço sobrava entre eles em vez de ficar antes do bloco. */}
+        <div className="flex flex-wrap items-center gap-2">
         {bases.length > 0 && (
           <Select value={baseId} onValueChange={setBaseId}>
             <SelectTrigger className="h-9 w-[240px] text-sm">
@@ -243,29 +295,45 @@ export default function Inicio() {
           </Select>
         )}
 
+        {cards.length > 0 && (
+          <Button
+            variant="outline"
+            className="h-9 border-border/20 font-normal text-muted-foreground hover:text-foreground"
+            // `true` = ignora o cache de snapshot. Sem ele, o botão relia o
+            // mesmo resultado e a idade só crescia — o usuário clicava e nada
+            // acontecia, que é pior do que não ter o botão.
+            onClick={() => recarregar(true)}
+            title="Recalcular todos os cards"
+          >
+            <RotateCw
+              className={`mr-1.5 h-4 w-4 ${estado === "carregando" ? "motion-safe:animate-spin" : ""}`}
+            />
+            Atualizar
+          </Button>
+        )}
+
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 border-border/20 text-muted-foreground hover:text-foreground"
+          onClick={alternarTelaCheia}
+          title={telaCheia ? "Sair da tela cheia" : "Ver em tela cheia"}
+          aria-label={telaCheia ? "Sair da tela cheia" : "Ver em tela cheia"}
+        >
+          {telaCheia ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
+
         {baseId && (
-          <Button size="sm" className="h-9" onClick={() => setCriando(true)}>
+          <Button className="h-9" onClick={() => setCriando(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
             Novo card
           </Button>
         )}
-
-        {cards.length > 0 && (
-          <button
-            type="button"
-            onClick={() => recarregar()}
-            title="Recalcular todos os cards"
-            // 44px de alvo de toque (`DESIGN.md` §9).
-            className="flex h-9 items-center gap-2 rounded-lg border border-border/20 px-3 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          >
-            <RotateCw className={`h-3.5 w-3.5 ${estado === "carregando" ? "motion-safe:animate-spin" : ""}`} />
-            Atualizar
-          </button>
-        )}
+        </div>
       </header>
 
       {previa ? (
-        <GradeDeCards cards={previa} />
+        <GradeDeCards cards={previa} preencherTela={telaCheia} />
       ) : semBase ? (
         <SemBase />
       ) : estado === "sem-coluna-liberada" ? (
@@ -289,7 +357,12 @@ export default function Inicio() {
       ) : cards.length === 0 && estado === "pronto" ? (
         <SemCard />
       ) : (
-        <GradeDeCards cards={cards} acoesDe={acoesDe} />
+        <GradeDeCards
+          cards={cards}
+          acoesDe={acoesDe}
+          preencherTela={telaCheia}
+          formaDe={(c) => formaEscolhida[c.id]}
+        />
       )}
 
       {baseId && organizationId && (
@@ -356,21 +429,56 @@ export default function Inicio() {
 function GradeDeCards({
   cards,
   acoesDe,
+  preencherTela = false,
+  formaDe,
 }: {
   cards: CardNaTela[];
   acoesDe?: (card: CardNaTela) => AcoesCard;
+  /** Tela cheia: a grade ocupa a altura disponível e nada rola. */
+  preencherTela?: boolean;
+  formaDe?: (card: CardNaTela) => TipoViz | undefined;
 }) {
-  const numeros = cards.filter((c) => c.viz === "kpi");
-  const graficos = cards.filter((c) => c.viz !== "kpi");
+  // A separação segue a forma EFETIVA: trocar um KPI para tabela deve movê-lo
+  // para a faixa de baixo, senão uma tabela apareceria espremida na tira de
+  // números, que tem altura de uma linha.
+  const forma = (c: CardNaTela) => formaDe?.(c) ?? c.viz;
+  const numeros = cards.filter((c) => forma(c) === "kpi");
+  const graficos = cards.filter((c) => forma(c) !== "kpi");
+
+  // Quantas colunas de gráfico cabem sem virar tira fina. Fora da tela cheia
+  // são sempre 2, porque a página rola e a largura é o que manda. Em tela cheia
+  // o que manda é a ALTURA: mais colunas significa menos fileiras, e menos
+  // fileiras é o que faz tudo caber.
+  const colunas = !preencherTela
+    ? 2
+    : graficos.length <= 2
+      ? graficos.length || 1
+      : graficos.length <= 6
+        ? 3
+        : 4;
 
   return (
-    <div className="space-y-4">
-      {numeros.length > 0 && <TiraDeNumeros cards={numeros} acoesDe={acoesDe} />}
+    <div className={preencherTela ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4"}>
+      {numeros.length > 0 && (
+        <div className={preencherTela ? "shrink-0" : ""}>
+          <TiraDeNumeros cards={numeros} acoesDe={acoesDe} />
+        </div>
+      )}
 
       {graficos.length > 0 && (
-        <div className="grid items-start gap-4 lg:grid-cols-2">
+        // `auto-rows-fr` divide a altura restante igualmente entre as fileiras,
+        // e `min-h-0` é o que permite ao grid ENCOLHER dentro do flex — sem
+        // ele, o conteúdo define a altura e a rolagem volta.
+        <div
+          className={
+            preencherTela
+              ? "grid min-h-0 flex-1 auto-rows-fr gap-4"
+              : "grid items-start gap-4 lg:grid-cols-2"
+          }
+          style={preencherTela ? { gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` } : undefined}
+        >
           {graficos.map((card) => (
-            <CardDashboard key={card.id} card={card} acoes={acoesDe?.(card)} />
+            <CardDashboard key={card.id} card={card} acoes={acoesDe?.(card)} vizEfetiva={formaDe?.(card)} />
           ))}
         </div>
       )}
@@ -417,7 +525,7 @@ function TiraDeNumeros({
           className="grow"
           style={{ flexBasis: heroiDuplo && i === 0 ? `calc(2 * ${base})` : base }}
         >
-          <CardDashboard card={card} compacto heroi={i === 0} acoes={acoesDe?.(card)} />
+          <CardDashboard card={card} compacto heroi={i === 0} acoes={acoesDe?.(card)} vizEfetiva={formaDe?.(card)} />
         </div>
       ))}
     </div>

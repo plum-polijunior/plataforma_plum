@@ -38,7 +38,12 @@ export function DashboardLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    // `h-screen` e não `min-h-screen`: com `min-h-`, o container CRESCE junto
+    // com o conteúdo, a página inteira vira o elemento que rola, e a sidebar
+    // sobe junto — o botão "Sair" some do alcance num dashboard longo.
+    // Travando a altura em uma tela, quem rola passa a ser o `overflow-auto`
+    // do `<main>`, e a barra lateral fica parada onde deve.
+    <div className="h-screen bg-background flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
@@ -52,7 +57,7 @@ export function DashboardLayout() {
         fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border/20 shadow-xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0
         ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col overflow-y-auto">
           <div className="h-16 flex items-center px-6 border-b border-border/10">
             <img src={plumLogo} alt="Plum" className="h-8 w-8 object-contain mr-2" />
             <span className="text-lg font-semibold text-gradient">Plum</span>
