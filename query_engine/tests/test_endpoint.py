@@ -56,11 +56,16 @@ def ambiente(monkeypatch):
         }
     )
 
-    chamadas = {"n": 0, "colunas": None}
+    chamadas = {"n": 0, "colunas": None, "tab": None, "tab_gid": None}
 
-    def fake_load(service, sheet_id, tab, columns, max_rows=None):
+    def fake_load(service, sheet_id, tab, columns, max_rows=None, tab_gid=None):
         chamadas["n"] += 1
         chamadas["colunas"] = set(columns)
+        # Guardados para que um teste possa afirmar QUAL aba foi pedida — a
+        # resolução por gid vive em sheets.resolver_aba (test_sheets.py), mas
+        # quem repassa o tab_gid do payload é o main.py, e isso se verifica aqui.
+        chamadas["tab"] = tab
+        chamadas["tab_gid"] = tab_gid
         # Devolve SÓ as colunas pedidas. É isso que faz a quinta barreira
         # funcionar: o que não foi autorizado nem existe no DataFrame.
         return base[[c for c in base.columns if c in columns]].copy()
@@ -123,6 +128,33 @@ def test_caminho_feliz_devolve_todos_os_grupos(client):
     regioes = {linha["regiao"] for linha in card["rows"]}
     assert regioes == {"Sul", "Norte", "Ilha"}, "k-anonimato foi removido: Ilha (2) nao suprime mais"
     assert card["suppressed_groups"] == 0
+
+
+def test_tab_gid_do_payload_chega_no_load_columns(client, ambiente):
+    # O `tab_gid` é assinado junto com o resto do payload, então trocar a aba
+    # alvo exige o segredo do HMAC — mesma razão pela qual `sheet_id` vive
+    # dentro do payload e não nos parâmetros da requisição.
+    r = _post(client, _corpo(tab_gid=991333939))
+    assert r.status_code == 200
+    assert ambiente["tab_gid"] == 991333939
+
+
+def test_tab_gid_zero_atravessa_como_zero_e_nao_como_ausente(client, ambiente):
+    # A regressão mais provável desta mudança: gid 0 (primeira aba) virar None
+    # em qualquer ponto do caminho Edge Function -> payload -> main -> sheets.
+    r = _post(client, _corpo(tab_gid=0))
+    assert r.status_code == 200
+    assert ambiente["tab_gid"] == 0
+    assert ambiente["tab_gid"] is not None
+
+
+def test_payload_sem_tab_gid_continua_valido(client, ambiente):
+    # Compatibilidade: Edge Function antiga (ou base sem gid) não manda o campo,
+    # e o executor precisa seguir usando o nome da aba.
+    r = _post(client, _corpo())
+    assert r.status_code == 200
+    assert ambiente["tab_gid"] is None
+    assert ambiente["tab"] == "Sheet1"
 
 
 def test_sem_assinatura_devolve_401(client):

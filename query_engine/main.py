@@ -140,6 +140,9 @@ async def execute(
             payload.tab,
             colunas_a_carregar,
             max_rows=max_rows,
+            # Qual aba, pelo identificador estável. Quando presente tem
+            # precedência sobre `payload.tab` — ver `sheets.resolver_aba`.
+            tab_gid=payload.tab_gid,
         )
     except sheets.SheetError as exc:
         # Falha de leitura atinge todos os cards que dependiam dela. A Edge

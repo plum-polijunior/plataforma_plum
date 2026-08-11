@@ -4,7 +4,7 @@ import DatabasePipeline from "@/components/DatabasePipeline";
 import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { extrairSheetId, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
+import { extrairSheetRef, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
 
 export default function DatabasePage() {
   const [organization, setOrganization] = useState<any>(null);
@@ -265,21 +265,31 @@ export default function DatabasePage() {
                       // Mesma regra do onboarding: o ID é a verdade, a URL é
                       // só para exibir. Recusar aqui evita gravar uma base que
                       // vai falhar depois, na hora que alguém abrir o card.
-                      const sheetId = extrairSheetId(editSheetUrl);
-                      if (!sheetId) {
+                      //
+                      // O `gid` (qual aba) vem no mesmo passo. Esta tela é
+                      // também o conserto de bases antigas: recolar a URL com a
+                      // aba certa aberta passa a corrigir a aba, coisa que
+                      // antes era impossível pela interface.
+                      const ref = extrairSheetRef(editSheetUrl);
+                      if (!ref) {
                         alert(ERRO_LINK_INVALIDO);
                         return;
                       }
                       const { error } = await supabase
                         .from('datasets')
-                        .update({ google_sheet_id: sheetId, google_sheet_url: editSheetUrl })
+                        .update({
+                          google_sheet_id: ref.id,
+                          google_sheet_url: editSheetUrl,
+                          google_sheet_gid: ref.gid,
+                        })
                         .eq('id', selectedDataset.id);
                       if (!error) {
                         alert("Planilha atualizada com sucesso!");
                         setSelectedDataset({
                           ...selectedDataset,
-                          google_sheet_id: sheetId,
+                          google_sheet_id: ref.id,
                           google_sheet_url: editSheetUrl,
+                          google_sheet_gid: ref.gid,
                         });
                       } else {
                         alert("Não consegui salvar: " + error.message);

@@ -53,6 +53,11 @@ SERVICE_ACCOUNT_EMAIL = "plum-polijunior@plataforma-plum.iam.gserviceaccount.com
 _META_TTL_SECONDS = 900
 _meta_cache: Dict[str, Tuple[float, "SheetMeta"]] = {}
 
+# Mapa {gid: titulo} por planilha. Também não guarda dado de cliente — só nome
+# de aba. Existe para que a tradução gid → nome custe uma requisição por
+# planilha a cada 15 min, e não uma por pergunta.
+_abas_cache: Dict[str, Tuple[float, Dict[int, str]]] = {}
+
 
 class SheetError(Exception):
     """Falha ao ler a planilha, já traduzida para linguagem de gente."""
@@ -185,6 +190,84 @@ def _translate(
     return SheetError("Nao consegui ler a planilha agora.")
 
 
+def mapa_de_abas(service, sheet_id: str) -> Dict[int, str]:
+    """
+    `{gid: titulo}` de todas as abas da planilha.
+
+    Resposta minúscula: `fields` limita a `sheetId` e `title`, e
+    `includeGridData` fica de fora, então nenhuma célula é transferida.
+    """
+    hit = _abas_cache.get(sheet_id)
+    if hit and (time.time() - hit[0]) < _META_TTL_SECONDS:
+        return hit[1]
+
+    try:
+        resp = (
+            service.spreadsheets()
+            .get(spreadsheetId=sheet_id, fields="sheets.properties(sheetId,title)")
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Sem `tab` aqui de propósito: a falha é da planilha inteira (não
+        # compartilhada, apagada), não de uma aba específica.
+        raise _translate(exc, sheet_id, service=service) from exc
+
+    mapa: Dict[int, str] = {}
+    for s in resp.get("sheets") or []:
+        props = s.get("properties") or {}
+        gid, titulo = props.get("sheetId"), props.get("title")
+        if gid is not None and titulo:
+            mapa[int(gid)] = str(titulo)
+
+    _abas_cache[sheet_id] = (time.time(), mapa)
+    return mapa
+
+
+def resolver_aba(service, sheet_id: str, tab: str, tab_gid: Optional[int]) -> str:
+    """
+    Qual nome de aba usar na notação A1 — a partir do `gid` quando ele existe.
+
+    A API do Sheets só aceita NOME de aba em range (`'Vendas 2026'!A2:A`); não
+    existe leitura por gid. Mas nome é apelido mutável: guardar o nome no banco
+    funciona até alguém renomear a aba, e então a base quebra sem ninguém ter
+    mexido nela. Por isso o banco guarda o `gid`, que o Google atribui na
+    criação da aba e não muda com rename, e a tradução acontece aqui.
+
+    Precedência do `gid` sobre `tab` não é correção silenciosa: o `gid` é a aba
+    que a pessoa tinha aberta quando copiou a URL, enquanto `tab` por muito
+    tempo foi só o DEFAULT da coluna ('Sheet1'), que nenhum código escrevia. O
+    `gid` é a escolha explícita; o nome é o palpite. Quando os dois discordam,
+    isso vai para o log — alerta, não silêncio.
+
+    `tab_gid is None` (e nunca `if not tab_gid`): gid 0 é a primeira aba.
+    """
+    if tab_gid is None:
+        return tab
+
+    mapa = mapa_de_abas(service, sheet_id)
+    titulo = mapa.get(tab_gid)
+
+    if titulo is None:
+        # A aba foi apagada, ou a URL gravada aponta para outra planilha. Cair
+        # no `tab` aqui seria ler uma aba que ninguém escolheu e devolver
+        # número de outro recorte — o modo de falha caro deste produto. Ver R-08
+        # em CLAUDE.md: validação alerta, nunca corrige.
+        disponiveis = ", ".join(f"{t} (gid={g})" for g, t in sorted(mapa.items()))
+        raise SheetError(
+            f"A aba configurada nesta base (gid={tab_gid}) nao existe mais nessa "
+            f"planilha. Abas disponiveis: {disponiveis or 'nenhuma'}. Reconecte a "
+            f"base colando a URL com a aba certa aberta."
+        )
+
+    if titulo != tab:
+        logger.info(
+            "Aba resolvida por gid: planilha %s gid=%s -> %r (o banco dizia %r)",
+            sheet_id[:8], tab_gid, titulo, tab,
+        )
+
+    return titulo
+
+
 def get_meta(service, sheet_id: str, tab: str) -> SheetMeta:
     """
     Cabeçalho e número de linhas numa chamada só.
@@ -301,6 +384,7 @@ def load_columns(
     tab: str,
     columns: Set[str],
     max_rows: Optional[int] = None,
+    tab_gid: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     Carrega só as colunas pedidas, numa requisição (ou do cache, ver abaixo).
@@ -317,6 +401,11 @@ def load_columns(
     """
     if not columns:
         raise SheetError("Nenhuma coluna a carregar para este card.")
+
+    # Uma resolução só, no topo, e todo o resto do caminho usa o nome resolvido
+    # — inclusive a chave do cache, que assim aponta para a mesma entrada quer o
+    # pedido tenha vindo pelo gid ou pelo nome legado.
+    tab = resolver_aba(service, sheet_id, tab, tab_gid)
 
     meta = get_meta(service, sheet_id, tab)
 

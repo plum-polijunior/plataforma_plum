@@ -125,7 +125,9 @@ async function handleExecutePlan(
 
   const { data: dataset, error: datasetErr } = await supabase
     .from("datasets")
-    .select("id, name, organization_id, google_sheet_id, google_sheet_tab, schema_metadata")
+    .select(
+      "id, name, organization_id, google_sheet_id, google_sheet_tab, google_sheet_gid, schema_metadata",
+    )
     .eq("id", datasetId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
@@ -212,6 +214,14 @@ async function handleExecutePlan(
   const payload = {
     sheet_id: dataset.google_sheet_id,
     tab: dataset.google_sheet_tab ?? "Sheet1",
+    // Qual aba, pelo identificador estável. O executor dá precedência a isto
+    // sobre `tab`, porque `tab` é nome (muda com rename) e por muito tempo ficou
+    // no default 'Sheet1' sem ninguém escrever nele.
+    //
+    // `?? null` e não `|| null`: gid 0 é a PRIMEIRA aba, um valor legítimo, e
+    // `||` o transformaria em null — mandando toda planilha na primeira aba de
+    // volta para o caminho que depende do nome.
+    tab_gid: dataset.google_sheet_gid ?? null,
     // "chat" no lugar de um id de card real: não existe card salvo aqui, e o
     // Lambda trata cada item de `plans` de forma independente de qualquer forma.
     plans: [{ card_id: "chat", plan, resolved_columns: veredito.required }],
