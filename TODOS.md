@@ -328,3 +328,44 @@ projeto na Vercel, ela muda e o SSO quebra de novo, silenciosamente, do mesmo je
 
 **Depende de / bloqueado por:** decidir o que acontece com o site que está hoje na Hostinger
 nesse domínio (fica num subdomínio? sai?), e uma janela para a propagação de DNS.
+
+---
+
+## 10. Escala do percentual: 0–1 (nativo) vs 0–100 (texto)
+
+**Aberto desde 2026-08-11.** Consequência direta da correção do
+`_parse_ptbr_number` (número nativo da planilha deixou de passar pela limpeza
+textual, que multiplicava por 10^casas_decimais — ver
+`test_formatting.py`, bloco "Célula que chega da planilha JÁ como número").
+
+Hoje uma coluna com `type: "percentual"` sai em duas escalas diferentes
+conforme a origem da célula:
+
+| origem da célula | valor bruto | resultado |
+|---|---|---|
+| formatada como % no Sheets | `0.15` | **0,15** |
+| digitada como texto | `"15%"` | **15** |
+
+Antes da correção o caso nativo virava `15` — mas por acidente, e só quando as
+casas decimais eram exatamente duas. `0.1` virava `1` (deveria ser 10) e
+`0.155` virava `155`. Não era uma conversão, era a mesma corrupção que atingia
+as colunas de dinheiro; ela só *parecia* certa no caso mais comum.
+
+Agora o caminho nativo é consistente (devolve o que a planilha tem) e o
+textual continua em 0–100. Escolher uma escala única é decisão de produto, não
+de implementação, porque muda o número exibido em cards já publicados:
+
+- **Padronizar em 0–100** (multiplicar o nativo por 100) casa com o que o
+  usuário vê na planilha e com o caminho textual, mas exige distinguir "0,15
+  que é 15%" de "0,15 que é 0,15%" — e essa informação não está no valor.
+- **Padronizar em 0–1** é matematicamente mais limpo e é o que o Sheets
+  guarda, mas quebra a leitura do caminho textual e a exibição atual.
+
+O que decide é `formatting_rule.params`: o Agente 3 vê 5 linhas de amostra e
+poderia gravar a escala junto do `type` na importação, que é o único momento
+em que existe contexto suficiente. Enquanto não houver decisão, o
+comportamento acima está fixado por teste — quem mudar, muda de propósito.
+
+**Impacto real hoje:** nenhuma das bases em produção usa `percentual`
+(conferido em 2026-08-11: doceria, roupas, estudos e riosulense não têm
+coluna com esse `type`). Por isso não foi tratado como bloqueante.
