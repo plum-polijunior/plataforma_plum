@@ -9,6 +9,8 @@ import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const Auth = () => {
   const { toast } = useToast();
 
@@ -26,6 +28,7 @@ const Auth = () => {
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const isLoginFormValid = EMAIL_REGEX.test(loginEmail) && loginPassword.length > 6;
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
 
@@ -371,9 +374,11 @@ const Auth = () => {
                             <Label htmlFor="top-login-password">Senha</Label>
                             <Input id="top-login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
                           </div>
-                          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                            {isLoading ? "Entrando..." : "Entrar com Email"}
-                          </Button>
+                          {isLoginFormValid && (
+                            <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
+                              {isLoading ? "Entrando..." : "Entrar com Email"}
+                            </Button>
+                          )}
                         </form>
 
                         <h3 className="font-semibold text-foreground mt-8 mb-4">Ainda não possui conta?</h3>
