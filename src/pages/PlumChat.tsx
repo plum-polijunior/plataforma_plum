@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PlumThinkingBar } from "@/components/PlumThinkingBar";
+import { RespostaMarkdown } from "@/components/RespostaMarkdown";
 
 interface ChatMessage {
   id: string;
@@ -271,9 +272,22 @@ export default function PlumChat() {
                     ? 'bg-primary text-primary-foreground rounded-tr-sm' 
                     : 'bg-card border border-border/50 text-foreground rounded-tl-sm'
                 }`}>
-                  <div className={`text-sm ${!isUser && 'prose prose-sm prose-neutral dark:prose-invert max-w-none'}`}>
-                    {msg.content}
-                  </div>
+                  {/*
+                    Resposta do assistente = Markdown; pergunta do usuário =
+                    texto literal. Ver `RespostaMarkdown.tsx` para o porquê da
+                    assimetria e para o conjunto de elementos aceitos.
+
+                    Até 2026-08-11 os dois lados caíam no mesmo `{msg.content}`
+                    de texto puro, com as classes `prose` penduradas na div sem
+                    efeito nenhum (o plugin de typography não estava registrado
+                    no `tailwind.config.ts`). O resultado era o `**` do modelo
+                    aparecendo na tela.
+                  */}
+                  {isUser ? (
+                    <div className="text-sm">{msg.content}</div>
+                  ) : (
+                    <RespostaMarkdown content={msg.content} />
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 px-1">

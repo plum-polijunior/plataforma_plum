@@ -1,4 +1,6 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
+import typography from "@tailwindcss/typography";
 
 export default {
   darkMode: ["class"],
@@ -99,5 +101,24 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  // `typography` habilita as classes `prose`, usadas na bolha do assistente do
+  // chat (`src/pages/PlumChat.tsx`) para estilizar o Markdown da resposta.
+  //
+  // Registrado em 2026-08-11. Antes disso o pacote estava instalado em
+  // `devDependencies` mas nunca tinha sido plugado aqui, então as quatro
+  // classes de typography que já estavam no JSX do chat não geravam CSS nenhum
+  // — `dist/assets/*.css` tinha zero ocorrência da string `prose`. Era código
+  // morto que parecia estilo aplicado, e foi metade do motivo de a resposta do
+  // chat sair sem formatação nenhuma na tela.
+  //
+  // Cuidado ao comentar sobre classe aqui: o extrator do Tailwind é regex sobre
+  // o arquivo e não pula comentário, então nome de classe citado em texto vira
+  // CSS de verdade no bundle. Ver a nota em `src/components/RespostaMarkdown.tsx`.
+  //
+  // Os dois plugins entram por `import` no topo, e não por `require()`: o
+  // `require` do `tailwindcss-animate` que estava aqui já era um erro de lint
+  // (`@typescript-eslint/no-require-imports`), e registrar o segundo do mesmo
+  // jeito só duplicaria o erro. O arquivo já é um módulo ESM — usa
+  // `import type { Config }` desde sempre.
+  plugins: [animate, typography],
 } satisfies Config;
