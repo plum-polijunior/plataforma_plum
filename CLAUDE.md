@@ -75,6 +75,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `src/integrations/supabase/types.ts` | ⚠️ atualizar **SEMPRE** junto com migrations (§4.12) |
 | `src/integrations/supabase/client.ts` | gerado; URL e anon key hardcoded (dívida, §8) |
 | `src/pages/Cfgdatabase.tsx` | datasets + matriz de permissões (`?tab=permissoes`) + edição de schema |
+| `src/pages/Auth.tsx` | entrar / primeiro acesso / criar organização. Login pousa em **`/inicio`**, não em `/dashboard` (§7); "Entrar com Email" só **existe** quando e-mail e senha passam na validação local |
 | `src/components/DatabasePipeline.tsx` | pipeline de importação em 5 etapas; rascunhos em `datasets.sketch` |
 | `src/components/ui/` | shadcn — preferir compor a editar |
 | `query_engine/security.py` | 4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna |
@@ -88,7 +89,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `supabase/migrations/` | aplicar **em ordem** (§6), e à mão pelo SQL Editor |
 | `supabase/functions/plum-chat/` | demo da landing — **NÃO confundir** com `ai-plum-chat` |
 | `supabase/functions/ai-plum-chat/` | chat: Agente Z/A/C + `execute_plan` (executor real) |
-| `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
+| `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. **Dois** agentes dentro de `gerar_card`: Z-dash (escopo) e Tarsila do Amaral (planejador) — §5. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
 | `supabase/functions/ai-agents/` | pipeline de importação (agentes 0/1/2/3/3.1) |
 | `supabase/functions/_shared/query_plan.ts` | ⭐ **único** interpretador de Query Plan (extrai colunas p/ RBAC) |
 | `infra/aws/PASSO-A-PASSO.md` | ⭐ fonte única de verdade do executor — **não duplicar** |
@@ -245,11 +246,13 @@ roteador destruiria a URL antes de a sessão ser salva.
 
 ## 5. Arquitetura de IA
 
-`ai-agents` e `ai-plum-chat` são roteadores por `action`, ambos usando Gemini com
-`temperature: 0.2` e `response_mime_type: application/json` quando a saída é estruturada.
-A `GEMINI_API_KEY` vive no ambiente da Edge Function — **nunca no front**. Uma terceira peça,
-`dashboard-execute`, não fala com o Gemini — ela só autoriza e chama o executor Python (ver
-abaixo).
+`ai-agents`, `ai-plum-chat` e `dashboard-agent` são roteadores por `action`, todos usando
+Gemini com `response_mime_type: application/json` quando a saída é estruturada. A
+`temperature` varia por papel, não por função: **0.0 em quem emite Query Plan** (Agente A,
+Tarsila do Amaral — plano é gramática, não criatividade) e 0.1–0.2 em classificadores e
+sintetizadores. A `GEMINI_API_KEY` vive no ambiente da Edge Function — **nunca no front**.
+Uma quarta peça, `dashboard-execute`, não fala com o Gemini — ela só autoriza e chama o
+executor Python (ver abaixo).
 
 ### `ai-agents` — pipeline de importação (`DatabasePipeline.tsx`, `Cfgdatabase.tsx`)
 
@@ -289,6 +292,38 @@ do usuário para o dataset, autoriza o plano do Agente A com `authorizePlan`
 implementação), assina (HMAC + SigV4) e chama o mesmo Lambda do dashboard. Sem card salvo nem
 cache de snapshot — cada pergunta do chat é ad-hoc; falha do executor vira mensagem de erro,
 não degradação para resultado antigo (não existe "resultado antigo" de uma pergunta nova).
+
+### `dashboard-agent` — criar card por pergunta (`NovoCardDialog.tsx`)
+
+Dois agentes, ambos dentro da ação `gerar_card`, nesta ordem:
+
+1. **Agente Z-dash** (`verificarEscopo`) — guardião de escopo, desde 2026-08-11. Devolve
+   `{status: PERMITIDO|BLOQUEADO, motivo}` com `response_schema` travado. Existe pelo mesmo
+   motivo do Agente Z do chat, mas é **mais estreito de propósito**: não tem `INVIAVEL`, e
+   por isso **não recebe `schemaMetadata`** — viabilidade já é checada duas vezes depois
+   (regra 1 do prompt do Tarsila, e a TRAVA 1 no cliente). Escopo não depende de quais
+   colunas a base tem, e mandar o schema aqui apagaria a economia que justifica a etapa.
+2. **Agente Tarsila do Amaral** (`INSTRUCAO_CARD`) — planejador de cards. Recebe pergunta +
+   `schemaMetadata` e emite `{title, viz, higher_is_better, query_plan}`, ou `{erro}` quando
+   a pergunta é inviável. É o prompt caro (~1.400 tokens antes do schema).
+
+⚠️ **O Z-dash é fail-open, e isso é deliberado.** Ele é economia de custo, não controle de
+segurança — quem protege dado é o RBAC em `executar_previa`. Rede, timeout, cota, JSON
+inválido, enum desconhecido: tudo deixa a pergunta passar. Fechar aqui transformaria um
+soluço do Gemini em "o produto não cria mais cards", e mascararia a mensagem específica de
+cota que o Tarsila já sabe produzir. Um 400 recusando o `response_schema` repete **uma** vez
+sem ele, pela mesma razão do chat: o endurecimento não pode ser o que derruba o porteiro.
+
+⚠️ **Custo:** o guardião é uma requisição Gemini a mais em **toda** geração de card. Como a
+cota do Gemini é por requisição, a quantidade de cards por dia cai pela metade — troca aceita
+conscientemente para impedir o pior caso, que não era erro: um card estruturalmente válido
+sobre uma coluna real qualquer, com título fora de contexto, **publicável** no dashboard da
+organização. Ver o risco R17 em `docs/fases dashboard/2026-08-10-fase-4-PLANO-pagina-inicial.md`.
+
+Logs, no padrão do chat (uma linha com a resposta inteira do agente):
+`[gerar_card/z-dash]` e `[gerar_card/tarsila]`. **A pergunta crua nunca vai para o log**, nos
+dois — é texto livre digitado sem pensar, e a D4 já decidiu não guardar isso nem no banco
+(`origin_question` fica `NULL`); reintroduzi-la pelo log seria contornar a mesma decisão.
 
 ### O executor real: `query_engine/` em AWS Lambda
 
@@ -407,6 +442,16 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   sempre com `.toLowerCase()`.
 - Cartão "Minha Organização" se adapta ao `join_mode`: `share_id` mostra o código;
   `dominio` mostra "Entrada: por domínio verificado" **sem código** (seria enganoso).
+- **Todo login pousa em `/inicio`** (Página Inicial, o mural de cards) — os três caminhos de
+  entrada em `Auth.tsx` (senha, SSO e criação de organização) apontam para lá desde
+  2026-08-11. Antes caíam em `/dashboard`, que é "Minha Organização", uma tela de
+  administração que a maioria dos usuários não precisa ver toda vez. Mexeu em um dos três?
+  Mexa nos três — eles não compartilham constante.
+- **Frequência decide hierarquia visual.** Criar organização acontece uma vez na vida da
+  empresa; entrar acontece milhares de vezes. Por isso `Auth.tsx` centraliza "Entrar" e
+  rebaixa "criar organização" a link secundário, em vez de oferecer os dois como cartões
+  irmãos. Mesma lógica dentro do fluxo de entrar: o formulário aparece direto, e "Primeiro
+  acesso" fica abaixo dele.
 
 ---
 
@@ -495,8 +540,8 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
       em 2026-08-11 o `dashboard-agent` estava no ar sem estar em commit nenhum, e teria
       ficado para trás com a versão antiga do `query_plan.ts` empacotada.
 - [ ] Mexeu na gramática do Query Plan? São **dois** prompts que a emitem, com textos
-      independentes: o Agente A (`ai-plum-chat`, ação `plan_query`) e o Planejador de Cards
-      (`dashboard-agent`, `INSTRUCAO_CARD`). E **três** lugares que a interpretam:
+      independentes: o Agente A (`ai-plum-chat`, ação `plan_query`) e o Agente Tarsila do
+      Amaral (`dashboard-agent`, `INSTRUCAO_CARD`). E **três** lugares que a interpretam:
       `_shared/query_plan.ts` (RBAC), `query_engine/pandas_executor.py` (execução) e as duas
       tabelas de teste. Mudar um sozinho é como a dívida da normalização de coluna, só que
       aqui divergir **pode** virar bypass.
@@ -526,4 +571,5 @@ própria sessão ou digite `/`.
 | `DESIGN.md` | Sistema de design: as duas superfícies, paleta validada, os cinco estados do card |
 | `TODOS.md` | Trabalho conscientemente adiado, com o raciocínio junto |
 | `docs/fases dashboard/` | Um arquivo por fase, com resumo estruturado por task |
+| `docs/2026-08-11-entrada-e-guardiao-do-dashboard.md` | Tela de entrada (pouso em `/inicio`, hierarquia, validação) e o Agente Z-dash — inclui o custo de cota aceito e as pendências de deploy/validação |
 | `infra/aws/PASSO-A-PASSO.md` | Como subir o executor |
