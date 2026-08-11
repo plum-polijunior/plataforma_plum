@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import DatabasePage from "./pages/Cfgdatabase";
 import Inicio from "./pages/Inicio";
+import DirecaoA from "./pages/DirecaoA";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -24,6 +25,10 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          {/* Direção A: proposta visual do ambiente interno, com dados falsos.
+              Fora do DashboardLayout de propósito — não passa pelo guard de
+              org, e a tela de login dela é parte do que está em avaliação. */}
+          <Route path="/direcao-a" element={<DirecaoA />} />
           <Route element={<DashboardLayout />}>
             {/* Página Inicial: rota viva, sem item na sidebar de propósito —
                 válvula de rollback da Fase 4 (§2.3 do plano). O link entra na

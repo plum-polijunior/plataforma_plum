@@ -148,6 +148,35 @@
   }
 }
 
+/* ── Direção A — cromo que não cabe em classe utilitária ────────────────────
+   Escopado em `.direcao-a` de propósito: o protótipo original setava
+   `html, body { background:#FFFFFF }` e a barra de rolagem no seletor
+   global, o que apagaria o tema escuro da landing. Aqui só vale dentro
+   da árvore da Direção A. */
+.direcao-a ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.direcao-a ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.direcao-a ::-webkit-scrollbar-thumb {
+  background: #ddd2d8;
+  border-radius: 99px;
+  border: 3px solid #ffffff;
+}
+
+.direcao-a a {
+  color: #7a2f56;
+  text-decoration: none;
+}
+
+.direcao-a a:hover {
+  color: #8e3a66;
+}
+
 @layer utilities {
   .scroll-snap-y {
     scroll-snap-type: y mandatory;
