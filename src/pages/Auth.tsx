@@ -28,7 +28,9 @@ const Auth = () => {
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const isLoginFormValid = EMAIL_REGEX.test(loginEmail) && loginPassword.length > 6;
+  const isLoginEmailValid = EMAIL_REGEX.test(loginEmail);
+  const isLoginPasswordValid = loginPassword.length >= 6;
+  const isLoginFormValid = isLoginEmailValid && isLoginPasswordValid;
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
 
@@ -369,10 +371,16 @@ const Auth = () => {
                           <div className="space-y-2">
                             <Label htmlFor="top-login-email">Email corporativo</Label>
                             <Input id="top-login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required className="bg-background/50" />
+                            {loginEmail.length > 0 && !isLoginEmailValid && (
+                              <p className="text-xs text-destructive">O email precisa ter um @ e um domínio (ex.: nome@empresa.com).</p>
+                            )}
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="top-login-password">Senha</Label>
                             <Input id="top-login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
+                            {loginPassword.length > 0 && !isLoginPasswordValid && (
+                              <p className="text-xs text-destructive">A senha precisa ter pelo menos 6 caracteres.</p>
+                            )}
                           </div>
                           {isLoginFormValid && (
                             <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
