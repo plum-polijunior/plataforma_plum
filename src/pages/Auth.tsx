@@ -340,6 +340,8 @@ const Auth = () => {
                   <>
                     {loginMode === "returning" ? (
                       <>
+                        <h3 className="font-semibold text-foreground mb-4">Já possui uma conta</h3>
+
                         <div className="space-y-3 mb-6">
                           <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('google')}>
                             <Globe className="mr-2 h-4 w-4" />
@@ -374,7 +376,9 @@ const Auth = () => {
                           </Button>
                         </form>
 
-                        <Button type="button" onClick={() => setLoginMode("new")} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6">
+                        <h3 className="font-semibold text-foreground mt-8 mb-4">Ainda não possui conta</h3>
+
+                        <Button type="button" onClick={() => setLoginMode("new")} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                           Primeiro acesso
                         </Button>
                       </>
