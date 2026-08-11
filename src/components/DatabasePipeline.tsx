@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
 import * as XLSX from "xlsx";
 import { extrairSheetRef, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
+import { normalizarNomeDeColuna } from "@/lib/colunas";
 
 interface DatabasePipelineProps {
   organizationId: string;
@@ -34,15 +35,11 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const [dataSamples, setDataSamples] = useState<any[]>([]);
 
   // Helpers
-  const normalizeString = (str: string) => {
-    return str
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // remove acentos
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "_") // caracteres especiais viram _
-      .replace(/_+/g, "_") // multiplos _ viram um só
-      .replace(/^_|_$/g, ""); // remove _ do começo e fim
-  };
+  // Movido para `@/lib/colunas` em 2026-08-11. Esta normalizacao nao e
+  // detalhe de componente: e o vocabulario do sistema (schema_metadata,
+  // allowed_columns, Query Plan), e o executor Python tem que espelha-la
+  // para achar a coluna no cabecalho da planilha. Ver o comentario de la.
+  const normalizeString = normalizarNomeDeColuna;
 
   const [datasetId, setDatasetId] = useState<string | null>(null);
 
