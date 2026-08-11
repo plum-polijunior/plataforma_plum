@@ -15,8 +15,10 @@ const Auth = () => {
   // State for active tab (empty initially so no forms show)
   const [activeTab, setActiveTab] = useState<string>("");
 
-  // Sub-state for "Entrar" tab (empty = choice buttons)
-  const [loginMode, setLoginMode] = useState<"" | "returning" | "new">("");
+  // Sub-state for "Entrar" tab (login por email/SSO é o caminho padrão —
+  // a esmagadora maioria dos acessos é de quem já tem conta; "Primeiro
+  // acesso" vira uma opção secundária, não uma escolha equivalente).
+  const [loginMode, setLoginMode] = useState<"returning" | "new">("returning");
 
   // State for "Entrar em uma organização"
   const [orgId, setOrgId] = useState("");
@@ -270,6 +272,7 @@ const Auth = () => {
           if (activeTab !== "") {
             setActiveTab("");
             setFoundOrg(null);
+            setLoginMode("returning");
           } else {
             window.location.href = '/';
           }
@@ -294,30 +297,36 @@ const Auth = () => {
         <div className="w-full">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {activeTab === "" && (
-              <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 mb-10 bg-transparent gap-6 p-0 h-auto">
-                <TabsTrigger
-                  value="entrar"
-                  onClick={() => setFoundOrg(null)}
-                  className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
-                >
-                  <span className="font-bold text-2xl mb-6 text-foreground">Entrar</span>
-                  <LogIn className="h-16 w-16 mb-6 text-primary" />
-                  <span className="text-base text-muted-foreground whitespace-normal text-center">
-                    Clique aqui se sua empresa já usa o Plum.
-                  </span>
-                </TabsTrigger>
+              <div className="flex flex-col items-center mb-10 gap-6">
+                <TabsList className="grid w-full max-w-sm grid-cols-1 bg-transparent gap-6 p-0 h-auto mx-auto">
+                  <TabsTrigger
+                    value="entrar"
+                    onClick={() => {
+                      setFoundOrg(null);
+                      setLoginMode("returning");
+                    }}
+                    className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+                  >
+                    <span className="font-bold text-2xl mb-6 text-foreground">Entrar</span>
+                    <LogIn className="h-16 w-16 mb-6 text-primary" />
+                    <span className="text-base text-muted-foreground whitespace-normal text-center">
+                      Clique aqui se sua empresa já usa o Plum.
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
 
-                <TabsTrigger
-                  value="criar"
-                  className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+                {/* Criar organização é raro (uma vez na vida da empresa) —
+                    fica como link secundário, não como opção do mesmo peso
+                    que "Entrar" (que acontece milhares de vezes). */}
+                <Button
+                  type="button"
+                  variant="link"
+                  onClick={() => setActiveTab("criar")}
+                  className="text-base text-muted-foreground hover:text-primary"
                 >
-                  <span className="font-bold text-2xl mb-6 text-foreground">Nova Organização</span>
-                  <Globe className="h-16 w-16 mb-6 text-primary" />
-                  <span className="text-base text-muted-foreground whitespace-normal text-center">
-                    Clique aqui para criar um novo ambiente para sua empresa.
-                  </span>
-                </TabsTrigger>
-              </TabsList>
+                  Sua empresa ainda não usa o Plum? Crie uma organização agora!
+                </Button>
+              </div>
             )}
 
             {/* TAB: ENTRAR EM UMA ORGANIZAÇÃO */}
@@ -325,34 +334,8 @@ const Auth = () => {
               <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
                 {!foundOrg ? (
                   <>
-                    {loginMode === "" ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Button 
-                          variant="outline" 
-                          className="h-24 flex flex-col items-center justify-center gap-2 border-primary/20 hover:border-primary/50 hover:bg-primary/5"
-                          onClick={() => setLoginMode("returning")}
-                        >
-                          <LogIn className="h-6 w-6 text-primary" />
-                          <span className="font-semibold text-base">Já sou usuário</span>
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="h-24 flex flex-col items-center justify-center gap-2 border-primary/20 hover:border-primary/50 hover:bg-primary/5"
-                          onClick={() => setLoginMode("new")}
-                        >
-                          <Globe className="h-6 w-6 text-primary" />
-                          <span className="font-semibold text-base">Primeiro acesso</span>
-                        </Button>
-                      </div>
-                    ) : loginMode === "returning" ? (
+                    {loginMode === "returning" ? (
                       <>
-                        <div className="flex items-center mb-6">
-                          <Button variant="ghost" size="sm" onClick={() => setLoginMode("")} className="mr-2 h-8 px-2">
-                            ← Voltar
-                          </Button>
-                          <h3 className="font-semibold text-foreground">Já sou usuário</h3>
-                        </div>
-
                         <div className="space-y-3 mb-6">
                           <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('google')}>
                             <Globe className="mr-2 h-4 w-4" />
@@ -386,11 +369,17 @@ const Auth = () => {
                             {isLoading ? "Entrando..." : "Entrar com Email"}
                           </Button>
                         </form>
+
+                        <div className="text-center mt-6">
+                          <Button type="button" variant="link" onClick={() => setLoginMode("new")} className="text-muted-foreground hover:text-primary">
+                            Primeiro acesso
+                          </Button>
+                        </div>
                       </>
                     ) : (
                       <>
                         <div className="flex items-center mb-6">
-                          <Button variant="ghost" size="sm" onClick={() => setLoginMode("")} className="mr-2 h-8 px-2">
+                          <Button variant="ghost" size="sm" onClick={() => setLoginMode("returning")} className="mr-2 h-8 px-2">
                             ← Voltar
                           </Button>
                           <h3 className="font-semibold text-foreground">Primeiro acesso</h3>
