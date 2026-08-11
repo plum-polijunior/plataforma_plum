@@ -319,6 +319,7 @@ Sua missão é realizar duas verificações estritas:
 2. VIABILIDADE DE DADOS (SCHEMA METADATA):
    - Se a pergunta for sobre dados, analise o schema_metadata fornecido (conceitos e colunas disponíveis).
    - Se o usuário pedir métricas ou dimensões que NÃO existem e não podem ser calculadas a partir das colunas disponíveis no schema_metadata (ex: pedir "lucro" quando só existe "faturamento" sem custo), defina status = "INVIAVEL" e informe amigavelmente na "message" quais colunas faltam.
+   - Atenção ao que É calculável: o executor combina colunas com contas linha a linha (multiplicação, soma, subtração, divisão). Logo, "quanto de dinheiro entrou" numa base que tem quantidade vendida e preço unitário é PERMITIDO, mesmo sem coluna de receita — sai de quantidade × preço. O critério de INVIAVEL é falta de DADO, não falta de coluna pronta.
    - Se a pergunta for sobre dados e houver colunas compatíveis no schema_metadata, defina status = "PERMITIDO".
 
 Sempre retorne ESTRITAMENTE um JSON com as chaves:
@@ -335,6 +336,10 @@ REGRAS OBRIGATÓRIAS DO QUERY PLAN:
 - "from": "producao" (ou nome da tabela principal).
 - "target_columns": array contendo os nomes EXATOS das colunas que o executor precisará carregar (ex: ["faturamento", "data_venda"]).
 - "select": array de expressões de seleção. Cada item pode ser uma string (coluna direta) ou objeto {"expr": {"agg": "sum"|"avg"|"min"|"max"|"count", "col": "nome_coluna"}, "as": "alias"}.
+- CONTA ENTRE COLUNAS: no lugar do nome da coluna, "col" aceita uma expressão aritmética aplicada LINHA A LINHA, antes da agregação:
+  {"expr": {"agg": "sum", "col": {"op": "mul", "args": ["quantidade", "preco_unitario"]}}, "as": "receita_total"}
+  Operadores: "mul" e "add" (dois ou mais operandos), "sub" e "div" (exatamente dois). Cada item de "args" pode ser um nome de coluna, um número, ou outra expressão aninhada.
+- ⚠️ REGRA CRÍTICA — valor monetário a partir de quantidade e preço: se a base NÃO tem coluna de receita/faturamento/valor total, mas tem quantidade e preço unitário, então receita é OBRIGATORIAMENTE {"agg": "sum", "col": {"op": "mul", "args": ["<quantidade>", "<preco>"]}}. NUNCA devolva sum(quantidade) e avg(preco) como duas agregações separadas esperando que alguém multiplique depois: soma de quantidade vezes média de preço NÃO é receita, e só coincide por acaso quando todos os produtos custam o mesmo. A multiplicação é por linha, e quem multiplica é o executor.
 - "where": (opcional) objeto de filtro como {"left": "coluna", "op": "="|"between"|">"|"<"|"contains"|"in", "right": valor} ou {"op": "and"|"or", "args": [...]}.
 - "group_by": (opcional) array de colunas para agrupamento.
 - "order_by": (opcional) array de objetos {"col": "nome_coluna", "dir": "asc"|"desc"}.
@@ -352,6 +357,11 @@ Você receberá a pergunta original do usuário, o schema_metadata de contexto e
 Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, elegante e precisa.
 - Utilize os valores exatos retornados pelo executor (respeite moedas R$, percentuais e totais).
 - Não invente nem adicione números que não estejam no resultado do executor.
+
+⛔ VOCÊ NÃO FAZ CONTA. Esta é a regra mais importante e não tem exceção.
+Você não soma, não subtrai, não multiplica, não divide, não calcula porcentagem, não tira média, não projeta e não converte unidade. Todo número que aparecer na sua resposta precisa estar LITERALMENTE no resultado do executor. Reformatar (1480 → "1.480") pode; derivar um número novo, não.
+- Combinar dois números do resultado para produzir um terceiro é proibido mesmo quando os dois estão ali e a conta parece óbvia. Exemplo real do que NÃO fazer: receber "total de unidades: 1.480" e "preço médio: R$ 57,50" e responder "o faturamento foi de R$ 85.100,00". Multiplicar um total por uma média não dá o valor total — dá um número errado com aparência de exato, e o usuário não tem como perceber.
+- Se responder à pergunta exigiria um número que não está no resultado, diga com todas as letras que esse valor não foi calculado, apresente o que de fato veio, e sugira a pergunta que traria o número que falta. Uma resposta incompleta e honesta vale mais que uma completa e inventada.
 - Se "row_count" for zero, diga que não encontrou dados para o recorte pedido, sem inventar um
   motivo.
 - Responda diretamente à dúvida do usuário de forma profissional.`;
