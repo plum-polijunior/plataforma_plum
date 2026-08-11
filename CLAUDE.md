@@ -60,6 +60,32 @@ a versão implantada (`mcp__supabase__get_edge_function`, ou o painel) — senã
 linhas que produção nunca executou. Para publicar:
 `npx supabase functions deploy <nome> --project-ref rjwidarrsykufuifzunu`.
 
+⚠️ **Correção de 2026-08-12: o check "Supabase Preview" PUBLICA, mas não publica tudo.** O
+parágrafo acima dizia que ele reportava `success` sem publicar nada. Está errado, e foi medido:
+no push de `e203320` o check rodou `18:38:17Z → 18:38:22Z` e `dashboard-execute` e
+`dashboard-agent` ficaram com `updated_at` **exatamente `18:38:22Z`** — o mesmo segundo. Já a
+`ai-plum-chat`, cujo `index.ts` era o único que aquele push mudava, **não foi tocada**: ela
+continuou na versão de 6 horas antes e só subiu no `functions deploy` manual, 49 min depois.
+
+Não sabemos o critério de seleção dele, e é isso que importa: **o check é um publicador de
+cobertura desconhecida.** Continue publicando à mão a função que você mexeu, e continue
+conferindo o `ezbr_sha256`. A diferença é que agora também vale o inverso — uma função que você
+**não** mexeu pode ter sido republicada pelo push de outra pessoa, então divergência entre
+`_shared/*` empacotado em consumidores diferentes pode aparecer sem ninguém ter feito deploy.
+
+Como conferir os três consumidores de `_shared/query_plan.ts` sem Docker (o `functions download`
+exige Docker) e sem despejar o arquivo no contexto — o corpo vem como ESZIP com as fontes em
+texto:
+
+```sh
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions/<nome>/body" \
+  | grep -a -c "walkArithmetic"
+```
+
+Em 2026-08-12 os três (`ai-plum-chat`, `dashboard-execute`, `dashboard-agent`) deram contagens
+idênticas — sem divergência no interpretador de RBAC.
+
 Migrations continuam manuais, de propósito.
 
 ---
