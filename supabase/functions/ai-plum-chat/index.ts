@@ -158,7 +158,12 @@ async function handleExecutePlan(
     return json({
       result: {
         status: "forbidden",
-        error: "Seu cargo nao tem acesso liberado a nenhuma coluna desta base.",
+        // Acentuada em 2026-08-11: esta frase é gravada em `plum_chat` e
+        // renderizada na bolha do assistente, então ela é lida pelo usuário
+        // como se fosse texto do chat. Sem acento, virava erro de ortografia
+        // nosso atribuído ao produto. Vale para as outras três deste arquivo
+        // que seguem o mesmo caminho (ver as demais marcações desta data).
+        error: "Seu cargo não tem acesso liberado a nenhuma coluna desta base.",
       } satisfies ExecutorResult,
     });
   }
@@ -172,7 +177,7 @@ async function handleExecutePlan(
     // investigação de RBAC tinha que reconstruir isso às cegas.
     //
     // A separação abaixo importa porque este branch tem DUAS causas que o
-    // usuário lê com a mesma frase ("uma coluna que seu cargo nao pode ver"):
+    // usuário lê com a mesma frase ("uma coluna que seu cargo não pode ver"):
     // a coluna existe na planilha e o cargo não a enxerga (RBAC de verdade),
     // ou o Agente A citou um nome que não existe no schema_metadata — e nome
     // inexistente nunca está em allowed_columns, então cai aqui igual. Sem
@@ -200,7 +205,9 @@ async function handleExecutePlan(
     return json({
       result: {
         status: "forbidden",
-        error: "Sua pergunta usa uma coluna que seu cargo nao pode ver.",
+        // Acentuada em 2026-08-11 (chega à bolha). O comentário 30 linhas acima
+        // cita esta frase literalmente — mudou aqui, muda lá.
+        error: "Sua pergunta usa uma coluna que seu cargo não pode ver.",
       } satisfies ExecutorResult,
     });
   }
@@ -258,7 +265,7 @@ async function handleExecutePlan(
     const corpo = await resp.json();
     const resultado: ExecutorResult = (corpo.results ?? [])[0] ?? {
       status: "error",
-      error: "Executor nao devolveu resultado.",
+      error: "Executor não devolveu resultado.", // acentuada em 2026-08-11 (chega à bolha)
     };
     console.log("[execute_plan]", JSON.stringify(resultado));
     return json({ result: resultado });
@@ -269,7 +276,8 @@ async function handleExecutePlan(
     return json({
       result: {
         status: "error",
-        error: "Nao consegui calcular isso agora. Tente novamente em instantes.",
+        // acentuada em 2026-08-11 (chega à bolha)
+        error: "Não consegui calcular isso agora. Tente novamente em instantes.",
       } satisfies ExecutorResult,
     });
   }
@@ -351,6 +359,24 @@ Retorne ESTRITAMENTE o JSON do Query Plan sem markdown.`;
 
     userPrompt = `Pergunta do Usuário: "${prompt}"\nSchema Metadata (JSON de Contexto): ${JSON.stringify(schemaMetadata || {})}`;
   } else {
+    // Agente C. Os dois blocos finais — FORMATO DA RESPOSTA e PORTUGUÊS CORRETO
+    // — entraram em 2026-08-11, e a ordem importa: eles vêm DEPOIS do bloco
+    // "⛔ VOCÊ NÃO FAZ CONTA" de propósito. Aquele é o R-13, escrito depois de
+    // um incidente real, e é a regra que não pode perder proeminência para uma
+    // instrução de tipografia.
+    //
+    // Antes disso este prompt não dizia nada sobre estrutura nem sobre
+    // acentuação (compare com o Agente A, que termina em "sem markdown"), e as
+    // consequências eram três: lista saía como frase corrida separada por
+    // vírgula, negrito ia em todo número, e nome técnico de coluna
+    // (`receita_total`, `natureza_da_aquisicao`) vazava cru para a prosa — o
+    // modelo espelha o registro do JSON que recebe, e as chaves de `rows` são
+    // os aliases do Query Plan, todos em snake_case sem acento.
+    //
+    // ⚠️ Este bloco é par indivisível com `src/components/RespostaMarkdown.tsx`.
+    // Pedir Markdown aqui só funciona porque o front passou a renderizar
+    // Markdown; com o front antigo, o "- " chega ao usuário como hífen literal.
+    // Se reverter um lado, reverta o outro.
     systemInstruction = `Você é o Agente C, Comunicador e Sintetizador de Respostas da Plataforma Plum.
 Você receberá a pergunta original do usuário, o schema_metadata de contexto e o resultado exato e determinístico calculado pelo Pandas Executor (vetor de resultados).
 
@@ -362,9 +388,21 @@ Sua tarefa é elaborar uma resposta em português brasileiro executiva, clara, e
 Você não soma, não subtrai, não multiplica, não divide, não calcula porcentagem, não tira média, não projeta e não converte unidade. Todo número que aparecer na sua resposta precisa estar LITERALMENTE no resultado do executor. Reformatar (1480 → "1.480") pode; derivar um número novo, não.
 - Combinar dois números do resultado para produzir um terceiro é proibido mesmo quando os dois estão ali e a conta parece óbvia. Exemplo real do que NÃO fazer: receber "total de unidades: 1.480" e "preço médio: R$ 57,50" e responder "o faturamento foi de R$ 85.100,00". Multiplicar um total por uma média não dá o valor total — dá um número errado com aparência de exato, e o usuário não tem como perceber.
 - Se responder à pergunta exigiria um número que não está no resultado, diga com todas as letras que esse valor não foi calculado, apresente o que de fato veio, e sugira a pergunta que traria o número que falta. Uma resposta incompleta e honesta vale mais que uma completa e inventada.
-- Se "row_count" for zero, diga que não encontrou dados para o recorte pedido, sem inventar um
-  motivo.
-- Responda diretamente à dúvida do usuário de forma profissional.`;
+- Se "row_count" for zero, diga que não encontrou dados para o recorte pedido, sem inventar um motivo.
+- Responda diretamente à dúvida do usuário de forma profissional.
+
+FORMATO DA RESPOSTA (o chat renderiza Markdown de verdade):
+- Comece com UMA frase que responde diretamente à pergunta, com o valor principal em **negrito**. Só esse valor leva negrito.
+- Se o resultado tiver mais de uma linha, liste os itens em tópicos, um por linha, começando com "- ", no formato "- Rótulo — valor". NUNCA emende os itens numa frase corrida separados por vírgula. NUNCA use negrito dentro dos tópicos.
+- Deixe uma linha em branco entre a frase de abertura e a lista.
+- Só estes recursos são permitidos: parágrafo curto, "- " para lista e "**" para o valor principal. NÃO use títulos (#), tabelas, blocos de código, citações, links nem emojis.
+- No máximo 3 parágrafos. Se a lista passar de 15 itens, mostre os mais relevantes e diga quantos ficaram de fora.
+
+PORTUGUÊS CORRETO:
+- Escreva em português brasileiro com acentuação e cedilha completas: "não", "orçamento", "número", "média", "período", "aquisição".
+- Nunca escreva sem acento, mesmo que a palavra apareça sem acento no JSON recebido. Nome técnico de coluna e mensagem interna do sistema vêm sem acento de propósito, e não são modelo de escrita.
+- Nome de coluna NUNCA aparece cru na resposta: "preco_unitario" vira "preço unitário", "natureza_da_aquisicao" vira "natureza da aquisição", o alias "receita_total" vira "receita total". Use a definição semântica do schema_metadata para nomear o conceito em linguagem de negócio.
+- Revise concordância e regência antes de responder.`;
 
     userPrompt = `Pergunta Original do Usuário: "${prompt}"\nResultado do Executor Python (Vetor de Dados): ${JSON.stringify(executorResult || {})}\nSchema Metadata: ${JSON.stringify(schemaMetadata || {})}`;
   }
