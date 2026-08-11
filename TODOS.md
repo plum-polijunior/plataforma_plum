@@ -328,3 +328,37 @@ projeto na Vercel, ela muda e o SSO quebra de novo, silenciosamente, do mesmo je
 
 **Depende de / bloqueado por:** decidir o que acontece com o site que está hoje na Hostinger
 nesse domínio (fica num subdomínio? sai?), e uma janela para a propagação de DNS.
+
+---
+
+## 10. Renomear a rota `/dashboard`, que não é um dashboard
+
+**O quê:** `/dashboard` (`src/pages/Dashboard.tsx`, 1007 linhas) é a tela de **gestão da
+organização** — membros, cargos, aprovações, matriz de permissões. Não mostra nenhum dado do
+cliente. O nome deveria ser `/organizacao` ou equivalente.
+
+**Por quê:** com a Página Inicial (`/inicio`) virando o dashboard de verdade, ter uma rota
+chamada `/dashboard` que não é o dashboard é uma armadilha permanente para quem chega no
+código. Já custou tempo de leitura mais de uma vez.
+
+**Os lugares que precisam mudar juntos** (é isso que torna a mudança não-trivial):
+
+1. `src/App.tsx` — a `<Route>`
+2. `src/layouts/DashboardLayout.tsx` — o `<Link to="/dashboard">` e as duas comparações
+   `location.pathname === "/dashboard"` da linha 71
+3. `src/pages/Auth.tsx` — **três** redirecionamentos: `:90`, `:111` e `:244`. O de `:111` é o
+   `redirectTo` do **OAuth**, e o valor precisa estar na allowlist de Redirect URLs do
+   Supabase (Authentication → URL Configuration), que **não é versionada**
+
+**Por que não agora:** o item 3 é o mesmo tipo de configuração fora do repositório que já
+quebrou o SSO uma vez (ver item 9 deste arquivo: o Site URL que nunca saiu de
+`http://localhost:3000`). Trocar a rota sem atualizar a allowlist faz o login por SSO cair
+numa página inexistente, com sintoma confuso. É barato de fazer e caro de fazer errado, então
+merece uma janela própria e não pode pegar carona numa fase de dashboard.
+
+**Contexto:** decisão D3 do plano da Fase 4
+(`docs/fases dashboard/2026-08-10-fase-4-PLANO-pagina-inicial.md`). A Página Inicial nasce em
+`/inicio` justamente para não depender disto.
+
+**Depende de / bloqueado por:** nada técnico. Só de alguém abrir a allowlist do Supabase na
+mesma janela em que troca as rotas, e testar um login por SSO depois.
