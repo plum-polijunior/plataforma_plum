@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
-import { Building2, LogOut, Menu, X, Users, Settings, Layers } from "lucide-react";
+import { Building2, LogOut, Menu, X, Users, Settings, Layers, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,6 +67,13 @@ export function DashboardLayout() {
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-2">
+            <Link to="/inicio">
+              <Button variant={location.pathname === "/inicio" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/inicio" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                <LayoutDashboard className="mr-2 h-4 w-4" />
+                Página Inicial
+              </Button>
+            </Link>
+
             <Link to="/dashboard">
               <Button variant={location.pathname === "/dashboard" ? "secondary" : "ghost"} className={`w-full justify-start ${location.pathname === "/dashboard" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                 <Building2 className="mr-2 h-4 w-4" />
