@@ -1,8 +1,17 @@
 # Direção A no app real
 
-**Data:** 2026-08-12 · **Branch:** `fix/formato-da-resposta-do-chat` (o trabalho do chat em
-Markdown é a base desta leva — ver §7) · **Estado:** `npm run build`, `npm test` e `npm run lint`
-verdes. Nada publicado ainda.
+**Data:** 2026-08-12 · **Branch:** mergeada em `plataforma` (`3c93ff6..e203320`, fast-forward) ·
+**Estado:** `npm run build`, `npm test` e `npm run lint` verdes; CI verde nas duas etapas; front
+publicado pela Vercel; `ai-plum-chat` publicada à mão (versão 51, `cf4801de…`).
+
+⚠️ **Duas pendências reais, nenhuma delas fechada nesta leva:**
+
+1. **Nenhuma verificação visual foi feita.** Tudo o que está afirmado aqui é estático — build,
+   testes, hashes, CSS gerado, bundle publicado. Ninguém olhou uma página renderizada. Os itens
+   da §8 que dependem de olho humano continuam todos abertos, começando pelo mais importante:
+   a landing tem que estar idêntica.
+2. **O ΔE sob daltonismo reprova.** Ver §2.1. O `DESIGN.md` §3 pede ≥8 e o tema escuro dava 8,4;
+   o claro dá **4,4** em deuteranopia. É decisão de produto, não ajuste de constante.
 
 A branch `feat/ui-direcao-a` trouxe uma proposta visual do ambiente interno — tema claro, marca
 `#7A2F56` no lugar do roxo `270 70% 60%`, e um vocabulário próprio de botão, campo e tipografia.
@@ -131,6 +140,34 @@ O ΔE mínimo entre degraus vizinhos subiu de **4,7 para 9,2**.
 | magenta | 64→30 | −34 (púrpura) | 3,00 | 9,2 |
 | verde | 32→14 | +20 (pinho) | 3,15 | 10,6 |
 | vermelho | 65→31 | −30 (magenta) | 3,06 | 9,9 |
+
+### 2.1 O que NÃO foi cumprido: ΔE sob daltonismo
+
+O plano listava isto como pendente, com estas palavras: *"Contraste eu validei; ΔE não."* Medido
+depois, com simulação de dicromacia (Brettel/Viénot em espaço LMS):
+
+| Visão | ΔE degraus vizinhos | ΔE entre slots |
+|---|---|---|
+| normal | 9,2 | 21,8 |
+| protanopia | 5,7 | 9,4 |
+| **deuteranopia** | **4,4** (vermelho, degraus 3/4) | **6,0** (laranja × verde) |
+
+O `DESIGN.md:80` registra que a paleta escura dava *"pior par sob daltonismo ΔE 8,4 (alvo ≥8)"*.
+A clara dá 4,4. **É uma regressão medida contra um alvo declarado.**
+
+O teste `contraste-serie.test.ts` **não** cobre daltonismo, de propósito: afrouxar o limiar para
+o número passar seria fingir que o critério foi atendido.
+
+O que segura a leitura hoje é o `DESIGN.md` §9 — "cor nunca sozinha": cada barra leva rótulo e
+valor ao lado, a legenda da empilhada traz valor e percentual, e existe o alternador
+"Ver como → Tabela", que o próprio documento chama de *"a peça que mais paga"*.
+
+Fechar o furo é decisão de produto: menos degraus por rampa (o `DESIGN.md` §3 já põe teto de 3
+slots em formas de todos-os-pares, por motivo parecido), separação maior de matiz, ou assumir
+conscientemente a dependência da tabela. Não é ajuste de constante.
+
+**Ponto vizinho:** o magenta fica no piso **exato** de 3,00:1, sem folga. Qualquer mexida na
+saturação dele reprova o teste — que é o comportamento desejado, mas vale saber antes.
 
 ### O sentido da rampa inverteu
 

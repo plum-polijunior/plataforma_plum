@@ -1,8 +1,10 @@
 # O formato da resposta do chat
 
-**Data:** 2026-08-11 · **Branch:** `plataforma` · **Estado:** front pronto e verificado
-(`npm run build` + `npm test` verdes). **Edge Function `ai-plum-chat` ainda não publicada** —
-ver "Reversão e deploy" no fim.
+**Data:** 2026-08-11 · **Branch:** `plataforma` · **Estado:** ✅ **tudo no ar.** Front publicado
+pela Vercel e Edge Function `ai-plum-chat` publicada em 2026-08-12 (versão 51,
+`ezbr_sha256` `cf4801de97b9178e17f4cffb80e298564d2e7a6bea00ad5d2c72e09155913adc`, subindo de
+`14ffe669…`). Conferido no bundle publicado: `FORMATO DA RESPOSTA`, `PORTUGUÊS CORRETO` e a
+mensagem já acentuada estão lá. Ver "Reversão e deploy" no fim.
 
 A queixa foi de apresentação, não de conteúdo: a resposta do chat vinha com `**` visível na
 tela, listas emendadas numa frase corrida, e erros de acentuação. O número em si já estava

@@ -33,6 +33,12 @@ produto. Num dashboard o produto é o número, e tudo que compete com ele é ru�
 
 ## 2. Tokens de App UI
 
+⚠️ **Os hex abaixo são do tema ESCURO e valem como registro histórico, não como referência.**
+Desde 2026-08-12 o ambiente interno é claro: o plano é `#FFFFFF`, a superfície do card é
+`#FAF7F8`, a tinta é `#191317` e a marca é `#7A2F56`. Os nomes `--app-*`, `--ink*` e `--brand`
+nunca existiram no código — a verdade está em `src/index.css` (`:root` claro, `.dark` para a
+landing). Ver `docs/2026-08-12-direcao-a-no-app.md`.
+
 ```css
 /* Superfícies. Derivadas dos tokens existentes, convertidas para hex. */
 --app-plane:      #08080C;   /* fundo da página (= --background 240 20% 4%)  */
@@ -86,6 +92,24 @@ Ordem fixa. Atribua por posição, **nunca cicle** e nunca gere uma cor nova.
   pertencer só ao cromo. Os 7 slots sem ele continuam passando.
 - `#9952E0` como cor de **ênfase** isolada: passa (banda de luminosidade, croma e
   contraste).
+
+⚠️ **Superfície CLARA (2026-08-12): passa em contraste, REPROVA em daltonismo.** A rampa em
+produção hoje é a do tema claro, com faixa de luminosidade por matiz (ver
+`src/components/dashboard/cores.ts`). Medido contra `#FAF7F8`:
+
+| Visão | ΔE degraus vizinhos | ΔE entre slots | Contraste |
+|---|---|---|---|
+| normal | 9,2 | 21,8 | ≥3,00:1 (magenta no piso exato) |
+| protanopia | 5,7 | 9,4 | — |
+| **deuteranopia** | **4,4** | **6,0** | — |
+
+O alvo de ≥8 sob daltonismo, que o tema escuro cumpria com 8,4, **não é cumprido**. O teste
+`src/lib/contraste-serie.test.ts` trava contraste, ΔE em visão normal e o sentido da rampa —
+**não** trava daltonismo, de propósito, para não fingir que o critério passou.
+
+O que segura a leitura hoje é a §9: cada barra leva rótulo e valor ao lado, e existe o alternador
+"Ver como → Tabela". Fechar o furo é decisão de produto, não ajuste de constante: menos degraus
+por rampa, separação maior de matiz, ou aceitar e assumir a dependência da tabela.
 
 Reproduza com:
 ```
@@ -248,7 +272,12 @@ Se algum destes aparecer numa tela de app do PLUM, está errado:
 - **Tipografia com nome próprio.** Hoje tudo roda na sans do sistema. Isso é uma
   omissão herdada, não uma escolha. Vale uma decisão dedicada depois, e ela muda o
   caráter da marca inteira, então não cabia nesta revisão.
-- **Modo claro.** `:root` e `.dark` têm os mesmos valores hoje: o produto é dark-only.
-  Se um cliente pedir modo claro, a paleta de série precisa ser **re-degrau na
-  superfície clara e revalidada**, não invertida automaticamente.
+- ~~**Modo claro.** `:root` e `.dark` têm os mesmos valores hoje: o produto é dark-only.~~
+  **ACONTECEU em 2026-08-12 (Direção A).** O ambiente interno é **claro**, marca `#7A2F56`, e
+  `.dark` virou opt-in da landing. O aviso desta linha estava certo e foi cumprido: a paleta de
+  série foi re-degrau e revalidada, não invertida — cinco medições, faixa de luminosidade **por
+  matiz** (os tetos no claro vão de 32% a 65%), e o sinal do desvio de matiz **invertido**, porque
+  no claro ele cancelava a rampa em vez de proteger o contraste. Ver
+  `docs/2026-08-12-direcao-a-no-app.md` §2 e o teste `src/lib/contraste-serie.test.ts`.
+  ⚠️ **Uma parte do alvo NÃO foi cumprida:** o ΔE sob daltonismo. Ver a nota na §3.
 - **Movimento além de transição de estado.** Fora de escopo por escolha: App UI.
