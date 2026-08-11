@@ -2,37 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Plumb Design System - Purple Futuristic Theme */
+/* Plum Design System
+ *
+ * Duas superfícies, como o DESIGN.md §1 exige: o ambiente interno do produto e a
+ * landing. Elas compartilham a marca e não compartilham o tratamento visual.
+ *
+ * ⚠️ A inversão de 2026-08-12 (Direção A). Até esta data `:root` e `.dark` eram
+ * BYTE A BYTE iguais e escuros, com `<html class="dark">` fixo no `index.html`:
+ * não existia tema claro, e o `.dark` não selecionava nada — era decoração.
+ *
+ * Agora:
+ *   `:root`  = o ambiente interno, CLARO, marca #7A2F56  ← a verdade do produto
+ *   `.dark`  = os valores escuros de antes, intactos      ← opt-in da landing
+ *
+ * A landing (`pages/Index.tsx`) e o 404 pedem `.dark` na raiz do próprio JSX.
+ *
+ * Por que nesta direção, e não um `.tema-claro` embrulhando o app: o Radix
+ * renderiza Dialog, Select, Popover e DropdownMenu em portal no `body`, FORA da
+ * árvore do layout. Com o claro num wrapper, todo diálogo do produto herdaria o
+ * tema errado — e o produto é feito de diálogos (novo card, editar card, a
+ * matriz de permissões). Com `:root` claro, o portal já nasce certo.
+ */
 
 @layer base {
   :root {
-    --background: 240 20% 4%;
-    --foreground: 270 20% 98%;
+    /* Ambiente interno — Direção A (claro). Hex de origem no comentário. */
+    --background: 0 0% 100%; /* #FFFFFF */
+    --foreground: 320 14% 9%; /* #191317  ink      */
 
-    --card: 260 30% 8%;
-    --card-foreground: 270 20% 98%;
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 320 14% 9%;
 
-    --popover: 260 30% 8%;
-    --popover-foreground: 270 20% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 320 14% 9%;
 
-    --primary: 270 70% 60%;
-    --primary-foreground: 270 20% 98%;
+    --primary: 329 44% 33%; /* #7A2F56  brand    */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 260 25% 15%;
-    --secondary-foreground: 270 20% 90%;
+    --secondary: 340 23% 97%; /* #FAF7F8  surface  */
+    --secondary-foreground: 327 6% 35%; /* #5F545A  text     */
 
-    --muted: 260 20% 12%;
-    --muted-foreground: 270 10% 60%;
+    --muted: 340 23% 97%; /* #FAF7F8  surface  */
+    --muted-foreground: 325 6% 41%; /* #6F636A  muted    */
 
-    --accent: 280 60% 50%;
-    --accent-foreground: 270 20% 98%;
+    --accent: 332 46% 93%; /* #F5E4EC  tint     */
+    --accent-foreground: 329 44% 33%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 349 52% 46%; /* #B3384F  danger   */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 260 30% 18%;
-    --input: 260 30% 15%;
-    --ring: 270 70% 60%;
+    --border: 330 17% 91%; /* #EBE3E7  line     */
+    --input: 330 14% 86%; /* #E0D6DB  line-strong */
+    --ring: 329 44% 33%;
+
+    /* Tokens da Direção A sem equivalente no vocabulário do shadcn.
+       Nomes são funções, não aparências — é o que permite o tema escuro
+       redefinir os mesmos nomes sem renomear nada no JSX. */
+    --brand-hover: 329 42% 39%; /* #8E3A66 */
+    --brand-soft: 329 40% 44%; /* #9E4472 */
+    --ink-soft: 323 10% 16%; /* #2E262B  corpo de texto longo */
+    --text-soft: 328 6% 46%; /* #7B6E75 */
+    --surface-hover: 330 20% 94%; /* #F3EDF0 */
+    --line-hover: 326 11% 76%; /* #C9BBC3 */
+    --tint-soft: 330 43% 95%; /* #F7EBF1 */
+    --tint-line: 328 33% 86%; /* #E7CFDC */
+
+    /* Estado. Substituem os 7 usos de cor crua (`bg-green-600`, `text-amber-500`,
+       o único `text-white` do projeto) que existiam espalhados nas páginas. */
+    --ok: 154 47% 29%; /* #276B4E */
+    --ok-bg: 148 35% 93%; /* #E6F3EC */
+    --ok-line: 149 36% 75%; /* #A8D6BE */
+    --warn: 36 77% 31%; /* #8A5A12 */
+    --warn-bg: 36 78% 93%; /* #FBF0DF */
+    --danger: 349 52% 46%; /* #B3384F */
+    --danger-line: 348 44% 84%; /* #E8C4CB */
 
     --radius: 0.75rem;
 
@@ -48,14 +91,16 @@
     --gradient-glow: radial-gradient(circle, hsl(270 70% 60% / 0.3), transparent);
 
     /* ── Tokens de App UI (DESIGN.md §2 e §3) ───────────────────────────────
-       Aditivos: nada acima foi alterado. A landing continua com gradiente,
-       glow e vidro; as rotas de app (/inicio) usam estes.
+       ⚠️ VESTIGIAIS, e agora também DESATUALIZADOS. Nenhum arquivo TS/TSX lê
+       `var(--serie-N)`, `var(--grid)` ou `var(--axis)` — a cor de série de
+       verdade sai de `corDaSerie()` em `src/components/dashboard/cores.ts`,
+       que calcula HSL em JS.
 
-       Paleta de série VALIDADA (§3), não estimada: pior par adjacente a
-       ΔE 19,3 em visão normal e 8,4 sob daltonismo, contra a superfície do
-       card. Ordem fixa, atribuída por posição — nunca ciclar, nunca gerar
-       cor nova. O roxo da marca NÃO entra aqui de propósito: ele pertence
-       só ao cromo interativo. */
+       Os valores abaixo foram medidos contra a superfície ESCURA do card
+       (`#120E1B`) e não valem mais na superfície clara: em 2026-08-12 a rampa
+       de `cores.ts` foi re-derivada por matiz para o tema claro, porque o
+       `DESIGN.md` §11 exige revalidação e não inversão. Mantidos como registro
+       histórico do número; não usar como referência. */
     --serie-1: 212 78% 56%;   /* azul     #3987E5 */
     --serie-2: 16 70% 50%;    /* laranja  #D95926 */
     --serie-3: 162 72% 36%;   /* aqua     #199E70 */
@@ -64,20 +109,33 @@
     --serie-6: 120 100% 26%;  /* verde    #008300 */
     --serie-7: 0 71% 65%;     /* vermelho #E66767 */
 
-    /* Cromo de gráfico: recessivo por definição. */
-    --grid: 60 2% 17%;
-    --axis: 60 2% 22%;
+    /* Cromo de gráfico: recessivo por definição. Também não lidos. */
+    --grid: 330 17% 91%;
+    --axis: 330 14% 86%;
 
-    --sidebar-background: 260 30% 6%;
-    --sidebar-foreground: 270 20% 90%;
-    --sidebar-primary: 270 70% 60%;
-    --sidebar-primary-foreground: 270 20% 98%;
-    --sidebar-accent: 260 25% 15%;
-    --sidebar-accent-foreground: 270 20% 90%;
-    --sidebar-border: 260 30% 18%;
-    --sidebar-ring: 270 70% 60%;
+    /* Estes 8 nunca são lidos: a sidebar de `DashboardLayout` é `bg-card` na
+       mão, não o `ui/sidebar.tsx` do shadcn. Atualizados junto com o resto
+       porque deixar valor escuro sob um `:root` claro é armadilha para quem
+       um dia plugar o componente. */
+    --sidebar-background: 340 23% 97%;
+    --sidebar-foreground: 327 6% 35%;
+    --sidebar-primary: 329 44% 33%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 330 20% 94%;
+    --sidebar-accent-foreground: 320 14% 9%;
+    --sidebar-border: 330 17% 91%;
+    --sidebar-ring: 329 44% 33%;
   }
 
+  /* ── Tema escuro — a landing, e só ela ──────────────────────────────────
+     Valores idênticos aos que `:root` tinha antes de 2026-08-12. Nada aqui
+     mudou de valor: o bloco só deixou de ser cópia inútil de `:root` e passou
+     a selecionar de verdade, via `className="dark"` na raiz de `Index.tsx` e
+     `NotFound.tsx`.
+
+     Os tokens de landing (`--glass-*`, `--gradient-*`, `--glow-*`) continuam
+     só em `:root` e são herdados por cascata aqui dentro — é por isso que
+     `glass`, `text-gradient` e os glows não precisaram ser duplicados. */
   .dark {
     --background: 240 20% 4%;
     --foreground: 270 20% 98%;
@@ -106,7 +164,28 @@
     --border: 260 30% 18%;
     --input: 260 30% 15%;
     --ring: 270 70% 60%;
-    
+
+    /* Os tokens novos da Direção A, em versão escura. Não existem na landing
+       de hoje, mas `ui/button.tsx` e `ui/input.tsx` passaram a usar alguns
+       deles — e a landing usa esses primitivos (`variant="hero"` no Header).
+       Sem redefinir aqui, um botão da landing herdaria rosa-claro de `:root`. */
+    --brand-hover: 270 70% 68%;
+    --brand-soft: 280 60% 55%;
+    --ink-soft: 270 15% 88%;
+    --text-soft: 270 10% 65%;
+    --surface-hover: 260 25% 15%;
+    --line-hover: 260 30% 28%;
+    --tint-soft: 270 40% 18%;
+    --tint-line: 270 35% 30%;
+
+    --ok: 154 45% 55%;
+    --ok-bg: 154 30% 14%;
+    --ok-line: 154 35% 30%;
+    --warn: 36 80% 60%;
+    --warn-bg: 36 40% 14%;
+    --danger: 349 60% 62%;
+    --danger-line: 349 40% 32%;
+
     --sidebar-background: 260 30% 6%;
     --sidebar-foreground: 270 20% 90%;
     --sidebar-primary: 270 70% 60%;

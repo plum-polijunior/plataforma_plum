@@ -1,5 +1,14 @@
 <!doctype html>
-<html lang="pt-BR" class="dark">
+<!--
+  O `class="dark"` que ficava aqui saiu em 2026-08-12 (Direção A). Ele forçava o
+  tema escuro no documento inteiro, e como `:root` e `.dark` tinham valores
+  idênticos em `src/index.css`, não selecionava nada de fato.
+
+  Agora `:root` é o tema claro do ambiente interno, e quem quer escuro pede:
+  `pages/Index.tsx` (landing) e `pages/NotFound.tsx` levam `className="dark"` na
+  raiz do próprio JSX.
+-->
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,7 +17,8 @@
     <meta name="description" content="Plum - Dados da sua operação em segundos no WhatsApp. Chatbot de consulta e avisos operacionais para executivos e gestores." />
     <meta name="keywords" content="dados, operação, WhatsApp, chatbot, BI, analytics, gestão" />
     <meta name="author" content="Plum" />
-    <meta name="theme-color" content="#7c3aed" />
+    <!-- Marca nova da Direção A (#7A2F56), no lugar do roxo #7c3aed. -->
+    <meta name="theme-color" content="#7A2F56" />
 
     <meta property="og:title" content="Plum - Dados da sua operação no WhatsApp" />
     <meta property="og:description" content="Chatbot de consulta e avisos operacionais. Conecte sua equipe aos dados em segundos." />
@@ -21,7 +31,18 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!--
+      Inter continua sendo a fonte do `body` (`src/index.css`). As três de
+      2026-08-12 são aditivas e usadas por classe:
+        Bricolage Grotesque → `font-display`, títulos de tela e de card
+        Geist               → `font-geist`, uso pontual
+        JetBrains Mono      → `font-code`, número em gráfico
+
+      `font-code`, e não `font-mono`: sobrescrever a chave `mono` do Tailwind
+      trocaria a fonte de todo `font-mono` que já existe no repo (Cfgdatabase,
+      Dashboard, DatabasePipeline, ui/chart) sem ninguém ter pedido.
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   </head>
 
   <body>

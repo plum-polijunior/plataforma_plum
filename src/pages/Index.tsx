@@ -113,7 +113,16 @@ const Index = () => {
   }, []);
 
   return (
-    <div ref={containerRef} className="bg-background min-h-screen">
+    // `dark` aqui é o opt-in da landing pelo tema escuro, desde 2026-08-12.
+    // Antes o escuro vinha de `<html class="dark">` no `index.html` e valia para
+    // o produto inteiro; agora `:root` é o tema claro do ambiente interno
+    // (Direção A) e a landing pede o escuro para a própria árvore. Ver o
+    // cabeçalho de `src/index.css`.
+    //
+    // Nada mais desta página mudou: `glass`, `text-gradient` e os glows leem
+    // `--glass-*` / `--gradient-*` / `--glow-*`, que continuam só em `:root` e
+    // são herdados por cascata aqui dentro.
+    <div ref={containerRef} className="dark bg-background min-h-screen">
       <Header onNavigate={handleNavigate} activeSection={activeSection} />
       
       {/* Hero Section */}

@@ -59,6 +59,41 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+
+        /* ── Tokens da Direção A sem equivalente no vocabulário do shadcn ─────
+           Definidos em `src/index.css`, nos DOIS temas, para que `bg-tint-soft`
+           ou `text-ok` funcionem igual na landing escura e no app claro. */
+        "brand-hover": "hsl(var(--brand-hover))",
+        "brand-soft": "hsl(var(--brand-soft))",
+        "ink-soft": "hsl(var(--ink-soft))",
+        "text-soft": "hsl(var(--text-soft))",
+        "surface-hover": "hsl(var(--surface-hover))",
+        "line-hover": "hsl(var(--line-hover))",
+        "tint-soft": "hsl(var(--tint-soft))",
+        "tint-line": "hsl(var(--tint-line))",
+
+        ok: {
+          DEFAULT: "hsl(var(--ok))",
+          bg: "hsl(var(--ok-bg))",
+          line: "hsl(var(--ok-line))",
+        },
+        warn: {
+          DEFAULT: "hsl(var(--warn))",
+          bg: "hsl(var(--warn-bg))",
+        },
+        danger: {
+          DEFAULT: "hsl(var(--danger))",
+          line: "hsl(var(--danger-line))",
+        },
+      },
+      fontFamily: {
+        /* Aditivo: nenhuma destas substitui a `Inter` do `body`.
+           `code` e NÃO `mono`: sobrescrever a chave `mono` do Tailwind trocaria
+           a fonte de todo `font-mono` já existente no repo (Cfgdatabase,
+           Dashboard, DatabasePipeline, ui/chart) sem ninguém ter pedido. */
+        display: ["'Bricolage Grotesque'", "sans-serif"],
+        geist: ["Geist", "system-ui", "sans-serif"],
+        code: ["'JetBrains Mono'", "monospace"],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -90,6 +125,34 @@ export default {
           "0%, 100%": { opacity: "0.4" },
           "50%": { opacity: "0.8" },
         },
+
+        /* Direção A. O prefixo `pl-` vem do protótipo e foi mantido para o diff
+           ser rastreável contra o arquivo de design.
+
+           As de entrada (`pl-up`, `pl-in`) ficam em ≤0,5s e as contínuas só
+           existem onde comunicam trabalho em curso — o `DESIGN.md` §1 põe teto
+           de 150ms em transição de estado de App UI e proíbe movimento
+           decorativo, e nenhuma destas é decorativa. */
+        "pl-up": {
+          from: { opacity: "0", transform: "translateY(10px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        "pl-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "pl-dot": {
+          "0%, 60%, 100%": { opacity: "0.25", transform: "translateY(0)" },
+          "30%": { opacity: "1", transform: "translateY(-3px)" },
+        },
+        "pl-pulse": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "1" },
+        },
+        "pl-grow": {
+          from: { transform: "scaleY(0)" },
+          to: { transform: "scaleY(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -98,6 +161,12 @@ export default {
         "fade-in-up": "fade-in-up 0.8s ease-out forwards",
         "scale-in": "scale-in 0.4s ease-out forwards",
         "glow-pulse": "glow-pulse 3s ease-in-out infinite",
+
+        "pl-up": "pl-up 0.4s ease-out both",
+        "pl-in": "pl-in 0.3s ease-out both",
+        "pl-dot": "pl-dot 1.3s infinite",
+        "pl-pulse": "pl-pulse 2.4s ease-in-out infinite",
+        "pl-grow": "pl-grow 0.5s ease-out both",
       },
     },
   },
