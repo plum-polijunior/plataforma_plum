@@ -29,7 +29,9 @@ de cliente) e por isso não precisou dessa decisão.
 from __future__ import annotations
 
 import logging
+import re
 import time
+import unicodedata
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
@@ -73,6 +75,58 @@ class SheetMeta:
     def __init__(self, headers: List[str], row_count: int):
         self.headers = headers
         self.row_count = row_count
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Normalização de nome de coluna
+#
+# ESTE É UM CONTRATO ENTRE DUAS LINGUAGENS. A referência é
+# `src/lib/colunas.ts` (`normalizarNomeDeColuna`), que é quem batiza as colunas
+# no `schema_metadata` durante a importação. Aqui a mesma transformação é
+# aplicada ao cabeçalho lido da planilha, para os dois lados se encontrarem.
+#
+# Por que isto precisa existir: o front normaliza (`NATUREZA DA AQUISIÇÃO` ->
+# `natureza_da_aquisicao`) e a planilha continua com o cabeçalho original,
+# porque o Plum nunca escreve nela (R-01). A comparação era de string crua, e o
+# docstring de `_ranges_for` afirmava que era normalizada — não era. Resultado
+# medido em 2026-08-11: nenhuma base com cabeçalho legível por humano conseguia
+# ser lida, e o erro dizia "A planilha nao tem a(s) coluna(s): estudo" numa
+# planilha cuja coluna C se chama `ESTUDO`.
+#
+# Duas implementações da mesma função é dívida, e é assumida com olhos abertos:
+# não há como compartilhar código entre o Deno/browser e o Lambda Python. A
+# defesa é `_CASOS_CONTRATO` (em `tests/test_sheets.py`), uma tabela de casos
+# idêntica à do `src/lib/colunas.test.ts` — se as duas divergirem, um dos dois
+# testes fica vermelho. Diferente do Query Plan (§`_shared/query_plan.ts`), aqui
+# divergência não vira bypass: ela vira "coluna nao encontrada", falha alta e
+# barulhenta, porque o RBAC já foi aplicado antes, sobre os nomes normalizados.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Exatamente a faixa que o `.replace(/[̀-ͯ]/g, "")` do TypeScript
+# remove — Combining Diacritical Marks. Usar `unicodedata.combining()` seria
+# mais amplo e, por ser mais amplo, divergiria do outro lado.
+_MARCAS_COMBINANTES = re.compile(r"[̀-ͯ]")
+_NAO_ALFANUMERICO = re.compile(r"[^a-z0-9]")
+_SUBLINHADOS_REPETIDOS = re.compile(r"_+")
+
+
+def normalizar_coluna(nome: object) -> str:
+    """
+    `NATUREZA DA AQUISIÇÃO` -> `natureza_da_aquisicao`.
+
+    Espelha `normalizarNomeDeColuna` (`src/lib/colunas.ts`) passo a passo, na
+    mesma ordem. Cabeçalho vazio (ou só pontuação) devolve string vazia, e
+    quem chama decide o que fazer — aqui, ignorar, porque coluna sem nome não é
+    endereçável e inventar um seria adivinhar.
+    """
+    s = unicodedata.normalize("NFD", str(nome))
+    s = _MARCAS_COMBINANTES.sub("", s)
+    s = s.lower()
+    s = _NAO_ALFANUMERICO.sub("_", s)
+    s = _SUBLINHADOS_REPETIDOS.sub("_", s)
+    # O TypeScript faz `.replace(/^_|_$/g, "")`, que remove no máximo um de cada
+    # ponta — e, como os repetidos já colapsaram, é o mesmo que `strip("_")`.
+    return s.strip("_")
 
 
 def _col_letter(index_zero_based: int) -> str:
@@ -320,21 +374,77 @@ def _ranges_for(headers: Sequence[str], wanted: Set[str], tab: str):
     """
     Mapeia nome de coluna para faixa A1. Devolve (ranges, nomes_na_ordem).
 
-    A comparação é feita no nome normalizado do cabeçalho, do mesmo jeito que o
-    onboarding normaliza ao montar o schema_metadata.
+    A comparação é feita no nome NORMALIZADO do cabeçalho (`normalizar_coluna`),
+    do mesmo jeito que a importação normaliza ao montar o `schema_metadata`.
+    Este docstring já dizia isso antes de ser verdade; agora é.
+
+    `nomes` sai normalizado de propósito: ele vira o nome da coluna no DataFrame
+    (`_fetch_columns_uncached`), e é por esse nome que o Query Plan pede. Sair
+    com o cabeçalho bruto deixaria o dado carregado e inalcançável.
     """
+    # {nome_normalizado: [(indice, cabecalho_bruto)]}
+    por_nome: Dict[str, List[Tuple[int, str]]] = {}
+    vazios = 0
+    for idx, h in enumerate(headers):
+        n = normalizar_coluna(h)
+        if not n:
+            vazios += 1
+            continue
+        por_nome.setdefault(n, []).append((idx, h))
+
+    # Dois cabeçalhos diferentes que normalizam para o mesmo nome: pegar o
+    # primeiro devolveria uma coluna com o rótulo da outra — número errado com
+    # cara de certo, que é o modo de falha que este projeto mais evita. E a
+    # ambiguidade não nasce aqui: o `schema_metadata` também teria só uma chave
+    # para as duas.
+    ambiguas = {n: oc for n, oc in por_nome.items() if n in wanted and len(oc) > 1}
+    if ambiguas:
+        detalhe = "; ".join(
+            f"{n} <- {', '.join(repr(h) for _, h in oc)}"
+            for n, oc in sorted(ambiguas.items())
+        )
+        raise SheetError(
+            "Duas colunas da planilha viram o mesmo nome depois de normalizar, "
+            f"entao nao da para saber qual usar: {detalhe}. Renomeie uma delas "
+            "na planilha."
+        )
+
     ranges, nomes, faltando = [], [], set(wanted)
     for idx, h in enumerate(headers):
-        if h in faltando:
+        n = normalizar_coluna(h)
+        if n and n in faltando:
             letra = _col_letter(idx)
             ranges.append(f"{_quoted_sheet(tab)}!{letra}2:{letra}")
-            nomes.append(h)
-            faltando.discard(h)
+            nomes.append(n)
+            faltando.discard(n)
+
     if faltando:
-        raise SheetError(
+        # Dizer só o que faltou obrigava a abrir a planilha para descobrir o que
+        # existe. Em 2026-08-11 essa mensagem custou uma ida e volta inteira num
+        # caso em que a coluna existia e só estava em maiúscula.
+        achados = [f"{h!r} -> {normalizar_coluna(h)}" for h in headers if normalizar_coluna(h)]
+        logger.warning(
+            "Colunas ausentes na aba %r: %s. Cabecalhos: %s. Colunas sem cabecalho: %d.",
+            tab, sorted(faltando), achados, vazios,
+        )
+        MOSTRAR = 12
+        lista = ", ".join(achados[:MOSTRAR]) or "nenhum"
+        if len(achados) > MOSTRAR:
+            lista += f" (e outros {len(achados) - MOSTRAR})"
+        recado = (
             "A planilha nao tem a(s) coluna(s): " + ", ".join(sorted(faltando))
             + ". A base pode ter mudado desde que o card foi criado."
+            + f" Cabecalhos da aba '{tab}': {lista}."
         )
+        if vazios:
+            # O caso real: a coluna com o nome do estudo existe, tem dado, e o
+            # cabeçalho dela está em branco — então não há nome pelo qual pedir.
+            recado += (
+                f" Atencao: {vazios} coluna(s) da aba estao SEM cabecalho na "
+                "primeira linha; preencha o titulo delas para poderem ser usadas."
+            )
+        raise SheetError(recado)
+
     return ranges, nomes
 
 

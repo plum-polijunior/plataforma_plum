@@ -365,7 +365,16 @@ mesma janela em que troca as rotas, e testar um login por SSO depois.
 
 ---
 
-## 11. `sheets.py` compara o cabeçalho CRU contra o nome normalizado
+## 11. `sheets.py` comparava o cabeçalho CRU contra o nome normalizado — RESOLVIDO em 2026-08-11
+
+**Corrigido pelo time em `6464677`**, com `src/lib/colunas.ts` como fonte única da
+normalização e teste dos dois lados. O registro abaixo fica como está: ele descreve o
+sintoma, o alcance e — o que mais importa daqui a três meses — o fato de o comentário da
+função afirmar o contrário do que o código fazia, que é como isto sobreviveu tanto tempo.
+
+<details>
+<summary>Registro original</summary>
+
 
 **O quê:** `_ranges_for` (`query_engine/sheets.py`) casa as colunas pedidas contra o cabeçalho
 da planilha por comparação **literal**:
@@ -413,6 +422,10 @@ existe um mapa gravado uma vez.
 **Depende de / bloqueado por:** decisão de quem cuida do `query_engine` sobre qual das duas
 saídas seguir. Enquanto isso, **o onboarding deveria avisar** quando o cabeçalho da planilha
 não bate com o schema — hoje o erro só aparece na primeira pergunta, muito depois.
+
+---
+
+</details>
 
 ---
 
@@ -464,37 +477,62 @@ exige trabalho no pipeline de importação.
 
 ---
 
-## 13. A escala do percentual é ambígua, e hoje quem chuta é a tela
+## 13. Escala do percentual: 0–1 (nativo) vs 0–100 (texto)
 
-**O quê:** o executor devolve percentual como está na planilha, e há duas origens
-legítimas para a mesma ideia de "10%":
+**Aberto desde 2026-08-11.** Consequência direta da correção do
+`_parse_ptbr_number` (número nativo da planilha deixou de passar pela limpeza
+textual, que multiplicava por 10^casas_decimais — ver
+`test_formatting.py`, bloco "Célula que chega da planilha JÁ como número").
 
-| Origem | O executor recebe |
-|---|---|
-| Célula formatada como porcentagem no Sheets | `0.1` (fração) |
-| Texto `"10%"` numa célula comum | `10` (pontos) — `_fmt_percentual` tira o `%` |
+Hoje uma coluna com `type: "percentual"` sai em duas escalas diferentes
+conforme a origem da célula:
 
-Nada no `formatting_rule` distingue as duas: o `type` informa **que** é percentual,
-não em **que escala**. É a mesma família da dívida do `query_engine/urgent.md`.
+| origem da célula | valor bruto | resultado |
+|---|---|---|
+| formatada como % no Sheets | `0.15` | **0,15** |
+| digitada como texto | `"15%"` | **15** |
 
-**Medido em 2026-08-11:** o card "Desconto médio" da base sintética mostrou **0,05%**
-onde o gabarito diz **5,00%**. O Sheets guardara os descontos como fração.
+Antes da correção o caso nativo virava `15` — mas por acidente, e só quando as
+casas decimais eram exatamente duas. `0.1` virava `1` (deveria ser 10) e
+`0.155` virava `155`. Não era uma conversão, era a mesma corrupção que atingia
+as colunas de dinheiro; ela só *parecia* certa no caso mais comum.
 
-**Mitigação aplicada, e é um chute:** `src/components/dashboard/formato.ts` assume
-fração quando o valor é `< 1` e multiplica por 100. Resolve o caso comum e **falha
-numa base cujos percentuais sejam todos abaixo de 1%** — 0,3% de taxa viraria 30%.
+Agora o caminho nativo é consistente (devolve o que a planilha tem) e o
+textual continua em 0–100. Escolher uma escala única é decisão de produto, não
+de implementação, porque muda o número exibido em cards já publicados:
 
-**Por que a tela é o lugar errado:** ela vê um agregado, um número só. O executor vê
-a **coluna inteira**. Decidir a escala olhando 40 valores é qualitativamente mais
-confiável que olhar uma média — e ali dá para usar sinais melhores que magnitude,
-como todos os valores estarem no intervalo [0,1].
+- **Padronizar em 0–100** (multiplicar o nativo por 100) casa com o que o
+  usuário vê na planilha e com o caminho textual, mas exige distinguir "0,15
+  que é 15%" de "0,15 que é 0,15%" — e essa informação não está no valor.
+- **Padronizar em 0–1** é matematicamente mais limpo e é o que o Sheets
+  guarda, mas quebra a leitura do caminho textual e a exibição atual.
 
-**E o chat tem o mesmo problema, sem nem a mitigação:** perguntar "qual o desconto
-médio" devolve o número cru para o Agente C, que o repassa como veio.
+O que decide é `formatting_rule.params`: o Agente 3 vê 5 linhas de amostra e
+poderia gravar a escala junto do `type` na importação, que é o único momento
+em que existe contexto suficiente. Enquanto não houver decisão, o
+comportamento acima está fixado por teste — quem mudar, muda de propósito.
 
-**Saída proposta:** `_fmt_percentual` (`query_engine/pandas_executor.py`) normaliza a
-coluna para pontos percentuais na ingestão. Aí o executor sempre emite uma escala só,
-o front só acrescenta o `%`, e a heurística morre — inclusive a do chat.
+**Impacto real hoje:** nenhuma das bases em produção usa `percentual`
+(conferido em 2026-08-11: doceria, roupas, estudos e riosulense não têm
+coluna com esse `type`). Por isso não foi tratado como bloqueante.
 
-**Depende de / bloqueado por:** é `query_engine`, compartilhado com o chat. Merece o
-mesmo cuidado da Fase 4: plano curto antes, e teste dos dois lados.
+---
+
+**Mitigação no front, aplicada em 2026-08-11 (Fase 5a do dashboard).**
+`src/components/dashboard/formato.ts` assume fração quando o valor é `< 1` e
+multiplica por 100 na EXIBIÇÃO. É `< 1` e não `<= 1` de propósito: média de
+exatamente 1,0 é comum em coluna de pontos (1% médio) e rara em fração.
+
+Isso resolve o caso comum e **falha numa base cujos percentuais sejam todos
+abaixo de 1%** — uma taxa de 0,3% viraria 30%. O modo de falha está comentado no
+ponto exato do código, não só aqui.
+
+Não é conserto, é curativo, e pelo motivo que o texto acima já diz melhor: a tela
+vê um agregado, um número só. O executor vê a **coluna inteira**, e ali dá para
+usar sinal melhor que magnitude — como todos os valores caberem em [0,1]. Melhor
+ainda é o que está proposto acima: o Agente 3 gravar a escala em
+`formatting_rule.params` na importação, único momento com contexto suficiente.
+
+**O chat continua sem mitigação nenhuma:** "qual o desconto médio" devolve o
+número cru para o Agente C, que o repassa como veio.
+

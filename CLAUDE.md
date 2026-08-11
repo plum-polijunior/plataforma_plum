@@ -27,7 +27,9 @@ npx tsc --noEmit     # só tipagem
 Testes automatizados, em três frentes:
 
 ```sh
-npm test                              # vitest — RBAC de coluna (_shared/query_plan.ts)
+npm test                              # vitest — RBAC de coluna (_shared/query_plan.ts),
+                                      # normalização de nome de coluna (src/lib/colunas.ts)
+                                      # e extração de id/gid da URL (src/lib/google-sheets.ts)
 npm run test:py                       # pytest do query_engine (bloqueio de linha bruta, assinatura, etc.)
 psql "$DATABASE_URL" -f supabase/tests/endurecimento_rls_test.sql   # RLS/SSO
 psql "$DATABASE_URL" -f supabase/tests/sso_dominio_test.sql
@@ -42,71 +44,57 @@ por decisão de produto — ver `k-anonimato-removido.md` na raiz do repo.)
 **Migrations não são aplicadas por CLI.** `supabase/config.toml` só contém `project_id`;
 o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar
 (ver `docs/PASSO-A-PASSO-APLICAR.md`). Edge Functions vivem em `supabase/functions/<nome>/index.ts`
-(padrão CLI, ver `supabase/functions/README.md`) e são publicadas **automaticamente**, desde
-2026-08-07, pela integração nativa GitHub↔Supabase (branch `plataforma`) — push que muda
-`supabase/functions/**` já deploya sozinho, sem passar pelo painel nem por comando manual.
-Migrations continuam manuais, de propósito — essa integração não cobre migrations aqui.
+(padrão CLI, ver `supabase/functions/README.md`).
+
+⚠️ **Deploy de Edge Function NÃO é automático — verificado em 2026-08-10.** Esta seção dizia
+que a integração nativa GitHub↔Supabase publicava sozinha a cada push em `plataforma`. Não
+publica: as 5 funções em produção têm `updated_at` idêntico em `2026-08-08T23:03:17Z` e não
+se moveram depois de **três** merges que mudaram `supabase/functions/**`. O check
+"Supabase Preview" que aparece no commit roda em 5 segundos, sem output, e reporta `success`
+sem publicar nada. O que subiu em 08/08 foi quase certamente um `supabase functions deploy`
+manual.
+
+**Consequência prática, e é grave:** o código da Edge Function no repositório **não é** o que
+está rodando. Antes de depurar qualquer comportamento de `ai-plum-chat`/`ai-agents`, confirme
+a versão implantada (`mcp__supabase__get_edge_function`, ou o painel) — senão você analisa
+linhas que produção nunca executou. Para publicar:
+`npx supabase functions deploy <nome> --project-ref rjwidarrsykufuifzunu`.
+
+Migrations continuam manuais, de propósito.
 
 ---
 
 ## 2. Mapa do repositório
 
-```
-src/
-  App.tsx                    rotas; /dashboard, /cfgdatabase, /plum dentro de DashboardLayout
-  layouts/DashboardLayout.tsx guard de acesso + sidebar
-  hooks/use-org-access.ts    ⭐ estado de acesso derivado das claims do JWT
-  integrations/supabase/
-    client.ts                cliente único (gerado; URL e anon key hardcoded)
-    types.ts                 ⚠️ atualizar SEMPRE junto com migrations
-  pages/
-    Index.tsx                landing pública
-    Auth.tsx                 login/cadastro/SSO
-    AccessPending.tsx        estados sem-org / pendente / bloqueado
-    Dashboard.tsx            (1007 l.) org, membros, cargos, aprovações
-    Cfgdatabase.tsx          datasets, matriz de permissões (?tab=permissoes), edição de schema
-    PlumChat.tsx             chat conversacional
-  components/
-    DatabasePipeline.tsx     (738 l.) pipeline de importação em 5 etapas
-    PlumThinkingBar.tsx      barra de progresso do chat
-    ui/                      shadcn — não editar sem motivo
-query_engine/
-  main.py                    FastAPI — POST /execute, roda em Lambda via lambda_handler.py
-  security.py                4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna
-  sheets.py                  Google Sheets: 1 batchGet por dataset, teto de linhas antes do parse
-  config.py                  segredos via SSM Parameter Store (nunca .env com valor)
-  pandas_executor.py         execute_plan(plan, tables, column_roles, max_rows)
-  cache.py                   TTLCache pronto mas **não conectado** (ver TODOS.md #1)
-  prd.md                     ⭐ arquitetura do chat + query engine (ver §9 lá: chat != dashboard)
-  implementation.md          histórico do plano de EC2 abandonado; aponta pra infra/aws/
-  urgent.md                  ⚠️ formattingRules por keyword-match — dívida ativa, ver §8
-supabase/
-  migrations/                aplicar em ordem (§6)
-  tests/                     cenários de RLS/SSO
-  functions/                 TODAS as Edge Functions — uma pasta por função, index.ts (padrão CLI)
-    ai-agents/               pipeline de importação (agentes 0/1/2/3/3.1)
-    ai-plum-chat/            chat: Agente Z/A/C + execute_plan (executor real)
-    dashboard-execute/       RBAC de coluna + executor real para os cards
-    plum-chat/               demo da landing page — NÃO confundir com ai-plum-chat
-    send-auth-email/         e-mails transacionais (Resend)
-    _shared/query_plan.ts    ⭐ único interpretador de Query Plan do sistema (extrai colunas p/ RBAC)
-    README.md                deploy, segredos, o que cada função faz
-infra/aws/
-  PASSO-A-PASSO.md           ⭐ como subir/operar o executor — fonte única de verdade, não duplicar
-  provision.sh               cria ECR, SSM, IAM roles, OIDC do GitHub (idempotente)
-src/lib/
-  google-sheets.ts           utilidades de URL/ID de planilha, com teste (vitest)
-testes/chat/                 roteiros de validação MANUAL do chat (não é o CI — ver README lá)
-  teste-chat-*.md            perguntas em português com gabarito calculado fora do Plum
-  bases/                     os .csv/.xlsx que alimentam os roteiros
-docs/
-  PRD-PLUM2.0.md             visão/roadmap — NÃO é o schema real
-  SSO-DOMINIO.md             especificação do SSO por domínio
-  INCIDENTE-2026-07-22-*.md  ⭐ pós-mortem do escalonamento de privilégio
-  MUDANCAS-FRONT-ENDURECIMENTO.md
-  PASSO-A-PASSO-APLICAR.md   runbook de aplicação
-  slides_plum_didatico.gs    Apps Script que gera os slides didáticos (30 slides)
-```
+`ls` mostra a árvore. Aqui só o que ela **não** mostra — o que cada arquivo esconde, e as
+armadilhas. Se um arquivo não está listado, faz o que o nome diz.
+
+| Arquivo | O que o nome não conta |
+|---|---|
+| `src/hooks/use-org-access.ts` | ⭐ estado de acesso derivado das **claims do JWT**, não do banco |
+| `src/integrations/supabase/types.ts` | ⚠️ atualizar **SEMPRE** junto com migrations (§4.12) |
+| `src/integrations/supabase/client.ts` | gerado; URL e anon key hardcoded (dívida, §8) |
+| `src/pages/Cfgdatabase.tsx` | datasets + matriz de permissões (`?tab=permissoes`) + edição de schema |
+| `src/components/DatabasePipeline.tsx` | pipeline de importação em 5 etapas; rascunhos em `datasets.sketch` |
+| `src/components/ui/` | shadcn — preferir compor a editar |
+| `query_engine/security.py` | 4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna |
+| `query_engine/sheets.py` | 1 `batchGet` por dataset; teto de linhas checado **antes** do parse; resolve `gid → nome da aba`; **normaliza o cabeçalho** (contraparte de `src/lib/colunas.ts`) |
+| `src/lib/colunas.ts` | ⭐ metade de um contrato entre duas linguagens — normaliza nome de coluna, e o Python espelha. Tabela de casos replicada nos testes dos dois lados |
+| `src/lib/google-sheets.ts` | extrai `id` **e `gid`** da URL colada (`extrairSheetRef`); `extrairSheetId` é wrapper |
+| `query_engine/config.py` | segredos via SSM Parameter Store — nunca `.env` com valor |
+| `query_engine/cache.py` | TTL de 15 min, **ligado** desde 2026-08-07 (`TODOS.md` #1) |
+| `query_engine/prd.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
+| `query_engine/implementation.md` | histórico do plano de EC2 **abandonado** — aponta pra `infra/aws/` |
+| `supabase/migrations/` | aplicar **em ordem** (§6), e à mão pelo SQL Editor |
+| `supabase/functions/plum-chat/` | demo da landing — **NÃO confundir** com `ai-plum-chat` |
+| `supabase/functions/ai-plum-chat/` | chat: Agente Z/A/C + `execute_plan` (executor real) |
+| `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
+| `supabase/functions/ai-agents/` | pipeline de importação (agentes 0/1/2/3/3.1) |
+| `supabase/functions/_shared/query_plan.ts` | ⭐ **único** interpretador de Query Plan (extrai colunas p/ RBAC) |
+| `infra/aws/PASSO-A-PASSO.md` | ⭐ fonte única de verdade do executor — **não duplicar** |
+| `testes/chat/` | roteiros de validação **manual** — não roda no CI (ver README lá) |
+| `docs/PRD-PLUM2.0.md` | visão/roadmap — **NÃO** é o schema real (§3) |
+| `docs/INCIDENTE-2026-07-22-*.md` | ⭐ pós-mortem do escalonamento de privilégio (origem do §4) |
 
 ---
 
@@ -122,7 +110,7 @@ docs/
 | `profiles` | usuário (estende `auth.users`) | `organization_id` (nullable!), `role_id`, `status` enum `profile_status`, `updated_at` |
 | `roles` | cargo por org | `name` — Admin é **por nome**, não por flag |
 | `role_permissions` | permissão granular | `(role_id, dataset_id)` UNIQUE, `allowed_columns TEXT[]` default `'{}'` |
-| `datasets` | base conectada | `google_sheet_id` (fonte da verdade p/ o executor), `google_sheet_url` (só exibição), `google_sheet_tab` (default `Sheet1`), `schema_metadata jsonb` ⭐, `sketch jsonb`, `status` |
+| `datasets` | base conectada | `google_sheet_id` (fonte da verdade p/ o executor), `google_sheet_url` (só exibição), `google_sheet_gid` ⭐ (**qual aba**, e tem precedência sobre o nome — ver abaixo), `google_sheet_tab` (nome da aba, default `Sheet1`, usado só quando o `gid` é nulo), `schema_metadata jsonb` ⭐, `sketch jsonb`, `status` |
 | `dashboard_cards` | card do dashboard = Query Plan salvo | `query_plan jsonb`, `viz` (sem `donut`, ver `DESIGN.md`), `refresh_interval_minutes` |
 | `dashboard_card_snapshots` | histórico de execuções de card | chave por `permissions_fingerprint` (hash de `allowed_columns`), **não** por `role_id` — revogar coluna invalida o cache sozinho |
 | `organization_domains` | SSO | `domain` UNIQUE + lowercase, `verified`, `verification_method` ∈ `admin`\|`dns_txt`, `ms_tenant_id` |
@@ -137,6 +125,34 @@ docs/
 **`schema_metadata` é o cérebro do produto.** Guarda, por coluna: a definição semântica
 (para o LLM entender o conceito de negócio) e as `formattingRules` (limpeza/tipagem).
 Toda inteligência do chat depende dele.
+
+### Qual aba da planilha é lida
+
+`google_sheet_gid` manda; `google_sheet_tab` é fallback. A API do Google exige o **nome** da
+aba no range (`'Vendas 2026'!A2:A`), mas nome é apelido mutável — guardar o nome funciona até
+alguém renomear a aba, e então a base quebra sem ninguém ter mexido nela. O `gid` é atribuído
+pelo Google na criação da aba e **não muda com rename**, então é ele que o banco guarda; o
+executor traduz `gid → nome` na leitura (`sheets.resolver_aba`), com cache próprio de 15 min.
+
+`gid` que não existe mais na planilha é **erro**, nunca fallback silencioso para o nome: ler
+uma aba que ninguém escolheu devolveria número de outro recorte (R-08).
+
+⚠️ **`gid = 0` é a primeira aba, um valor legítimo.** `if (!gid)` / `if not gid` manda a
+primeira aba de toda planilha para o caminho errado — compare sempre com `null`/`None`.
+
+### Nome de coluna é um contrato entre duas linguagens
+
+As chaves de `schema_metadata`, os valores de `role_permissions.allowed_columns` e as colunas
+dos Query Plans estão todos em `snake_case` sem acento — saída de `normalizarNomeDeColuna`
+(`src/lib/colunas.ts`), aplicada na importação.
+
+A planilha continua com o cabeçalho **original** (`NATUREZA DA AQUISIÇÃO`), porque o Plum
+nunca escreve nela (R-01). Por isso o executor aplica a **mesma** normalização ao cabeçalho
+lido (`normalizar_coluna`, `query_engine/sheets.py`): é assim que os dois lados se encontram.
+Ver a dívida das duas implementações em §8.
+
+Coluna da planilha **sem cabeçalho** não é endereçável — não existe nome pelo qual pedir, e
+inventar um seria adivinhar qual coluna é qual. O erro diz isso explicitamente.
 
 ### Hierarquia de acesso
 
@@ -317,7 +333,19 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   de ninguém, só em `allowed_columns` já resolvido no payload assinado.
 - **R-06** O dicionário semântico é revisado por humano. **R-08** Validação alerta, nunca corrige.
 - **R-11 Limites do plano:** colunas ∈ `allowed_cols`, agg ∈ {sum,avg,min,max,count},
-  `limit` 1..500, **joins bloqueados**.
+  `limit` 1..500, **joins bloqueados**. Desde 2026-08-11 o `col` de uma agregação também
+  aceita uma **expressão aritmética** — `{"agg":"sum","col":{"op":"mul","args":["qtd","preco"]}}`
+  — calculada linha a linha antes de agregar. Operadores: `mul`/`add` (N operandos),
+  `sub`/`div` (2). Operandos: coluna, número literal, ou outro nó. Sem `eval`, enum fechado.
+  **Toda coluna dentro da expressão passa pelo RBAC** (`walkArithmetic` em `_shared/query_plan.ts`):
+  `addCol` descarta o que não é string, então um nó aqui não contribuía com coluna nenhuma
+  e o plano era autorizado sem ninguém olhar os operandos.
+- **R-13 Só o Python multiplica.** Corolário do R-02, escrito depois de ser violado em
+  2026-08-11: o Agente C recebeu `{unidades: 1.480, preco_medio: 57,50}` e respondeu
+  "faturamento de R$ 85.100,00" — multiplicou os dois no texto. `soma(qtd) × média(preço)`
+  não é receita: só coincide quando todo item custa o mesmo (na doceria real iam de R$ 2,50 a
+  R$ 90,00). Nenhum agente sintetizador faz conta, nem quando os dois números estão no
+  resultado e a conta parece óbvia. Se falta um número, a resposta diz que falta.
 - **R-12 k-Anonimato — removido em 2026-08-08.** Existia aqui até então: nenhum vetor de
   resultado saía sem agregação (isso **continua** valendo, ver R-02) e todo grupo precisava de
   no mínimo `k_min` linhas de origem, configurável por organização. A parte de "mínimo de
@@ -354,6 +382,13 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 9. `20260806230000_dashboard_cards.sql` — `dashboard_cards`, `dashboard_card_snapshots`,
    `organizations.dashboard_k_min`/`dashboard_max_rows`, `datasets.google_sheet_id` como
    fonte da verdade (com backfill a partir da URL antiga)
+10. `20260808120000_sso_dominio_bernardo.sql` — vínculo de domínio da `Machado Lmtd`
+    (o nome no arquivo diz `bernardo`; a organização é outra — ver `CONTINUAR-AQUI.md`)
+11. `20260811000000_google_sheet_gid.sql` — `datasets.google_sheet_gid`, com backfill por
+    regex a partir de `google_sheet_url` (aceita `?gid=` e `#gid=`). **Aplicada em produção em
+    2026-08-11**, as 3 bases existentes ficaram com `gid` preenchido. É par indivisível com o
+    front e com as duas Edge Functions (§4.12): sem a coluna, salvar base falha e todo
+    `execute_plan` erra
 
 ---
 
@@ -361,7 +396,9 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 
 - **Idioma:** código e domínio em português (`criar_organizacao`, `tocar_updated_at`,
   `carregando`, `pendente`). Comentários e commits em português. Mantenha.
-- Colunas de dados do usuário são normalizadas para `snake_case`.
+- Colunas de dados do usuário são normalizadas para `snake_case` por
+  `normalizarNomeDeColuna` (`src/lib/colunas.ts`) — **nunca à mão, nunca reimplementada num
+  componente**. O Python espelha a mesma função; ver §3 e a dívida em §8.
 - Alias `@/` → `src/`. Componentes shadcn em `src/components/ui/` — preferir compor a editar.
 - Cores só via CSS variables do tema (`hsl(var(--primary))`), nunca hex solto.
 - Toasts via `sonner` / `use-toast`. Dados remotos via `@tanstack/react-query` quando houver
@@ -389,23 +426,47 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - `src/integrations/supabase/client.ts` tem URL e anon key hardcoded, apesar de existir
   `.env.example` com `VITE_SUPABASE_*`. Chave `anon` é pública por design (protegida por
   RLS), mas a inconsistência é real.
-- `apply_formatting_rules`/`roles_from_formatting_rules` em `pandas_executor.py`, e
-  `columnRolesFromSchema` em `_shared/query_plan.ts` (a versão TypeScript, usada tanto por
-  `dashboard-execute` quanto por `ai-plum-chat`), continuam decidindo o tipo de cada coluna por
-  keyword-match em texto livre (a `cleaning_rule` que o Agente 3 escreve). Não existe mais
-  constante global vazia (`_PCT_COLS` foi substituído por `column_roles`), mas o mecanismo de
-  origem é o mesmo e tem a mesma fragilidade. Ver `query_engine/urgent.md`.
+- ~~`apply_formatting_rules`/`columnRolesFromSchema` decidem o tipo por keyword-match em texto
+  livre~~ — **RESOLVIDO, este item estava desatualizado (conferido em 2026-08-10).** Hoje o
+  `type` vem de um **enum fechado** e o papel sai de um lookup direto (`TYPE_TO_ROLE` em
+  `pandas_executor.py`), não de heurística. `type` fora do enum não é ignorado em silêncio:
+  loga warning no Python e o `sanitizeFormattingRules` (`ai-agents`) o reescreve para
+  `'nenhuma'` com a tentativa registrada na explicação. A versão TypeScript
+  (`_shared/query_plan.ts`) **não decide papel nenhum** — só repassa `type`/`params`, de
+  propósito, para não ter a mesma heurística em duas linguagens. O que sobra de dívida real é
+  menor: quem escolhe o `type` continua sendo um LLM (Agente 3) olhando 5 linhas de amostra.
 - A matriz de permissões (quais colunas cada cargo vê) ainda mora só em `Dashboard.tsx`,
   duplicada em intenção com um plano nunca aplicado (`reorganizacao_cargos_e_permissoes`, na
   raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `organizar_tudo.md` §2.1 — o
   plano continua válido, só não é prioridade no momento.
-- Pelo menos uma base em produção tem `datasets.google_sheet_id` guardando a **URL completa**
-  da planilha (`https://docs.google.com/spreadsheets/d/.../edit?gid=...`), não só o ID extraído
-  — apesar de este campo ser documentado como "fonte da verdade" (§3) e de
-  `src/lib/google-sheets.ts` existir exatamente para extrair o ID na escrita
-  (`DatabasePipeline.tsx:handleFinalizeAndSave`). Não confirmado ainda se isso quebra a leitura
-  no `query_engine` (que espera um ID puro) ou se é sintoma do bug em investigação no
-  `TODOS.md` #8. Confira antes de assumir que `google_sheet_id` é sempre só o ID.
+- ~~Pelo menos uma base em produção tem `datasets.google_sheet_id` guardando a URL completa~~
+  — **não se confirmou (conferido em 2026-08-11).** As 3 bases em produção têm ID puro, 44
+  chars. O que existia de verdade nesse campo era outra coisa, e pior: ver o item do `gid`
+  abaixo.
+- **Duas implementações da normalização de nome de coluna**, uma em TypeScript
+  (`src/lib/colunas.ts`) e uma em Python (`query_engine/sheets.py`). É a dívida que
+  `_shared/query_plan.ts` existe para evitar, e aqui é inevitável: não há como compartilhar
+  código entre o browser e o Lambda. A defesa é uma tabela de 26 casos **replicada** em
+  `src/lib/colunas.test.ts` e `query_engine/tests/test_sheets.py` — mudar um lado sem o outro
+  deixa um dos dois vermelho. Diferente do Query Plan, divergência aqui **não vira bypass**:
+  vira "coluna não encontrada", porque o RBAC já foi aplicado antes, sobre os nomes
+  normalizados. Ao mexer em qualquer passo, mexa nos dois lugares e nas duas tabelas.
+- **O pipeline de importação nunca lê a planilha.** As 5 etapas leem o **arquivo** no navegador
+  (`FileReader`) e é de lá que saem cabeçalho e amostras; o Google Sheets só é lido depois, na
+  primeira pergunta ou no primeiro card. Consequência medida em 2026-08-10/11: aba errada,
+  planilha não compartilhada com a service account, cabeçalho divergente e coluna sem título
+  **não aparecem na hora de conectar** — aparecem dias depois, no chat, como erro. Um passo de
+  verificação no fim do pipeline (uma leitura real, comparando o cabeçalho da aba com o do
+  arquivo) pegaria os quatro de uma vez, com a pessoa olhando a tela. Não implementado:
+  depende de decisão de produto sobre como aparecer na interface.
+- **O caminho de escrita descartava informação que o de leitura precisava** — duas vezes, pelo
+  mesmo padrão. O `gid` da aba era jogado fora por `extrairSheetId` (corrigido em 2026-08-11,
+  PR #6), e o mapa `cabeçalho original → nome normalizado` é jogado fora na finalização, porque
+  vive em `datasets.sketch` e `sketch` vira `NULL` quando a base fica ativa. O segundo continua
+  assim: por isso a normalização precisa ser recalculada no executor em vez de consultada. Se
+  algum dia o `schema_metadata` passar a guardar o cabeçalho original por coluna, a normalização
+  em Python deixa de ser necessária — e é a saída preferível, porque elimina a duplicação
+  acima. Não é retroativo: o original das bases atuais já foi perdido.
 - Chat real (`execute_plan`) — RESOLVIDO em 2026-08-08, ver `TODOS.md` #8. O 403
   `"base nao encontrada"` original não reproduzia mais, e o 403 diferente que apareceu depois
   (`aws4fetch` → Function URL do Lambda) já tinha sido corrigido: a Function URL com
@@ -425,23 +486,38 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - [ ] Mexeu em RLS/policy? Checou `organization_id = current_org_id()` **e** status;
       rodou `supabase/tests/*.sql`.
 - [ ] Nenhuma decisão de autorização depende de dado enviado pelo cliente.
+- [ ] Mexeu em `supabase/functions/_shared/*`? Ele é empacotado **por função**, não
+      compartilhado em runtime: publique **todos** os consumidores (`query_plan.ts` →
+      `ai-plum-chat` + `dashboard-execute` + **`dashboard-agent`**; `gemini_parsing.ts` →
+      `ai-plum-chat` + `ai-agents` + `dashboard-agent`).
+      Publicar um só deixa cópias divergentes do interpretador de RBAC em produção.
+      Confira a lista real com `mcp__supabase__list_edge_functions` antes de assumir —
+      em 2026-08-11 o `dashboard-agent` estava no ar sem estar em commit nenhum, e teria
+      ficado para trás com a versão antiga do `query_plan.ts` empacotada.
+- [ ] Mexeu na gramática do Query Plan? São **dois** prompts que a emitem, com textos
+      independentes: o Agente A (`ai-plum-chat`, ação `plan_query`) e o Planejador de Cards
+      (`dashboard-agent`, `INSTRUCAO_CARD`). E **três** lugares que a interpretam:
+      `_shared/query_plan.ts` (RBAC), `query_engine/pandas_executor.py` (execução) e as duas
+      tabelas de teste. Mudar um sozinho é como a dívida da normalização de coluna, só que
+      aqui divergir **pode** virar bypass.
+- [ ] Mexeu na normalização de nome de coluna? Mudou **nos dois lados** (`src/lib/colunas.ts` e
+      `query_engine/sheets.py`) **e nas duas tabelas de casos**? Ver §8.
+- [ ] Publicou Edge Function? Confirme que subiu de verdade: `ezbr_sha256` tem que mudar
+      (`mcp__supabase__list_edge_functions`). `version` sobe sozinho em mudança de secret, sem
+      código novo — não serve de prova. Ver §1.
 - [ ] Explique brevemente cada alteração feita (convenção deste projeto).
 
 ---
 
 ## 10. gstack
 
-Use a skill `/browse` do gstack para qualquer navegação web. NUNCA use ferramentas
-`mcp__claude-in-chrome__*`.
+Se o gstack estiver instalado, use a skill `/browse` dele para navegação web. **NUNCA** use
+ferramentas `mcp__claude-in-chrome__*`.
 
-Skills disponíveis: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`,
-`/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`,
-`/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`,
-`/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`,
-`/setup-deploy`, `/setup-gbrain`, `/retro`, `/investigate`, `/document-release`,
-`/document-generate`, `/codex`, `/cso`, `/autoplan`, `/plan-devex-review`,
-`/devex-review`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`,
-`/learn`.
+A lista das ~34 skills do gstack que ficava aqui foi removida em 2026-08-10: estava
+desatualizada (nenhuma delas aparecia na listagem da sessão) e duplicava algo que o agente já
+recebe pronto a cada sessão. Para saber o que existe agora, veja a listagem de skills da
+própria sessão ou digite `/`.
 
 ### Documentos que complementam este
 

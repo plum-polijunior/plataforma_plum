@@ -6,6 +6,13 @@
  * tem prompt próprio, propósito próprio e um enum de saída mais estreito que o
  * do chat. Foi decisão explícita não reaproveitar os agentes do chat (D1).
  *
+ * ⚠️ ORIGEM DESTE ARQUIVO (2026-08-11): esta função estava ATIVA em produção
+ * (version 5) sem existir em nenhum commit de nenhuma branch. O conteúdo abaixo
+ * foi recuperado do bundle implantado, via `mcp__supabase__get_edge_function`,
+ * quando a expressão aritmética derivada obrigou a republicar todos os
+ * consumidores de `_shared/query_plan.ts`. Se este arquivo divergir do que está
+ * no ar de novo, o problema é o mesmo: publicação manual sem commit.
+ *
  * DUAS AÇÕES:
  *
  *   gerar_card      — {pergunta, schemaMetadata} → {title, viz, query_plan,
@@ -99,6 +106,12 @@ FORMATO DO QUERY PLAN:
   carregar (as do select, do where e do group_by).
 - "select": array. Cada item é {"expr": {"agg": "sum"|"avg"|"min"|"max"|"count",
   "col": "nome_da_coluna"}, "as": "alias"}.
+- CONTA ENTRE COLUNAS: no lugar do nome da coluna, "col" aceita uma expressão
+  aritmética aplicada LINHA A LINHA, antes da agregação:
+  {"expr": {"agg": "sum", "col": {"op": "mul", "args": ["quantidade", "preco_unitario"]}}, "as": "receita_total"}
+  Operadores: "mul" e "add" (dois ou mais operandos), "sub" e "div" (exatamente
+  dois). Cada item de "args" pode ser um nome de coluna, um número, ou outra
+  expressão aninhada.
 - "where": (opcional) {"left": "coluna", "op": "="|">"|"<"|"between"|"contains"|"in",
   "right": valor} ou {"op": "and"|"or", "args": [...]}.
 - "group_by": (opcional) array com UMA coluna categórica.
@@ -136,7 +149,20 @@ REGRAS QUE NÃO PODEM SER QUEBRADAS:
    Isto não é preciosismo: num teste real com esta regra ausente, o plano
    perdeu o primeiro dia do intervalo e devolveu R$ 1.626,57 no lugar de
    R$ 2.387,92. O número saiu errado com cara de certo, que é o pior tipo de
-   erro que este produto pode cometer.`;
+   erro que este produto pode cometer.
+
+7. VALOR MONETÁRIO A PARTIR DE QUANTIDADE E PREÇO. Se a base não tem coluna de
+   receita/faturamento/valor total, mas tem quantidade vendida e preço
+   unitário, receita é OBRIGATORIAMENTE
+   {"agg": "sum", "col": {"op": "mul", "args": ["<quantidade>", "<preco>"]}}.
+   NUNCA devolva sum(quantidade) e avg(preco) como duas agregações separadas: a
+   soma da quantidade vezes a média do preço NÃO é receita, e só coincide por
+   acaso quando todos os produtos custam o mesmo. A multiplicação é por linha, e
+   quem multiplica é o executor.
+
+   Também não é preciosismo: em 2026-08-11 o chat respondeu
+   "1.480 unidades × R$ 57,50 = R$ 85.100,00" para uma doceria cujos produtos
+   iam de R$ 2,50 a R$ 90,00. O valor certo não tinha relação com esse.`;
 
 async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Response> {
   if (!GEMINI_API_KEY) return json({ error: "GEMINI_API_KEY nao configurada." }, 500);

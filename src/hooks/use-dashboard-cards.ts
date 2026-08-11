@@ -30,6 +30,14 @@ export type EstadoGrade =
   | "base-desconectada" // 409: dataset sem google_sheet_id
   | "falhou"; // rede, ou erro inesperado
 
+/**
+ * De quanto em quanto tempo o cliente pergunta ao servidor.
+ *
+ * Não confundir com o TTL do snapshot: este é o intervalo de PERGUNTA, aquele é
+ * o de RECÁLCULO. Perguntar mais vezes não gera mais leitura da planilha.
+ */
+const INTERVALO_ATUALIZACAO_MS = 2 * 60_000;
+
 interface ResultadoExecutor {
   card_id: string;
   status: Exclude<EstadoCard, "carregando">;
@@ -179,6 +187,47 @@ export function useDashboardCards(datasetId: string | null) {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  /**
+   * Atualização automática.
+   *
+   * O `refresh_interval_minutes` (15 min por padrão) sempre foi um TTL de
+   * SERVIDOR: ele diz a `dashboard-execute` se o snapshot ainda serve. Ele nunca
+   * fez o navegador buscar de novo — a página carregava uma vez e ficava
+   * envelhecendo, e "Calculado há 26 min" era a verdade sobre uma aba esquecida
+   * aberta.
+   *
+   * A busca aqui vai SEM `force`, e isso é o ponto: dentro do TTL o servidor
+   * devolve o snapshot já gravado, sem tocar no Google Sheets. Só quando o TTL
+   * vence é que ele recalcula. Ou seja, o cliente pode perguntar de dois em dois
+   * minutos que a cota de 60 req/min do Sheets não sente — quem controla o custo
+   * é o TTL, não o intervalo daqui.
+   *
+   * Efeito prático: o número na tela nunca fica mais velho que o TTL mais dois
+   * minutos, em vez de envelhecer indefinidamente.
+   */
+  useEffect(() => {
+    if (!datasetId) return;
+
+    // Aba escondida não precisa de dado fresco, e cada busca é uma invocação de
+    // Edge Function. Um dashboard esquecido numa aba ao fundo consumiria a noite
+    // inteira sem ninguém olhando.
+    const tick = () => {
+      if (document.visibilityState === "visible") carregar();
+    };
+
+    const id = setInterval(tick, INTERVALO_ATUALIZACAO_MS);
+
+    // Voltar para a aba é o momento em que o dado velho mais incomoda: a pessoa
+    // olha a tela esperando o número de agora. Buscar aqui evita ela ver o valor
+    // de meia hora atrás até o próximo tique.
+    document.addEventListener("visibilitychange", tick);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [carregar, datasetId]);
 
   return { cards, estado, recarregar: carregar };
 }

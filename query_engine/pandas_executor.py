@@ -73,6 +73,159 @@ def _is_ano(col: str, roles: Dict[str, str]) -> bool:
     return roles.get(col) == "ano"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Expressão aritmética derivada (linha a linha, antes da agregação)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Fechado de propósito: sem `eval`, sem operador que o Agente A possa inventar.
+_OPS_ARITMETICOS = ("mul", "add", "sub", "div")
+
+# Operadores que exigem exatamente dois operandos. `mul`/`add` são associativos,
+# então aceitam N; `sub`/`div` não são — `a - b - c` depende da ordem e um plano
+# com três operandos aqui é ambíguo o bastante para recusar.
+_OPS_BINARIOS = ("sub", "div")
+
+# Prefixo da coluna materializada. Não pode colidir com coluna de planilha:
+# `normalizar_coluna` (sheets.py) termina em `.strip("_")`, então nenhum
+# cabeçalho, por mais estranho que seja, produz um nome começando com "_".
+_PREFIXO_DERIVADA = "__expr_"
+
+
+def _eh_no_aritmetico(no: object) -> bool:
+    return isinstance(no, dict) and str(no.get("op", "")).lower() in _OPS_ARITMETICOS
+
+
+def _colunas_da_expressao(no: object, _profundidade: int = 0) -> list:
+    """
+    Nomes de coluna citados por uma expressão, em ordem, sem repetir.
+
+    Espelha `walkArithmetic` (`_shared/query_plan.ts`). O que este lado recolhe
+    tem que ser subconjunto do que aquele lado autorizou — se aqui aparecesse
+    uma coluna que lá não apareceu, ela simplesmente não teria sido carregada e
+    viraria MissingColumnError, que é o comportamento correto e barulhento.
+    """
+    if _profundidade > 32 or not isinstance(no, dict):
+        return []
+    fora: list = []
+    for arg in no.get("args") or []:
+        if isinstance(arg, dict):
+            achadas = _colunas_da_expressao(arg, _profundidade + 1)
+        elif isinstance(arg, str):
+            achadas = [_strip_table(arg.strip())] if arg.strip() else []
+        else:
+            achadas = []  # literal numérico: não é coluna
+        for c in achadas:
+            if c not in fora:
+                fora.append(c)
+    return fora
+
+
+def _serie_numerica(df: pd.DataFrame, col: str) -> pd.Series:
+    """
+    A coluna como número, para entrar numa conta.
+
+    No caminho normal ela já chega tipada: `apply_formatting_rules` roda antes do
+    executor e converte pelo `type` do Agente 3. O fallback com
+    `_parse_ptbr_number` cobre a coluna que ficou em `type: "nenhuma"` e chegou
+    como texto — sem ele, "R$ 57,50" viraria NaN e a receita daria zero.
+
+    NaN NÃO vira 0 aqui, de propósito: numa soma o pandas já ignora NaN (mesmo
+    efeito de zero), e numa média `fillna(0)` puxaria o resultado para baixo
+    contando linha vazia como venda de R$ 0.
+    """
+    s = df[col]
+    if pd.api.types.is_numeric_dtype(s):
+        return s.astype("float64")
+    return _parse_ptbr_number(s)
+
+
+def _avaliar_expressao(
+    no: object, df: pd.DataFrame, roles: Dict[str, str], _profundidade: int = 0
+) -> pd.Series:
+    """
+    Calcula a expressão linha a linha e devolve a série resultante.
+
+    É este passo que faltava para responder "quanto de dinheiro entrou": receita
+    é `soma(quantidade × preço)`, e o `×` acontece POR LINHA, antes da soma.
+    `soma(quantidade) × média(preço)` só coincide com isso quando todos os preços
+    são iguais — em qualquer planilha real, não são.
+    """
+    if _profundidade > 32:
+        raise ExecutorError("Expressao aritmetica aninhada demais.")
+    if not isinstance(no, dict):
+        raise ExecutorError(
+            f"Expressao aritmetica invalida: esperava objeto, veio {type(no).__name__}."
+        )
+
+    op = str(no.get("op", "")).lower()
+    if op not in _OPS_ARITMETICOS:
+        raise ExecutorError(
+            f"Operador aritmetico nao suportado: '{op}'. "
+            f"Aceitos: {', '.join(_OPS_ARITMETICOS)}."
+        )
+
+    args = no.get("args") or []
+    if not isinstance(args, list) or len(args) < 2:
+        raise ExecutorError(
+            f"Operador '{op}' precisa de pelo menos dois operandos."
+        )
+    if op in _OPS_BINARIOS and len(args) != 2:
+        raise ExecutorError(
+            f"Operador '{op}' aceita exatamente dois operandos, veio {len(args)}. "
+            f"A ordem de '{op}' muda o resultado, entao encadear e ambiguo."
+        )
+
+    series: list = []
+    for arg in args:
+        if isinstance(arg, dict):
+            series.append(_avaliar_expressao(arg, df, roles, _profundidade + 1))
+        elif isinstance(arg, (int, float)) and not isinstance(arg, bool):
+            # Literal: mesma constante em toda linha (ex.: preco * 0.9).
+            series.append(pd.Series(float(arg), index=df.index))
+        elif isinstance(arg, str):
+            col = _strip_table(arg.strip())
+            if not col:
+                raise ExecutorError(f"Operando vazio em '{op}'.")
+            if col not in df.columns:
+                raise MissingColumnError(
+                    f"Coluna '{col}' usada em calculo nao existe nos dados."
+                )
+            # Ano é dimensão, não medida — pelo mesmo motivo que sum/avg sobre
+            # ano é recusado logo abaixo. Multiplicar por 2026 produz um número
+            # que o pandas calcula sem reclamar e que não significa nada.
+            if _is_ano(col, roles):
+                raise ExecutorError(
+                    f"A coluna de ano '{col}' nao pode entrar num calculo: "
+                    f"ano serve para agrupar ou filtrar, nao para multiplicar."
+                )
+            if _is_text(col, roles):
+                raise ExecutorError(
+                    f"A coluna '{col}' e de texto e nao pode entrar num calculo."
+                )
+            series.append(_serie_numerica(df, col))
+        else:
+            raise ExecutorError(
+                f"Operando invalido em '{op}': {type(arg).__name__}. "
+                f"Esperava nome de coluna, numero ou outra expressao."
+            )
+
+    acc = series[0]
+    for outra in series[1:]:
+        if op == "mul":
+            acc = acc * outra
+        elif op == "add":
+            acc = acc + outra
+        elif op == "sub":
+            acc = acc - outra
+        else:  # div
+            # Divisão por zero em pandas devolve ±inf, e `inf` não é JSON
+            # válido: viraria `Infinity` no corpo da resposta e quebraria o
+            # parse do outro lado. Vira NaN, que as agregações já ignoram.
+            acc = acc / outra.replace(0, np.nan)
+
+    return acc.replace([np.inf, -np.inf], np.nan)
+
+
 def execute_plan(
     plan: Dict[str, Any],
     tables: Dict[str, pd.DataFrame],
@@ -128,6 +281,8 @@ def execute_plan(
 
     direct_cols: list = []   # (alias, raw_col)
     aggs: list = []          # (alias, func, raw_col)
+    derivadas: list = []     # colunas sintéticas materializadas neste plano
+    df_copiado = False       # `df` aqui é a fatia do where; escrever exige cópia
 
     for item in select_items:
         # Duas formas válidas de item, ambas documentadas no prompt do Agente A
@@ -159,6 +314,37 @@ def execute_plan(
 
         if isinstance(expr, dict):
             func = str(expr.get("agg", "sum")).lower()
+
+            # ── Expressão aritmética derivada ────────────────────────────────
+            # Duas formas aceitas, porque as duas são plausíveis na saída do
+            # Agente A e divergir do `_shared/query_plan.ts` custou caro antes:
+            #   {"agg":"sum","col":{"op":"mul","args":["qtd","preco"]}}
+            #   {"agg":"sum","op":"mul","args":["qtd","preco"]}
+            # `col` sendo objeto só pode ser expressão — validar o operador é
+            # trabalho do `_avaliar_expressao`, que sabe dizer qual é o problema.
+            # Exigir aqui um `op` conhecido mandava `{"op":"pow",...}` para o
+            # caminho de coluna normal, onde o dict inteiro virava nome de
+            # coluna e o erro saía como "coluna '{'op': 'pow', ...}' nao existe".
+            no = expr.get("col")
+            if not isinstance(no, dict):
+                no = expr if _eh_no_aritmetico(expr) else None
+
+            if no is not None:
+                # Materializa como coluna de verdade e segue o caminho normal.
+                # Assim `_grouped_agg`/`_scalar_agg` não precisam saber que
+                # expressão derivada existe: para eles é só mais uma coluna.
+                if not df_copiado:
+                    df = df.copy()
+                    df_copiado = True
+                col = f"{_PREFIXO_DERIVADA}{len(derivadas)}"
+                df[col] = _avaliar_expressao(no, df, roles)
+                derivadas.append(col)
+                if alias is None:
+                    partes = _colunas_da_expressao(no)[:2]
+                    alias = f"{func}_" + ("_".join(partes) if partes else "calculado")
+                aggs.append((alias, func, col))
+                continue
+
             col = _strip_table(str(expr.get("col", "")))
             # Somar percentual nao significa nada: 10% + 20% nao e 30% de nada.
             if func == "sum" and _is_percent(col, roles):
@@ -592,11 +778,13 @@ def _eval_single(
 # Execução com Regras de Formatação (Agente 3 & 3.1)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Series:
-    """
-    Limpa um número em formato PT-BR: remove 'R$', espaços, opcionalmente '%',
-    o ponto de milhar, e troca a vírgula decimal por ponto.
-    """
+def _eh_numero(v: object) -> bool:
+    """Número de verdade (não texto, não booleano)."""
+    return isinstance(v, (int, float, np.number)) and not isinstance(v, bool)
+
+
+def _limpar_texto_ptbr(s: pd.Series, *, strip_percent: bool) -> pd.Series:
+    """A limpeza textual: 'R$ 1.234,56' -> 1234.56."""
     text = s.astype(str)
     text = text.str.replace("R$", "", regex=False)
     if strip_percent:
@@ -605,6 +793,46 @@ def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Serie
     text = text.str.replace(".", "", regex=False)
     text = text.str.replace(",", ".", regex=False)
     return pd.to_numeric(text, errors="coerce")
+
+
+def _parse_ptbr_number(s: pd.Series, *, strip_percent: bool = False) -> pd.Series:
+    """
+    Limpa um número em formato PT-BR: remove 'R$', espaços, opcionalmente '%',
+    o ponto de milhar, e troca a vírgula decimal por ponto.
+
+    ⚠️ Valor que JÁ É NÚMERO não passa pela limpeza textual, e isto não é
+    otimização — é correção. `sheets.load_columns` lê com
+    `valueRenderOption=UNFORMATTED_VALUE`, então célula numérica chega como
+    número Python de verdade, e a limpeza tratava o ponto DECIMAL dele como
+    separador de milhar:
+
+        2.5   -> astype(str) -> "2.5"   -> tira "." -> "25"    (x10)
+        90.0  -> "90.0"                 ->           "900"     (x10)
+        0.155 -> "0.155"                ->           "0155"    (x1000)
+
+    Ou seja: toda coluna de dinheiro nativa da planilha vinha multiplicada por
+    10^(casas decimais). Os testes nunca pegaram porque todos alimentam string
+    ("R$ 1.234,56"), que é justamente o caminho que funciona.
+
+    A decisão é por TIPO e não por "dá pra converter": em pt-BR a string
+    "1.234" significa mil duzentos e trinta e quatro, enquanto o número 1.234
+    significa um vírgula dois três quatro. Só o tipo distingue os dois, e
+    tentar `pd.to_numeric` primeiro leria a string errado.
+
+    A mesma coluna pode misturar os dois casos linha a linha (célula digitada
+    como texto ao lado de célula formatada como número), então a escolha é por
+    linha — mesmo padrão que `_fmt_data` já usa para serial vs texto.
+    """
+    if pd.api.types.is_numeric_dtype(s):
+        return pd.to_numeric(s, errors="coerce")
+
+    eh_num = s.map(_eh_numero).fillna(False).astype(bool)
+    if not eh_num.any():
+        return _limpar_texto_ptbr(s, strip_percent=strip_percent)
+
+    via_numero = pd.to_numeric(s.where(eh_num), errors="coerce")
+    via_texto = _limpar_texto_ptbr(s.where(~eh_num), strip_percent=strip_percent)
+    return via_numero.where(eh_num, via_texto)
 
 
 def _fmt_moeda_brl(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
@@ -616,7 +844,33 @@ def _fmt_numero_decimal(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
 
 
 def _fmt_numero_inteiro(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
-    return _parse_ptbr_number(s).astype("Int64")
+    """
+    O `.round()` antes do cast não é preciosismo: `astype("Int64")` sobre um
+    valor fracionário levanta `TypeError` ("cannot safely cast non-equivalent
+    float64 to int64"), que NÃO é `ExecutorError` — escaparia do `except` do
+    `main.py` e viraria 500 mudo, com a pergunta do usuário morrendo em
+    "Nao consegui calcular isso agora".
+
+    Era inalcançável enquanto a limpeza textual comia o ponto decimal (0.15
+    virava 15, inteiro por acidente). Com o número nativo preservado, deixou de
+    ser: `demo_riosulense` tem `percent_peso_nao_conformes` tipado como
+    `numero_inteiro`, e percentual nativo do Sheets chega como 0.15.
+
+    Arredondar em silêncio seria a outra metade do erro, então a perda fica
+    registrada: o `type` veio de um LLM olhando 5 linhas de amostra, e coluna
+    com decimal real tipada como inteiro é sinal de que ele errou.
+    """
+    numeros = _parse_ptbr_number(s)
+    # `notna()` importa: `NaN % 1` é `NaN`, e `NaN != 0` é True — sem isso toda
+    # célula vazia era contada como decimal e o aviso disparava à toa.
+    fracionarios = int((((numeros % 1) != 0) & numeros.notna()).sum())
+    if fracionarios:
+        logger.warning(
+            "Coluna tipada como numero_inteiro tem %d valor(es) com casa "
+            "decimal; arredondando. O 'type' do Agente 3 provavelmente "
+            "deveria ser numero_decimal.", fracionarios,
+        )
+    return numeros.round().astype("Int64")
 
 
 def _fmt_percentual(s: pd.Series, params: Dict[str, Any]) -> pd.Series:

@@ -6,8 +6,9 @@
  * deveria, e nenhuma outra camada pega, porque as camadas abaixo confiam no
  * conjunto que sai daqui.
  *
- * Por isso o foco dos testes é cobertura de POSIÇÃO: as seis posições em que
- * um nome de coluna pode aparecer, mais aninhamento profundo no `where`.
+ * Por isso o foco dos testes é cobertura de POSIÇÃO: as sete posições em que
+ * um nome de coluna pode aparecer, mais aninhamento profundo no `where` e na
+ * expressão aritmética.
  */
 
 import { describe, expect, it } from "vitest";
@@ -56,6 +57,119 @@ describe("extractColumns — cobertura de posição", () => {
     expect(extractColumns({ order_by: [{ col: "total", dir: "desc" }] })).toEqual(
       new Set(["total"]),
     );
+  });
+
+  it("acha AS DUAS colunas de uma expressão aritmética em select", () => {
+    const plan = {
+      select: [{
+        expr: { agg: "sum", col: { op: "mul", args: ["vendas_mes", "preco_unitario"] } },
+        as: "receita_total",
+      }],
+    };
+    expect(extractColumns(plan)).toEqual(new Set(["vendas_mes", "preco_unitario"]));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expressão aritmética derivada
+//
+// `addCol` descarta calado tudo que não é string. Quando `col` deixou de ser
+// sempre uma string, isso virou um buraco de verdade: um nó aritmético em `col`
+// não contribuía com NENHUMA coluna, e o plano era autorizado sem que ninguém
+// olhasse os operandos contra o allowed_columns do cargo.
+//
+// Estes testes existem para que esse buraco não volte em silêncio.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("extractColumns — expressão aritmética", () => {
+  it("recolhe operandos aninhados em qualquer profundidade", () => {
+    const plan = {
+      select: [{
+        expr: {
+          agg: "sum",
+          col: {
+            op: "mul",
+            args: [
+              { op: "sub", args: ["preco_unitario", { op: "add", args: ["custo", "frete"] }] },
+              "vendas_mes",
+            ],
+          },
+        },
+        as: "margem",
+      }],
+    };
+    expect(extractColumns(plan)).toEqual(
+      new Set(["preco_unitario", "custo", "frete", "vendas_mes"]),
+    );
+  });
+
+  it("aceita a forma com agg ao lado do operador", () => {
+    const plan = {
+      select: [{
+        expr: { agg: "sum", op: "mul", args: ["vendas_mes", "preco_unitario"] },
+        as: "receita",
+      }],
+    };
+    expect(extractColumns(plan)).toEqual(new Set(["vendas_mes", "preco_unitario"]));
+  });
+
+  it("literal numérico não vira coluna", () => {
+    const plan = {
+      select: [{ expr: { agg: "sum", col: { op: "mul", args: ["preco_unitario", 0.9] } } }],
+    };
+    expect(extractColumns(plan)).toEqual(new Set(["preco_unitario"]));
+  });
+
+  it("recolhe operandos mesmo com operador desconhecido", () => {
+    // Fail-closed. O executor recusa `pow`, mas a extração não pode APOSTAR
+    // nisso: se um dia um operador novo entrar no Python e não aqui, a
+    // consequência tem que ser plano barrado, nunca coluna não checada.
+    const plan = {
+      select: [{ expr: { agg: "sum", col: { op: "pow", args: ["base", "expoente"] } } }],
+    };
+    expect(extractColumns(plan)).toEqual(new Set(["base", "expoente"]));
+  });
+
+  it("aninhamento absurdo não estoura a pilha", () => {
+    let no: Record<string, unknown> = { op: "mul", args: ["folha", 2] };
+    for (let i = 0; i < 500; i++) no = { op: "mul", args: [no, 2] };
+    const plan = { select: [{ expr: { agg: "sum", col: no } }] };
+    expect(() => extractColumns(plan)).not.toThrow();
+  });
+
+  it("expressão aritmética que aparece dentro do where também é checada", () => {
+    const plan = { where: { op: "mul", args: ["qtd", "preco"] } };
+    expect(extractColumns(plan)).toEqual(new Set(["qtd", "preco"]));
+  });
+});
+
+describe("authorizePlan — expressão aritmética", () => {
+  it("barra o plano quando UM operando é proibido", () => {
+    // O caso que importa: `vendas_mes` liberada, `preco_unitario` não. Antes da
+    // extração enxergar dentro do nó, este plano passava inteiro.
+    const plan = {
+      select: [{
+        expr: { agg: "sum", col: { op: "mul", args: ["vendas_mes", "preco_unitario"] } },
+        as: "receita",
+      }],
+    };
+    const veredito = authorizePlan(plan, ["vendas_mes"]);
+    expect(veredito.allowed).toBe(false);
+    expect(veredito.forbidden).toEqual(["preco_unitario"]);
+  });
+
+  it("libera quando o cargo vê os dois operandos", () => {
+    const plan = {
+      select: [{
+        expr: { agg: "sum", col: { op: "mul", args: ["vendas_mes", "preco_unitario"] } },
+        as: "receita",
+      }],
+    };
+    const veredito = authorizePlan(plan, ["vendas_mes", "preco_unitario", "categoria"]);
+    expect(veredito.allowed).toBe(true);
+    // `required` vira o que o executor carrega da planilha: os operandos, e
+    // nunca o alias — nenhuma planilha tem coluna chamada `receita`.
+    expect(veredito.required).toEqual(["preco_unitario", "vendas_mes"]);
   });
 });
 
