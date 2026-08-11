@@ -4,12 +4,65 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogIn, Globe } from "lucide-react";
+import { ArrowLeft, Database, Globe, LineChart, Lock } from "lucide-react";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * O painel direito da tela de entrada, criado em 2026-08-12 (Direção A).
+ *
+ * O protótipo desenha um gráfico de barras decorativo aqui, com os números da
+ * base de demonstração. Aqui ele é TEXTO: número na tela de login não tem
+ * origem, e a única leitura possível é "estes são dados de alguém". O mesmo
+ * princípio que faz o Agente C não inventar valor.
+ *
+ * Só de apresentação — não recebe nem decide nada.
+ */
+function PainelLateral() {
+  const pontos = [
+    { Icone: Database, texto: "Conecte uma planilha do Google Sheets, sem exportar nada." },
+    { Icone: LineChart, texto: "Pergunte em português. O Python calcula, a IA só comunica." },
+    { Icone: Lock, texto: "Cada cargo vê apenas as colunas que foram liberadas para ele." },
+  ];
+
+  return (
+    <div className="relative hidden items-center justify-center overflow-hidden border-l border-border bg-secondary p-10 md:flex">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(600px_400px_at_70%_20%,hsl(var(--accent)),transparent_70%)]" />
+      <div className="relative max-w-[340px]">
+        <h2 className="mb-3 font-display text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
+          Os dados da sua operação, em uma conversa
+        </h2>
+        <p className="mb-8 text-sm leading-[1.6] text-text-soft">
+          O Plum lê as suas planilhas e responde perguntas de negócio com o número exato.
+        </p>
+        <ul className="space-y-4">
+          {pontos.map(({ Icone, texto }) => (
+            <li key={texto} className="flex gap-3">
+              <Icone size={17} strokeWidth={1.8} className="mt-0.5 flex-none text-primary" />
+              <span className="text-[13.5px] leading-[1.55] text-secondary-foreground">{texto}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/** Separador "ou …" entre SSO e formulário. Repetia-se em três lugares. */
+function Separador({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="my-6 flex items-center gap-3">
+      <div className="h-px flex-1 bg-border" />
+      <span className="whitespace-nowrap text-[10.5px] uppercase tracking-[0.1em] text-muted-foreground">
+        {children}
+      </span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
 
 const Auth = () => {
   const { toast } = useToast();
@@ -263,329 +316,358 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-16 md:pt-24 p-4 relative overflow-hidden">
-      {/* Glows do tema */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute bottom-[-140px] right-[-120px] h-[420px] w-[420px] rounded-full bg-accent/10 blur-3xl" />
-      </div>
+    /*
+      Repaginado para a Direção A em 2026-08-12: painel duplo, tema claro, sem
+      nenhuma alteração de lógica — os handlers, a validação e o destino do login
+      estão todos acima e não foram tocados.
 
-      {/* Botão voltar */}
-      <Button
-        variant="ghost"
-        onClick={() => {
-          if (activeTab !== "") {
-            setActiveTab("");
-            setFoundOrg(null);
-            setLoginMode("returning");
-          } else {
-            window.location.href = '/';
-          }
-        }}
-        className="absolute top-4 left-4 z-20 text-muted-foreground hover:text-foreground"
-      >
-        ← {activeTab !== "" ? "Voltar para seleção de acesso" : "Voltar para o site"}
-      </Button>
+      O que saiu, e por quê: os dois glows `blur-3xl`, o `glass` dos cartões, o
+      `text-gradient` do título e o botão `variant="hero"`. Todos são vocabulário
+      da landing (vidro e brilho sobre fundo escuro), e esta tela é a porta do
+      produto, não a página de venda. O `DESIGN.md` §1 separa as duas superfícies
+      exatamente aqui.
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-2xl z-10"
-      >
-        <div className="text-center mb-16">
-          <img src={plumLogo} alt="Plum" className="w-20 h-20 mx-auto object-contain mb-4" />
-          <h1 className="text-2xl font-bold text-gradient">Plum Platform</h1>
-          <p className="text-muted-foreground mt-2">Acesse os dados da sua operação</p>
-        </div>
+      O que ficou, porque é decisão de produto e não de estilo (§7 do CLAUDE.md):
+      "Entrar" continua sendo o caminho central e "criar organização" continua
+      rebaixado a link secundário — entrar acontece milhares de vezes, criar
+      acontece uma vez na vida da empresa.
+    */
+    <div className="grid min-h-screen grid-cols-1 bg-background md:grid-cols-2">
+      <div className="relative flex flex-col justify-center px-6 py-12 md:px-10">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(600px_400px_at_30%_15%,hsl(var(--tint-soft)),transparent_70%)]" />
 
-        <div className="w-full">
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTab !== "") {
+              setActiveTab("");
+              setFoundOrg(null);
+              setLoginMode("returning");
+            } else {
+              window.location.href = '/';
+            }
+          }}
+          className="absolute left-6 top-6 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground md:left-10"
+        >
+          <ArrowLeft size={14} strokeWidth={2} />
+          {activeTab !== "" ? "Voltar" : "Voltar para o site"}
+        </button>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="relative mx-auto w-full max-w-[360px]"
+        >
+          <img src={plumLogo} alt="Plum" className="mb-8 h-10 w-10 object-contain" />
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {activeTab === "" && (
-              <div className="flex flex-col items-center mb-10 gap-6">
-                <TabsList className="grid w-full max-w-sm grid-cols-1 bg-transparent gap-6 p-0 h-auto mx-auto">
+              <div>
+                <h1 className="mb-2 font-display text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-foreground">
+                  Entrar na plataforma
+                </h1>
+                <p className="mb-8 text-sm leading-[1.55] text-text-soft">
+                  Acesse os dados da sua operação.
+                </p>
+
+                {/* O `TabsList`/`TabsTrigger` continua sendo quem troca de aba —
+                    só deixou de ser um cartão de 300px de altura e passou a ser
+                    o botão primário da tela. */}
+                <TabsList className="h-auto w-full bg-transparent p-0">
                   <TabsTrigger
                     value="entrar"
                     onClick={() => {
                       setFoundOrg(null);
                       setLoginMode("returning");
                     }}
-                    className="flex flex-col items-center justify-center px-6 py-16 border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 data-[state=active]:border-primary data-[state=active]:bg-primary/20 transition-all rounded-2xl shadow-md min-h-[300px]"
+                    className="h-[42px] w-full rounded-[9px] bg-primary text-sm font-medium text-primary-foreground transition-all duration-150 hover:-translate-y-px hover:bg-brand-hover data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                   >
-                    <span className="font-bold text-2xl mb-6 text-foreground">Entrar</span>
-                    <LogIn className="h-16 w-16 mb-6 text-primary" />
-                    <span className="text-base text-muted-foreground whitespace-normal text-center">
-                      Clique aqui se sua empresa já usa o Plum.
-                    </span>
+                    Entrar
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Criar organização é raro (uma vez na vida da empresa) —
-                    fica abaixo do "Entrar" (que acontece milhares de vezes),
-                    com o mesmo estilo do "Entrar no Plum" do Header. */}
-                <div className="inline-block group relative bg-gradient-to-b from-primary/20 to-primary/5 p-px rounded-2xl backdrop-blur-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
-                  <Button
+                <p className="mt-7 text-center text-[12.5px] text-muted-foreground">
+                  Sua empresa ainda não usa o Plum?{" "}
+                  <button
                     type="button"
-                    variant="hero"
                     onClick={() => setActiveTab("criar")}
-                    className="group"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
                   >
-                    <span className="opacity-90 group-hover:opacity-100 transition-opacity">
-                      Sua empresa ainda não usa o Plum? Crie uma organização agora!
-                    </span>
-                  </Button>
-                </div>
+                    Crie uma organização
+                  </button>
+                </p>
               </div>
             )}
 
-            {/* TAB: ENTRAR EM UMA ORGANIZAÇÃO */}
-            <TabsContent value="entrar">
-              <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
-                {!foundOrg ? (
-                  <>
-                    {loginMode === "returning" ? (
-                      <>
-                        <h3 className="font-semibold text-foreground mb-4">Já possui uma conta?</h3>
+            {/* ── ENTRAR EM UMA ORGANIZAÇÃO ─────────────────────────────────── */}
+            <TabsContent value="entrar" className="mt-0">
+              {!foundOrg ? (
+                <>
+                  {loginMode === "returning" ? (
+                    <>
+                      <h1 className="mb-2 font-display text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-foreground">
+                        Entrar na plataforma
+                      </h1>
+                      <p className="mb-8 text-sm leading-[1.55] text-text-soft">
+                        Acesse os dados da sua operação.
+                      </p>
 
-                        <div className="space-y-3 mb-6">
-                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('google')}>
-                            <Globe className="mr-2 h-4 w-4" />
-                            Continuar com Google
-                          </Button>
-                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('azure')}>
-                            <Globe className="mr-2 h-4 w-4" />
-                            Continuar com Microsoft
-                          </Button>
-                        </div>
-
-                        <div className="relative my-6">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-border/30" />
-                          </div>
-                          <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-card px-2 text-muted-foreground">ou entre com email</span>
-                          </div>
-                        </div>
-
-                        <form onSubmit={handleLogin} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="top-login-email">Email corporativo</Label>
-                            <Input id="top-login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required className="bg-background/50" />
-                            {loginEmail.length > 0 && !isLoginEmailValid && (
-                              <p className="text-xs text-destructive">O email precisa ter um @ e um domínio (ex.: nome@empresa.com).</p>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="top-login-password">Senha</Label>
-                            <Input id="top-login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
-                            {loginPassword.length > 0 && !isLoginPasswordValid && (
-                              <p className="text-xs text-destructive">A senha precisa ter pelo menos 6 caracteres.</p>
-                            )}
-                          </div>
-                          {isLoginFormValid && (
-                            <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                              {isLoading ? "Entrando..." : "Entrar com Email"}
-                            </Button>
-                          )}
-                        </form>
-
-                        <h3 className="font-semibold text-foreground mt-8 mb-4">Ainda não possui conta?</h3>
-
-                        <Button type="button" onClick={() => setLoginMode("new")} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                          Primeiro acesso
+                      <div className="flex flex-col gap-2">
+                        <Button type="button" variant="outline" className="w-full" disabled={isLoading} onClick={() => handleSSO('google')}>
+                          <Globe className="mr-2 h-4 w-4" />
+                          Continuar com Google
                         </Button>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center mb-6">
-                          <Button variant="ghost" size="sm" onClick={() => setLoginMode("returning")} className="mr-2 h-8 px-2">
-                            ← Voltar
-                          </Button>
-                          <h3 className="font-semibold text-foreground">Primeiro acesso</h3>
-                        </div>
-
-                        <form onSubmit={handleSearchOrg} className="space-y-4 mb-6">
-                          <div className="space-y-2">
-                            <Label htmlFor="orgId">Código de Convite</Label>
-                            <Input
-                              id="orgId"
-                              placeholder="Ex: MINH4EMPRES4"
-                              value={orgId}
-                              onChange={(e) => setOrgId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                              maxLength={12}
-                              required
-                              className="bg-background/50 uppercase tracking-wider"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Digite o código enviado pela sua empresa para pedir acesso.
-                            </p>
-                          </div>
-                          <Button type="submit" variant="secondary" className="w-full" disabled={isLoading}>
-                            {isLoading ? "Buscando..." : "Buscar Organização"}
-                          </Button>
-                        </form>
-
-                        <div className="relative my-6">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-border/30" />
-                          </div>
-                          <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-card px-2 text-muted-foreground">ou continue com email corporativo</span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('google')}>
-                            <Globe className="mr-2 h-4 w-4" />
-                            Continuar com Google
-                          </Button>
-                          <Button type="button" variant="outline" className="w-full bg-background/50" disabled={isLoading} onClick={() => handleSSO('azure')}>
-                            <Globe className="mr-2 h-4 w-4" />
-                            Continuar com Microsoft
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="flex items-center justify-between mb-4 pb-4 border-b border-border/20">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Entrando em:</p>
-                        <p className="font-semibold text-foreground text-lg">{foundOrg.name}</p>
+                        <Button type="button" variant="outline" className="w-full" disabled={isLoading} onClick={() => handleSSO('azure')}>
+                          <Globe className="mr-2 h-4 w-4" />
+                          Continuar com Microsoft
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => setFoundOrg(null)}>Trocar</Button>
-                    </div>
 
-                    <Tabs defaultValue="login" className="w-full mt-4">
-                      <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/20">
-                        <TabsTrigger value="login">Login</TabsTrigger>
-                        <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
-                      </TabsList>
+                      <Separador>ou com email</Separador>
 
-                      <TabsContent value="login">
-                        <form onSubmit={handleLogin} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="login-email">Email</Label>
-                            <Input id="login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required className="bg-background/50" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="login-password">Senha</Label>
-                            <Input id="login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required className="bg-background/50" />
-                          </div>
-                          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                            {isLoading ? "Entrando..." : "Entrar"}
+                      <form onSubmit={handleLogin} className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="top-login-email" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Email corporativo
+                          </Label>
+                          <Input id="top-login-email" type="email" placeholder="voce@empresa.com.br" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required />
+                          {loginEmail.length > 0 && !isLoginEmailValid && (
+                            <p className="text-xs text-destructive">O email precisa ter um @ e um domínio (ex.: nome@empresa.com).</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="top-login-password" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Senha
+                          </Label>
+                          <Input id="top-login-password" type="password" placeholder="••••••••••" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+                          {loginPassword.length > 0 && !isLoginPasswordValid && (
+                            <p className="text-xs text-destructive">A senha precisa ter pelo menos 6 caracteres.</p>
+                          )}
+                        </div>
+                        {/* O botão só EXISTE quando e-mail e senha passam na
+                            validação local — §7 do CLAUDE.md. Não é `disabled`:
+                            é ausência, de propósito. */}
+                        {isLoginFormValid && (
+                          <Button type="submit" className="mt-1 w-full" disabled={isLoading}>
+                            {isLoading ? "Entrando…" : "Entrar com Email"}
                           </Button>
-                        </form>
-                      </TabsContent>
+                        )}
+                      </form>
 
-                      <TabsContent value="cadastro">
-                        <form onSubmit={handleSignup} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="signup-email">Email Corporativo</Label>
-                            <Input id="signup-email" type="email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} required className="bg-background/50" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="signup-password">Senha</Label>
-                            <Input id="signup-password" type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} required className="bg-background/50" />
-                          </div>
-                          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>
-                            {isLoading ? "Solicitando..." : "Solicitar Acesso"}
-                          </Button>
-                          <p className="text-xs text-muted-foreground text-center mt-2">
-                            Você precisará da aprovação do administrador para entrar.
+                      <p className="mt-7 text-center text-[12.5px] text-muted-foreground">
+                        Primeiro acesso?{" "}
+                        <button
+                          type="button"
+                          onClick={() => setLoginMode("new")}
+                          className="font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          Pedir acesso à sua organização
+                        </button>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h1 className="mb-2 font-display text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-foreground">
+                        Primeiro acesso
+                      </h1>
+                      <p className="mb-8 text-sm leading-[1.55] text-text-soft">
+                        Use o código que a sua empresa enviou, ou entre pelo email corporativo.
+                      </p>
+
+                      <form onSubmit={handleSearchOrg} className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="orgId" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Código de convite
+                          </Label>
+                          <Input
+                            id="orgId"
+                            placeholder="Ex: MINH4EMPRES4"
+                            value={orgId}
+                            onChange={(e) => setOrgId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                            maxLength={12}
+                            required
+                            className="font-code uppercase tracking-wider"
+                          />
+                          <p className="text-xs leading-[1.5] text-muted-foreground">
+                            São 12 caracteres. Quem tem o código é o administrador da sua
+                            organização.
                           </p>
-                        </form>
-                      </TabsContent>
-                    </Tabs>
-                  </motion.div>
-                )}
-              </div>
+                        </div>
+                        <Button type="submit" variant="outline" className="w-full" disabled={isLoading}>
+                          {isLoading ? "Buscando…" : "Buscar organização"}
+                        </Button>
+                      </form>
+
+                      <Separador>ou com email corporativo</Separador>
+
+                      <div className="flex flex-col gap-2">
+                        <Button type="button" variant="outline" className="w-full" disabled={isLoading} onClick={() => handleSSO('google')}>
+                          <Globe className="mr-2 h-4 w-4" />
+                          Continuar com Google
+                        </Button>
+                        <Button type="button" variant="outline" className="w-full" disabled={isLoading} onClick={() => handleSSO('azure')}>
+                          <Globe className="mr-2 h-4 w-4" />
+                          Continuar com Microsoft
+                        </Button>
+                      </div>
+
+                      <p className="mt-7 text-center text-[12.5px] text-muted-foreground">
+                        <button
+                          type="button"
+                          onClick={() => setLoginMode("returning")}
+                          className="font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          Já tenho conta
+                        </button>
+                      </p>
+                    </>
+                  )}
+                </>
+              ) : (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                  <div className="mb-6 flex items-end justify-between gap-3 border-b border-border pb-5">
+                    <div className="min-w-0">
+                      <p className="text-[12.5px] text-muted-foreground">Entrando em</p>
+                      <p className="truncate font-display text-lg font-semibold tracking-[-0.01em] text-foreground">
+                        {foundOrg.name}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFoundOrg(null)}
+                      className="flex-none text-[12.5px] font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Trocar
+                    </button>
+                  </div>
+
+                  <Tabs defaultValue="login" className="w-full">
+                    <TabsList className="mb-5 grid w-full grid-cols-2 bg-secondary">
+                      <TabsTrigger value="login">Entrar</TabsTrigger>
+                      <TabsTrigger value="cadastro">Pedir acesso</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="login">
+                      <form onSubmit={handleLogin} className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="login-email" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Email
+                          </Label>
+                          <Input id="login-email" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required />
+                        </div>
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="login-password" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Senha
+                          </Label>
+                          <Input id="login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+                        </div>
+                        <Button type="submit" className="mt-1 w-full" disabled={isLoading}>
+                          {isLoading ? "Entrando…" : "Entrar"}
+                        </Button>
+                      </form>
+                    </TabsContent>
+
+                    <TabsContent value="cadastro">
+                      <form onSubmit={handleSignup} className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="signup-email" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Email corporativo
+                          </Label>
+                          <Input id="signup-email" type="email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} required />
+                        </div>
+                        <div className="flex flex-col gap-[7px]">
+                          <Label htmlFor="signup-password" className="text-[12.5px] font-medium text-secondary-foreground">
+                            Senha
+                          </Label>
+                          <Input id="signup-password" type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} required />
+                        </div>
+                        <Button type="submit" className="mt-1 w-full" disabled={isLoading}>
+                          {isLoading ? "Solicitando…" : "Solicitar acesso"}
+                        </Button>
+                        <p className="text-center text-xs text-muted-foreground">
+                          Um administrador precisa aprovar antes de você ver os dados.
+                        </p>
+                      </form>
+                    </TabsContent>
+                  </Tabs>
+                </motion.div>
+              )}
             </TabsContent>
 
-            {/* TAB: CRIAR UMA ORGANIZAÇÃO */}
-            <TabsContent value="criar">
-              <div className="glass p-6 md:p-8 rounded-2xl border border-border/30 shadow-xl mx-auto max-w-md">
-                
-                <div className="space-y-4 mb-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-org-name" className="text-primary font-semibold">Nome da sua Empresa <span className="text-destructive">*</span></Label>
-                    <Input 
-                      id="new-org-name" 
-                      placeholder="Ex: Cali Ltda" 
-                      value={newOrgName} 
-                      onChange={(e) => setNewOrgName(e.target.value)} 
-                      required 
-                      className="bg-background/50 border-primary/30 focus-visible:ring-primary/50" 
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Obrigatório. Este será o nome do seu ambiente no Plum.
-                    </p>
-                  </div>
-                </div>
+            {/* ── CRIAR UMA ORGANIZAÇÃO ─────────────────────────────────────── */}
+            <TabsContent value="criar" className="mt-0">
+              <h1 className="mb-2 font-display text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-foreground">
+                Criar uma organização
+              </h1>
+              <p className="mb-8 text-sm leading-[1.55] text-text-soft">
+                Você será o administrador do ambiente da sua empresa.
+              </p>
 
-                <div className="space-y-3 mb-6">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full bg-background/50"
-                    disabled={isLoading}
-                    onClick={() => handleSSOCreateOrg('google')}
-                  >
-                    <Globe className="mr-2 h-4 w-4" />
-                    Criar com Google
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full bg-background/50"
-                    disabled={isLoading}
-                    onClick={() => handleSSOCreateOrg('azure')}
-                  >
-                    <Globe className="mr-2 h-4 w-4" />
-                    Criar com Microsoft
-                  </Button>
-                </div>
-
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border/30" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">ou crie com email e senha</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleCreateOrg} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email">Seu Email Corporativo</Label>
-                    <Input id="admin-email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required className="bg-background/50" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-password">Crie uma Senha</Label>
-                    <Input id="admin-password" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="bg-background/50" />
-                  </div>
-
-                  {/* O código de convite deixou de ser escolhido pelo cliente:
-                      agora é gerado pelo servidor com 12 caracteres aleatórios
-                      (o antigo, de 4, era enumerável em poucas horas). */}
-                  <div className="rounded-lg border border-border/30 bg-muted/20 p-3 mt-4">
-                    <p className="text-xs text-muted-foreground">
-                      Um <span className="font-medium text-foreground">código de convite</span> de
-                      12 caracteres será gerado automaticamente. Você o encontra no painel,
-                      em "Minha Organização", para enviar aos seus colaboradores.
-                    </p>
-                  </div>
-
-                  <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6" disabled={isLoading}>
-                    {isLoading ? "Criando ambiente..." : "Criar Organização"}
-                  </Button>
-                </form>
+              <div className="mb-6 flex flex-col gap-[7px]">
+                <Label htmlFor="new-org-name" className="text-[12.5px] font-medium text-secondary-foreground">
+                  Nome da empresa
+                </Label>
+                <Input
+                  id="new-org-name"
+                  placeholder="Ex: Minha Empresa Ltda"
+                  value={newOrgName}
+                  onChange={(e) => setNewOrgName(e.target.value)}
+                  required
+                />
+                <p className="text-xs leading-[1.5] text-muted-foreground">
+                  Este será o nome do ambiente no Plum. Vale para os três caminhos abaixo.
+                </p>
               </div>
+
+              <div className="flex flex-col gap-2">
+                <Button type="button" variant="outline" className="w-full" disabled={isLoading} onClick={() => handleSSOCreateOrg('google')}>
+                  <Globe className="mr-2 h-4 w-4" />
+                  Criar com Google
+                </Button>
+                <Button type="button" variant="outline" className="w-full" disabled={isLoading} onClick={() => handleSSOCreateOrg('azure')}>
+                  <Globe className="mr-2 h-4 w-4" />
+                  Criar com Microsoft
+                </Button>
+              </div>
+
+              <Separador>ou com email e senha</Separador>
+
+              <form onSubmit={handleCreateOrg} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-[7px]">
+                  <Label htmlFor="admin-email" className="text-[12.5px] font-medium text-secondary-foreground">
+                    Seu email corporativo
+                  </Label>
+                  <Input id="admin-email" type="email" placeholder="voce@empresa.com.br" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required />
+                </div>
+                <div className="flex flex-col gap-[7px]">
+                  <Label htmlFor="admin-password" className="text-[12.5px] font-medium text-secondary-foreground">
+                    Crie uma senha
+                  </Label>
+                  <Input id="admin-password" type="password" placeholder="••••••••••" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required />
+                </div>
+
+                {/* O código de convite deixou de ser escolhido pelo cliente:
+                    agora é gerado pelo servidor com 12 caracteres aleatórios
+                    (o antigo, de 4, era enumerável em poucas horas). */}
+                <div className="rounded-[9px] border border-border bg-secondary p-3">
+                  <p className="text-xs leading-[1.5] text-muted-foreground">
+                    Um <span className="font-medium text-foreground">código de convite</span> de 12
+                    caracteres é gerado automaticamente. Ele fica em "Minha Organização", para você
+                    enviar à sua equipe.
+                  </p>
+                </div>
+
+                <Button type="submit" className="mt-1 w-full" disabled={isLoading}>
+                  {isLoading ? "Criando ambiente…" : "Criar organização"}
+                </Button>
+              </form>
             </TabsContent>
           </Tabs>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
+
+      <PainelLateral />
     </div>
   );
 };

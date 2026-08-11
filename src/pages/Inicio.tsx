@@ -272,7 +272,17 @@ export default function Inicio() {
     >
       <header className={`flex shrink-0 flex-wrap items-start justify-between gap-4 ${telaCheia ? "mb-4" : "mb-8"}`}>
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Página Inicial</h1>
+          {/* O título só aparece em tela cheia, desde 2026-08-12.
+              Fora da tela cheia o cabeçalho do `DashboardLayout` já escreve
+              "Página Inicial" na trilha, e repetir a mesma frase 40px abaixo
+              gastava a primeira linha da tela para não dizer nada. Em tela
+              cheia o `DashboardLayout` não está na árvore, então o título
+              volta a ser a única identificação da tela. */}
+          {telaCheia && (
+            <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-foreground">
+              Página Inicial
+            </h1>
+          )}
           {/* Frescor dito UMA vez, para a página inteira, em vez de repetido em
               cada card — era uma linha de altura gasta por card sem informar
               nada de novo. Mostra a idade do resultado MAIS ANTIGO: é a
@@ -315,7 +325,7 @@ export default function Inicio() {
         {cards.length > 0 && (
           <Button
             variant="outline"
-            className="h-9 border-border/20 font-normal text-muted-foreground hover:text-foreground"
+            className="h-9 border-border font-normal text-muted-foreground hover:text-foreground"
             // `true` = ignora o cache de snapshot. Sem ele, o botão relia o
             // mesmo resultado e a idade só crescia — o usuário clicava e nada
             // acontecia, que é pior do que não ter o botão.
@@ -332,7 +342,7 @@ export default function Inicio() {
         <Button
           variant="outline"
           size="icon"
-          className="h-9 w-9 border-border/20 text-muted-foreground hover:text-foreground"
+          className="h-9 w-9 border-border text-muted-foreground hover:text-foreground"
           onClick={alternarTelaCheia}
           title={telaCheia ? "Sair da tela cheia" : "Ver em tela cheia"}
           aria-label={telaCheia ? "Sair da tela cheia" : "Ver em tela cheia"}
@@ -570,7 +580,7 @@ function Aviso({
   texto: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/20 bg-card px-6 py-12 text-center">
+    <div className="rounded-xl border border-border bg-card px-6 py-12 text-center">
       {icone}
       <h2 className="text-base font-medium text-foreground">{titulo}</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{texto}</p>

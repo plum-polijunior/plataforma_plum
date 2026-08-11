@@ -84,7 +84,7 @@ export function CardDashboard({
       // `mt-auto` empurra o número para a base: os títulos alinham no topo, os
       // valores alinham embaixo, e a diferença de corpo entre o herói e os
       // outros deixa de virar degrau.
-      <article className="flex h-full flex-col rounded-xl border border-border/20 bg-card px-4 py-3.5 transition-colors duration-150 hover:border-border/40 motion-reduce:transition-none">
+      <article className="flex h-full flex-col rounded-xl border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-line-hover motion-reduce:transition-none">
         <div className="flex items-start justify-between gap-2">
           <h2 className="truncate text-xs text-muted-foreground" title={card.titulo}>
             {card.titulo}
@@ -102,10 +102,10 @@ export function CardDashboard({
   }
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-border/20 bg-card transition-colors duration-150 hover:border-border/40 motion-reduce:transition-none">
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card transition-colors duration-150 hover:border-line-hover motion-reduce:transition-none">
       {/* Hairline separando cabeçalho de dado: é o mecanismo de separação do
           app (`DESIGN.md` §1), no lugar da sombra que a superfície não tem. */}
-      <header className="flex items-start justify-between gap-2 border-b border-border/15 px-4 py-3">
+      <header className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
         <h2 className="truncate text-sm font-semibold text-foreground" title={card.titulo}>
           {card.titulo}
         </h2>

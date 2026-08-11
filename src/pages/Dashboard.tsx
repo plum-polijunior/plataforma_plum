@@ -582,7 +582,7 @@ export default function Dashboard() {
       )}
 
       {profile?.status === 'ativo' && (
-        <div className="glass p-6 rounded-2xl border border-border/30 shadow-sm">
+        <div className="glass p-6 rounded-2xl border border-border shadow-sm">
           <Tabs defaultValue="pendentes" className="w-full">
             <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-3 mb-8 bg-muted/50">
               <TabsTrigger value="ativos" className="data-[state=active]:bg-background">Membros Ativos ({activeMembers.length})</TabsTrigger>
@@ -603,7 +603,7 @@ export default function Dashboard() {
                   <p className="text-muted-foreground text-center py-8">Nenhum membro ativo.</p>
                 ) : (
                   activeMembers.map(member => (
-                    <div key={member.id} className="flex items-center justify-between p-4 rounded-xl border border-border/40 bg-card/50 hover:bg-card transition-colors">
+                    <div key={member.id} className="flex items-center justify-between p-4 rounded-xl border border-border bg-card/50 hover:bg-card transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
                           {member.email.charAt(0).toUpperCase()}
@@ -627,7 +627,7 @@ export default function Dashboard() {
             <TabsContent value="pendentes" className="space-y-4">
               <div className="grid gap-4">
                 {pendingMembers.length === 0 ? (
-                  <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed border-border/50">
+                  <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed border-border">
                     <BadgeCheck className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
                     <p className="text-foreground font-medium">Tudo certo!</p>
                     <p className="text-muted-foreground text-sm mt-1">Nenhuma aprovação pendente no momento.</p>
@@ -638,7 +638,7 @@ export default function Dashboard() {
                     const selectedRoleObj = roles.find(r => r.id === selectedRoleId);
 
                     return (
-                      <div key={member.id} className="flex flex-col p-5 rounded-xl border border-border/60 bg-card/60 gap-4 transition-all">
+                      <div key={member.id} className="flex flex-col p-5 rounded-xl border border-border bg-card/60 gap-4 transition-all">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
                             <div className="h-12 w-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-bold text-lg">
@@ -692,7 +692,7 @@ export default function Dashboard() {
 
                         {/* Summary box showing exactly what permissions this user will get */}
                         {selectedRoleObj && (
-                          <div className="mt-2 pt-3 border-t border-border/40 flex items-center justify-between bg-primary/5 -mx-5 -mb-5 p-4 rounded-b-xl border-b border-x border-primary/20 text-xs">
+                          <div className="mt-2 pt-3 border-t border-border flex items-center justify-between bg-primary/5 -mx-5 -mb-5 p-4 rounded-b-xl border-b border-x border-primary/20 text-xs">
                             <div className="flex items-center gap-2 text-foreground/90 font-medium">
                               <Sliders className="h-4 w-4 text-primary shrink-0" />
                               <span><strong>Permissões que serão concedidas ({selectedRoleObj.name}):</strong> {getRoleSummaryText(selectedRoleObj)}</span>
@@ -726,7 +726,7 @@ export default function Dashboard() {
                       placeholder="Ex: Analista de Produção ou Gestor Comercial"
                       value={newRoleName}
                       onChange={e => setNewRoleName(e.target.value)}
-                      className="bg-background/80 h-11 text-sm border-border/80"
+                      className="bg-background/80 h-11 text-sm border-border"
                     />
                   </div>
                   <Button type="submit" className="h-11 px-6 font-semibold shadow-sm w-full sm:w-auto">
@@ -741,7 +741,7 @@ export default function Dashboard() {
                   const isRoleAdmin = role.name?.toLowerCase() === 'admin';
 
                   return (
-                    <div key={role.id} className="p-5 rounded-xl border border-border/50 bg-card/50 flex flex-col justify-between h-full hover:border-primary/30 transition-all shadow-sm">
+                    <div key={role.id} className="p-5 rounded-xl border border-border bg-card/50 flex flex-col justify-between h-full hover:border-primary/30 transition-all shadow-sm">
                       <div>
                         <div className="flex items-start justify-between gap-2">
                           <div>
@@ -767,7 +767,7 @@ export default function Dashboard() {
                         </div>
 
                         {/* Permission Badge / Summary */}
-                        <div className="mt-4 p-3 rounded-lg bg-background/60 border border-border/40 text-xs text-muted-foreground space-y-1">
+                        <div className="mt-4 p-3 rounded-lg bg-background/60 border border-border text-xs text-muted-foreground space-y-1">
                           <div className="flex items-center gap-1.5 font-medium text-foreground/80">
                             <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
                             <span>Escopo de Acesso a Planilhas:</span>
@@ -778,7 +778,7 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <div className="mt-5 pt-4 border-t border-border/20 flex items-center justify-between">
+                      <div className="mt-5 pt-4 border-t border-border flex items-center justify-between">
                         {roleMembers.length > 0 ? (
                           <div className="flex -space-x-2 overflow-hidden">
                             {roleMembers.slice(0, 5).map(m => (
@@ -818,8 +818,8 @@ export default function Dashboard() {
 
       {/* Permission Matrix Dialog */}
       <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col bg-card border-border/80 shadow-2xl">
-          <DialogHeader className="border-b border-border/40 pb-4">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col bg-card border-border shadow-2xl">
+          <DialogHeader className="border-b border-border pb-4">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Sliders className="h-5 w-5 text-primary" />
               Configurar Matriz de Acesso: <span className="text-primary">{editingRole?.name}</span>
@@ -839,7 +839,7 @@ export default function Dashboard() {
                 </p>
               </div>
             ) : datasets.length === 0 ? (
-              <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed border-border/50">
+              <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed border-border">
                 <Database className="h-12 w-12 mx-auto text-muted-foreground opacity-40 mb-3" />
                 <h4 className="font-semibold text-foreground">Nenhuma Base de Dados Anexada</h4>
                 <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
@@ -861,7 +861,7 @@ export default function Dashboard() {
                     const allSelected = isDatasetAllowed && cols.length > 0 && allowedCols.length === cols.length;
 
                     return (
-                      <div key={ds.id} className={`rounded-xl border transition-all ${isDatasetAllowed ? 'border-primary/40 bg-primary/[0.02]' : 'border-border/60 bg-card/40 opacity-75'}`}>
+                      <div key={ds.id} className={`rounded-xl border transition-all ${isDatasetAllowed ? 'border-primary/40 bg-primary/[0.02]' : 'border-border bg-card/40 opacity-75'}`}>
                         <div className="flex items-center justify-between p-4 pb-0">
                           <div className="flex items-center gap-3">
                             <Checkbox
@@ -896,14 +896,14 @@ export default function Dashboard() {
                           <AccordionTrigger className="py-3 text-xs text-primary hover:no-underline font-semibold">
                             {isDatasetAllowed ? "Personalizar colunas visíveis &rarr;" : "Ver colunas da base (Desativado)"}
                           </AccordionTrigger>
-                          <AccordionContent className="pt-2 pb-4 border-t border-border/30 space-y-3">
+                          <AccordionContent className="pt-2 pb-4 border-t border-border space-y-3">
                             {!isDatasetAllowed ? (
                               <p className="text-xs text-muted-foreground italic py-2">
                                 Ative a caixa de seleção ao lado do nome da base ("{ds.name}") para autorizar e escolher as colunas visíveis para este cargo.
                               </p>
                             ) : (
                               <>
-                                <div className="flex items-center justify-between bg-muted/40 p-2.5 rounded-lg border border-border/40">
+                                <div className="flex items-center justify-between bg-muted/40 p-2.5 rounded-lg border border-border">
                                   <span className="text-xs font-medium text-foreground/80">Seleção Rápida de Colunas:</span>
                                   <div className="flex gap-2">
                                     <Button
@@ -938,7 +938,7 @@ export default function Dashboard() {
                                         onClick={() => handleToggleColumn(ds.id, col.name)}
                                         className={`flex items-start gap-2.5 p-3 rounded-lg border text-left cursor-pointer transition-all ${isColChecked
                                             ? 'border-primary/30 bg-primary/5 text-foreground'
-                                            : 'border-border/40 bg-background/40 text-muted-foreground opacity-60 hover:opacity-100'
+                                            : 'border-border bg-background/40 text-muted-foreground opacity-60 hover:opacity-100'
                                           }`}
                                       >
                                         <Checkbox
@@ -970,7 +970,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <DialogFooter className="border-t border-border/40 pt-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+          <DialogFooter className="border-t border-border pt-4 flex flex-col sm:flex-row justify-between items-center gap-3">
             <Button
               type="button"
               variant="outline"

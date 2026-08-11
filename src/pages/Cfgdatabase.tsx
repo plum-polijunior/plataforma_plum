@@ -170,7 +170,7 @@ export default function DatabasePage() {
       </div>
 
       {datasets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 border border-dashed border-border/50 rounded-xl bg-background/50">
+        <div className="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-xl bg-background/50">
           <FileSpreadsheet className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
           <h3 className="text-lg font-medium text-foreground">Nenhuma base conectada</h3>
           <p className="text-sm text-muted-foreground mt-1 mb-6">Conecte sua primeira planilha para o Chatbot aprender sobre seus dados.</p>
@@ -183,7 +183,7 @@ export default function DatabasePage() {
           {datasets.map((dataset) => (
             <div
               key={dataset.id}
-              className={`p-5 rounded-xl border cursor-pointer transition-all hover:border-primary/50 hover:bg-muted/20 ${selectedDataset?.id === dataset.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'border-border/50 bg-background'}`}
+              className={`p-5 rounded-xl border cursor-pointer transition-all hover:border-primary/50 hover:bg-muted/20 ${selectedDataset?.id === dataset.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'border-border bg-background'}`}
               onClick={() => {
                 setSelectedDataset(selectedDataset?.id === dataset.id ? null : dataset);
                 setIsEditingSchema(false);
@@ -212,8 +212,8 @@ export default function DatabasePage() {
       )}
 
       {selectedDataset && (
-        <div className="mt-8 border border-border/50 rounded-xl bg-background overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <div className="p-6 border-b border-border/50 bg-muted/20 flex justify-between items-center">
+        <div className="mt-8 border border-border rounded-xl bg-background overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="p-6 border-b border-border bg-muted/20 flex justify-between items-center">
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-primary" /> {selectedDataset.name}
@@ -299,16 +299,16 @@ export default function DatabasePage() {
                 </div>
 
                 {/* 2. Refinar Contexto */}
-                <div className="space-y-4 border-t border-border/50 pt-6">
+                <div className="space-y-4 border-t border-border pt-6">
                   <h4 className="font-semibold text-foreground">Refinar Contexto Semântico (Agente 2)</h4>
                   <p className="text-xs text-muted-foreground">Edite manualmente o que a IA entende por cada coluna, ou peça ajuda do agente abaixo.</p>
                   
-                  <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2 border border-border/50 p-3 rounded-xl bg-background/50">
+                  <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2 border border-border p-3 rounded-xl bg-background/50">
                     {Object.entries(editedSchema.columns).map(([colName, colData]: [string, any]) => (
                       <div key={colName} className="flex flex-col gap-1">
                         <label className="text-xs font-bold font-mono text-primary">{colName}</label>
                         <textarea
-                          className="w-full text-sm p-2 rounded-md border border-border/50 bg-background resize-y min-h-[60px]"
+                          className="w-full text-sm p-2 rounded-md border border-border bg-background resize-y min-h-[60px]"
                           value={colData.semantic_definition || ''}
                           onChange={(e) => {
                             const updated = { ...editedSchema };
@@ -380,13 +380,13 @@ export default function DatabasePage() {
                 </div>
 
                 {/* 3. Refinar Formatação */}
-                <div className="space-y-4 border-t border-border/50 pt-6">
+                <div className="space-y-4 border-t border-border pt-6">
                   <h4 className="font-semibold text-foreground">Refinar Formatação (Agente 3.1)</h4>
                   <p className="text-xs text-muted-foreground">Visualize as regras de formatação atuais. Dê uma ordem em linguagem natural para que o Agente ajuste as regras em massa.</p>
                   
-                  <div className="flex flex-col gap-3 max-h-60 overflow-y-auto pr-2 border border-border/50 p-3 rounded-xl bg-background/50">
+                  <div className="flex flex-col gap-3 max-h-60 overflow-y-auto pr-2 border border-border p-3 rounded-xl bg-background/50">
                     {Object.entries(editedSchema.columns).map(([colName, colData]: [string, any]) => (
-                      <div key={colName} className="flex gap-4 p-2 bg-muted/10 rounded-md border border-border/30">
+                      <div key={colName} className="flex gap-4 p-2 bg-muted/10 rounded-md border border-border">
                         <span className="text-xs font-bold font-mono text-primary w-1/4 truncate">{colName}</span>
                         <span className="text-xs text-muted-foreground flex-1 break-words">{colData.formatting_rule?.explicacao || 'Sem regra'}</span>
                       </div>
@@ -450,7 +450,7 @@ export default function DatabasePage() {
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase">Dicionário Semântico Extraído</h4>
                 <div className="grid grid-cols-1 gap-3">
                   {Object.entries(selectedDataset.schema_metadata.columns).map(([colName, colData]: [string, any]) => (
-                    <div key={colName} className="p-4 rounded-lg border border-border/50 bg-background flex flex-col md:flex-row gap-4">
+                    <div key={colName} className="p-4 rounded-lg border border-border bg-background flex flex-col md:flex-row gap-4">
                       <div className="md:w-1/4">
                         <span className="font-mono text-sm font-bold text-primary">{colName}</span>
                       </div>

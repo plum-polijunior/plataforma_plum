@@ -40,6 +40,34 @@ const CONTEUDO = {
   },
 } as const;
 
+/**
+ * A moldura das três telas desta página, criada em 2026-08-12 (Direção A).
+ *
+ * Os três `return` repetiam o mesmo wrapper palavra por palavra — `min-h-screen`
+ * mais um glow `blur-3xl` absoluto mais um cartão `glass shadow-xl`. Repaginar
+ * três cópias à mão é como elas divergem. Componente só de apresentação: não
+ * recebe nem decide nada de sessão, cargo ou organização.
+ *
+ * Saíram o glow e o `glass`: os dois são vocabulário da landing (vidro sobre
+ * fundo escuro) e o `DESIGN.md` §1 os proíbe em tela de produto, onde a
+ * separação é hairline de 1px e não sombra.
+ */
+function Moldura({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md">
+        <div className="mb-8 flex flex-col items-center">
+          <img src={plumLogo} alt="" className="mb-3 h-12 w-12 object-contain" />
+          <span className="font-display text-lg font-semibold tracking-[-0.01em] text-foreground">
+            Plum
+          </span>
+        </div>
+        <div className="rounded-xl border border-border bg-secondary p-8">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AccessPending({ state, email, organizationName }: AccessPendingProps) {
   const { icone: Icone, titulo, descricao } = CONTEUDO[state];
   const { toast } = useToast();
@@ -113,149 +141,140 @@ export default function AccessPending({ state, email, organizationName }: Access
 
   if (sucesso) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-        </div>
+      <Moldura>
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="glass p-8 rounded-2xl border border-border/30 shadow-xl text-center max-w-md w-full space-y-6 z-10"
+          className="space-y-6 text-center"
         >
-          <div className="h-16 w-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-inner border border-green-500/20">
-            <CheckCircle2 className="h-8 w-8" />
+          {/* `ok` em vez de `bg-green-500/20 text-green-500`: era uma das 7 cores
+              cruas do repo, e agora é token de estado dos dois temas. */}
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-ok-line bg-ok-bg text-ok">
+            <CheckCircle2 className="h-7 w-7" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-foreground">Organização criada!</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Seu ambiente corporativo já está pronto para uso.
+            <h2 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
+              Organização criada
+            </h2>
+            <p className="text-sm leading-[1.6] text-text-soft">
+              Seu ambiente já está pronto. Você é o administrador dele.
             </p>
           </div>
-          <Button 
-            className="w-full text-base py-5 font-semibold" 
-            onClick={handleEntrarNoPlum}
-            disabled={enviando}
-          >
-            {enviando ? (
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            ) : null}
-            {enviando ? "Entrando..." : "Entrar no Plum"}
+          <Button className="w-full" onClick={handleEntrarNoPlum} disabled={enviando}>
+            {enviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {enviando ? "Entrando…" : "Entrar no Plum"}
           </Button>
         </motion.div>
-      </div>
+      </Moldura>
     );
   }
 
   if (state === "sem-org" && pendingSSOOrgName) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-        </div>
-        <div className="glass p-8 rounded-2xl border border-border/30 shadow-xl text-center max-w-sm w-full space-y-5 z-10">
-          <Loader2 className="h-10 w-10 text-primary mx-auto animate-spin" />
+      <Moldura>
+        <div className="space-y-5 text-center">
+          <Loader2 className="mx-auto h-9 w-9 animate-spin text-primary" />
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Configurando ambiente</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mt-2">
-              Criando a organização <strong className="text-foreground">{pendingSSOOrgName}</strong> e vinculando sua conta...
+            <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-foreground">
+              Configurando o ambiente
+            </h2>
+            <p className="mt-2 text-sm leading-[1.6] text-text-soft">
+              Criando a organização{" "}
+              <strong className="font-semibold text-foreground">{pendingSSOOrgName}</strong> e
+              vinculando a sua conta…
             </p>
           </div>
         </div>
-      </div>
+      </Moldura>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-      </div>
-
+    <Moldura>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="w-full max-w-md z-10"
+        transition={{ duration: 0.3 }}
       >
-        <div className="text-center mb-10">
-          <img src={plumLogo} alt="Plum" className="w-16 h-16 mx-auto object-contain mb-4" />
-          <h1 className="text-xl font-bold text-gradient">Plum Platform</h1>
-        </div>
+        {/* Ícone sem círculo colorido atrás: o item 2 da lista de reprovação do
+            `DESIGN.md` §10 é exatamente "ícone dentro de círculo colorido como
+            decoração de seção". O ícone sozinho, na tinta suave, informa igual. */}
+        <Icone className="mb-4 h-7 w-7 text-primary" strokeWidth={1.8} />
 
-        <div className="glass p-8 rounded-2xl border border-border/30 shadow-xl text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 border border-primary/30">
-            <Icone className="h-8 w-8 text-primary" />
+        <h2 className="mb-2 font-display text-[22px] font-semibold leading-[1.2] tracking-[-0.02em] text-foreground">
+          {titulo}
+        </h2>
+        <p className="text-sm leading-[1.6] text-text-soft">{descricao}</p>
+
+        {(organizationName || email) && (
+          <dl className="mt-6 space-y-1.5 border-t border-border pt-5 text-[13px]">
+            {organizationName && (
+              <div className="flex gap-2">
+                <dt className="text-muted-foreground">Organização</dt>
+                <dd className="truncate font-medium text-foreground">{organizationName}</dd>
+              </div>
+            )}
+            {email && (
+              <div className="flex gap-2">
+                <dt className="text-muted-foreground">Conta</dt>
+                <dd className="truncate font-medium text-foreground">{email}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+
+        {state === "sem-org" && (
+          <div className="mt-6 border-t border-border pt-5">
+            {!criando ? (
+              <Button variant="outline" className="w-full" onClick={() => setCriando(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Criar uma organização
+              </Button>
+            ) : (
+              <form onSubmit={handleCriarOrg} className="space-y-3">
+                <Label htmlFor="nome-org" className="text-[12.5px] font-medium text-secondary-foreground">
+                  Nome da empresa
+                </Label>
+                <Input
+                  id="nome-org"
+                  value={nomeOrg}
+                  onChange={(e) => setNomeOrg(e.target.value)}
+                  placeholder="Ex: Minha Empresa Ltda"
+                  required
+                  minLength={2}
+                />
+                <p className="text-xs leading-[1.5] text-muted-foreground">
+                  Você será o administrador. Um código de convite de 12 caracteres será gerado
+                  para a sua equipe.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="flex-1"
+                    onClick={() => setCriando(false)}
+                    disabled={enviando}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" className="flex-1" disabled={enviando}>
+                    {enviando ? "Criando…" : "Criar"}
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
+        )}
 
-          <h2 className="text-lg font-semibold text-foreground mb-3">{titulo}</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">{descricao}</p>
-
-          {organizationName && (
-            <p className="mt-6 text-sm">
-              <span className="text-muted-foreground">Organização: </span>
-              <span className="font-medium text-foreground">{organizationName}</span>
-            </p>
-          )}
-
-          {email && (
-            <p className="mt-1 text-sm">
-              <span className="text-muted-foreground">Conta: </span>
-              <span className="font-medium text-foreground">{email}</span>
-            </p>
-          )}
-
-          {state === "sem-org" && (
-            <div className="mt-8 pt-6 border-t border-border/20 text-left">
-              {!criando ? (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setCriando(true)}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Criar uma organização
-                </Button>
-              ) : (
-                <form onSubmit={handleCriarOrg} className="space-y-3">
-                  <Label htmlFor="nome-org">Nome da empresa</Label>
-                  <Input
-                    id="nome-org"
-                    value={nomeOrg}
-                    onChange={(e) => setNomeOrg(e.target.value)}
-                    placeholder="Ex: Minha Empresa Ltda"
-                    required
-                    minLength={2}
-                    className="bg-background/50"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Você será o administrador. Um código de convite de 12 caracteres
-                    será gerado para sua equipe.
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="flex-1"
-                      onClick={() => setCriando(false)}
-                      disabled={enviando}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="submit" className="flex-1" disabled={enviando}>
-                      {enviando ? "Criando..." : "Criar"}
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
-
-          <Button variant="outline" className="w-full mt-4 text-muted-foreground" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sair
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sair desta conta
+        </button>
       </motion.div>
-    </div>
+    </Moldura>
   );
 }

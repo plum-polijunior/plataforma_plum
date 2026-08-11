@@ -91,12 +91,21 @@ export function RespostaMarkdown({ content }: RespostaMarkdownProps) {
     //
     // A margem do primeiro e do último bloco não precisa de utilitário: o
     // plugin já emite `.prose > :first-child { margin-top: 0 }` e o par
-    // simétrico, então a bolha não ganha espaço morto no topo nem no rodapé.
+    // simétrico, então o bloco não ganha espaço morto no topo nem no rodapé.
+    //
+    // Ajustado em 2026-08-12 para a Direção A: o corpo do texto passou de
+    // `foreground` (a tinta cheia) para `ink-soft`, e o `strong` FICOU na tinta
+    // cheia. É o que cria a hierarquia da resposta — a frase é legível, o valor
+    // principal é o que salta. Com os dois no mesmo token o negrito só engrossa
+    // o traço, e o número deixa de ser o assunto.
+    //
+    // Os dois tokens existem nos dois temas (`src/index.css`), então isto
+    // continua correto se a tela voltar a ser escura.
     <div
-      className="text-sm prose prose-sm max-w-none
-        prose-p:text-foreground prose-p:my-2
+      className="text-[14.5px] leading-[1.65] prose prose-sm max-w-none
+        prose-p:text-ink-soft prose-p:my-2
         prose-strong:text-foreground prose-strong:font-semibold
-        prose-li:text-foreground prose-li:my-0.5
+        prose-li:text-ink-soft prose-li:my-0.5
         prose-ul:my-2 prose-ol:my-2
         prose-headings:text-foreground"
     >

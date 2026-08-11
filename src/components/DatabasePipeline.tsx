@@ -501,7 +501,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     <div className="space-y-6">
 
       {/* Stepper Header */}
-      <div className="flex items-center justify-between mb-8 rounded-xl border border-border/40 bg-card/30">
+      <div className="flex items-center justify-between mb-8 rounded-xl border border-border bg-card/30">
         {[
           { label: "Etapa 1: Upload", icon: FileSpreadsheet },
           { label: "Etapa 2: Colunas", icon: Database },
@@ -511,11 +511,11 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         ].map((s, i, arr) => {
           const isActive = step >= i;
           return (
-            <div key={i} className={`flex-1 flex flex-col items-center justify-center p-4 border-r border-border/40 last:border-0 relative ${isActive ? 'bg-primary/5 text-primary' : 'opacity-50 grayscale'}`}>
+            <div key={i} className={`flex-1 flex flex-col items-center justify-center p-4 border-r border-border last:border-0 relative ${isActive ? 'bg-primary/5 text-primary' : 'opacity-50 grayscale'}`}>
               <s.icon className={`h-6 w-6 mb-2 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
               <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-center">{s.label}</span>
               {i < arr.length - 1 && (
-                <div className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-background rounded-full border border-border/40 p-0.5">
+                <div className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-background rounded-full border border-border p-0.5">
                   <ArrowRight className="h-3 w-3 text-muted-foreground" />
                 </div>
               )}
@@ -524,7 +524,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         })}
       </div>
 
-      <div className="glass p-6 rounded-2xl border border-border/30">
+      <div className="glass p-6 rounded-2xl border border-border">
         {step === 0 && (
           <div className="text-center py-12 space-y-4">
             {isProcessing ? (
@@ -544,7 +544,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                   <span className="font-bold text-2xl">!</span>
                 </div>
                 <h3 className="text-2xl font-bold text-foreground">Atenção ao Formato das Colunas</h3>
-                <p className="text-muted-foreground max-w-lg mx-auto whitespace-pre-line text-sm leading-relaxed text-left bg-muted/50 p-4 rounded-xl border border-border/50">
+                <p className="text-muted-foreground max-w-lg mx-auto whitespace-pre-line text-sm leading-relaxed text-left bg-muted/50 p-4 rounded-xl border border-border">
                   {uploadError}
                 </p>
                 <div className="pt-4">
@@ -585,7 +585,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               <p className="text-sm text-muted-foreground mt-1">Cheque se todas as colunas da planilha estão aqui. Caso necessário, corrija diretamente com a IA na caixa de texto abaixo</p>
             </div>
 
-            <div className="bg-background/50 border border-border/50 rounded-xl p-4">
+            <div className="bg-background/50 border border-border rounded-xl p-4">
               <h4 className="text-sm font-semibold mb-3">Colunas Identificadas ({originalColumns.length})</h4>
               <div className="flex flex-wrap gap-2">
                 {Object.values(normalizedColumns).map((col, idx) => (
@@ -596,7 +596,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </div>
             </div>
 
-            <div className="bg-muted/30 border border-border/40 rounded-xl p-4 space-y-3">
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary" /> Faltou alguma coluna?
               </h4>
@@ -619,7 +619,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               )}
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-border/30">
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(0)} disabled={isProcessing}>Voltar</Button>
               <Button onClick={handleFormatData} disabled={isProcessing}>
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -653,7 +653,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               )}
             </div>
 
-            <div className="bg-muted/30 border border-border/40 rounded-xl p-4 space-y-3 mt-4">
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3 mt-4">
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary" /> A formatação não ficou legal? Peça ajustes para o Agente 3.1
               </h4>
@@ -671,7 +671,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-border/30">
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(1)} disabled={isProcessing}>Voltar</Button>
               <Button onClick={handleAnalyzeSemantics} disabled={isProcessing}>
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -691,9 +691,9 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </p>
             </div>
 
-            <div className="border border-border/50 rounded-xl overflow-hidden bg-background max-h-[500px] overflow-y-auto">
+            <div className="border border-border rounded-xl overflow-hidden bg-background max-h-[500px] overflow-y-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border/50 sticky top-0 z-10">
+                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border sticky top-0 z-10">
                   <tr>
                     <th className="px-6 py-3 font-medium w-1/4">Coluna</th>
                     <th className="px-6 py-3 font-medium">Definição para a Inteligência Artificial</th>
@@ -707,7 +707,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                         <textarea
                           value={semanticDefinitions[col] || ''}
                           onChange={(e) => handleUpdateSemantic(col, e.target.value)}
-                          className="w-full bg-transparent border border-border/40 rounded-md p-2 text-sm min-h-[60px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 resize-y"
+                          className="w-full bg-transparent border border-border rounded-md p-2 text-sm min-h-[60px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 resize-y"
                           placeholder="Ex: Representa o lucro líquido..."
                         />
                       </td>
@@ -717,7 +717,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </table>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border/30">
+            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(2)} disabled={isProcessing}>Voltar</Button>
               <div className="flex gap-3">
                 <Button variant="secondary" onClick={handleRefineSemantics} disabled={isProcessing}>
@@ -752,7 +752,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                   <p>Abra a planilha oficial que contém esses dados no seu Google Drive.</p>
                   <p>Clique no botão azul <strong>"Compartilhar"</strong> no canto superior direito.</p>
                   <p>Cole o e-mail abaixo e mantenha a permissão restrita a <strong>Leitor</strong>:</p>
-                  <div className="bg-background border border-border/50 rounded p-2 font-mono text-xs text-primary font-bold break-all select-all">
+                  <div className="bg-background border border-border rounded p-2 font-mono text-xs text-primary font-bold break-all select-all">
                     plum-polijunior@plataforma-plum.iam.gserviceaccount.com
                   </div>
                   <p>Clique em <strong>Concluído</strong>. O Plum nunca irá alterar ou apagar seus dados.</p>
@@ -760,7 +760,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </div>
 
               {/* Input */}
-              <div className="bg-background border border-border/50 rounded-xl p-5 space-y-4">
+              <div className="bg-background border border-border rounded-xl p-5 space-y-4">
                 <h4 className="font-bold text-foreground flex items-center gap-2">
                   <span className="bg-muted text-muted-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
                   Link da Planilha
@@ -776,7 +776,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-border/30">
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(3)} disabled={isProcessing}>Voltar</Button>
               <Button onClick={() => handleFinalizeAndSave(sheetUrl)} disabled={isProcessing || !sheetUrl.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

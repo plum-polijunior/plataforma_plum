@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgAccess } from "@/hooks/use-org-access";
-import { Send, Bot, User, Loader2, Database, AlertCircle } from "lucide-react";
+import { ArrowUp, Database, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -204,146 +204,171 @@ export default function PlumChat() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] max-w-4xl mx-auto border border-border/40 rounded-2xl bg-card shadow-sm overflow-hidden mt-4 md:mt-8">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border/40 bg-card/80 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center">
-            <span className="font-extrabold text-primary-foreground text-lg">P</span>
-          </div>
-          <div>
-            <h2 className="font-bold text-foreground leading-tight">Plum Chat</h2>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block"></span>
-              Online
-            </p>
-          </div>
-        </div>
+    /*
+      Repaginado para a Direção A em 2026-08-12. Quatro mudanças estruturais, e
+      nenhuma linha de lógica: o `return` começa aqui e todo o pipeline de
+      agentes fica acima, intocado.
 
-        <div>
-          <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId} disabled={isProcessing}>
-            <SelectTrigger className="w-[200px] h-8 text-xs bg-background/50">
-              <SelectValue placeholder="Selecione uma base" />
-            </SelectTrigger>
-            <SelectContent>
-              {datasets.map(d => (
-                <SelectItem key={d.id} value={d.id}>
-                  <div className="flex items-center gap-2">
-                    <Database className="h-3 w-3 text-primary" />
-                    {d.name}
-                  </div>
-                </SelectItem>
-              ))}
-              {datasets.length === 0 && (
-                <SelectItem value="empty" disabled>Nenhuma base liberada</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      1. O cartão sumiu. A tela era um `rounded-2xl bg-card shadow-sm` de 4xl no
+         meio da página; agora é a própria coluna da conversa, como no protótipo.
+         De graça, morrem dois itens da lista de reprovação do `DESIGN.md` §1:
+         `shadow-sm` e o `backdrop-blur` do cabeçalho.
+      2. O cabeçalho próprio sumiu. Ele repetia "Plum Chat" — que o cabeçalho do
+         `DashboardLayout` agora escreve — e trazia um selo "Online" com
+         `bg-green-500` cru que não media nada.
+      3. O seletor de base descartou o canto superior direito e foi para o pé da
+         caixa de texto, onde o protótipo põe o escopo da pergunta. É o lugar
+         certo: a base é parte do que se está perguntando, não do título da tela.
+      4. A resposta do assistente perdeu a bolha. Fica em texto corrido ao lado
+         da marca, e só a pergunta do usuário é uma bolha. Isso dá à resposta a
+         largura inteira da coluna, que é o que uma lista de tópicos precisa.
 
-      {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-muted/10 relative">
-        {messages.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
-            <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Bot className="h-8 w-8 text-primary opacity-80" />
+      A altura desconta os 60px do cabeçalho do layout mais o padding do
+      contêiner de conteúdo (`p-4` no mobile, `md:p-8`).
+    */
+    <div className="flex h-[calc(100vh-60px-2rem)] flex-col md:h-[calc(100vh-60px-4rem)]">
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-[740px] flex-col gap-[30px] px-1 pb-5 pt-2">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-start pt-10">
+              <h3 className="mb-2 font-display text-[22px] font-semibold tracking-[-0.02em] text-foreground">
+                Converse com os seus dados
+              </h3>
+              <p className="max-w-sm text-sm leading-[1.6] text-text-soft">
+                Escolha uma base no pé da caixa de texto e pergunte em português. O Plum planeja
+                a consulta, o Python calcula, e a resposta vem com o número exato.
+              </p>
             </div>
-            <h3 className="text-lg font-bold text-foreground mb-2">Bem-vindo ao Plum Chat</h3>
-            <p className="text-sm max-w-sm">
-              Selecione uma das suas bases de dados conectadas no topo e faça qualquer pergunta corporativa.
-            </p>
-          </div>
-        )}
+          )}
 
-        {messages.map((msg) => {
-          const isUser = msg.role === 'user';
-          const d = new Date(msg.created_at);
-          const timeString = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const dateString = d.toLocaleDateString();
+          {messages.map((msg) => {
+            const isUser = msg.role === 'user';
+            const d = new Date(msg.created_at);
+            const timeString = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateString = d.toLocaleDateString();
 
-          return (
-            <div key={msg.id} className={`flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300 ${isUser ? 'justify-end' : 'justify-start'}`}>
-              <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] ${isUser ? 'items-end' : 'items-start'}`}>
-                
-                <div className={`px-4 py-3 rounded-2xl shadow-sm ${
-                  isUser 
-                    ? 'bg-primary text-primary-foreground rounded-tr-sm' 
-                    : 'bg-card border border-border/50 text-foreground rounded-tl-sm'
-                }`}>
-                  {/*
-                    Resposta do assistente = Markdown; pergunta do usuário =
-                    texto literal. Ver `RespostaMarkdown.tsx` para o porquê da
-                    assimetria e para o conjunto de elementos aceitos.
+            /*
+              Resposta do assistente = Markdown; pergunta do usuário = texto
+              literal. Ver `RespostaMarkdown.tsx` para o porquê da assimetria e
+              para o conjunto de elementos aceitos.
 
-                    Até 2026-08-11 os dois lados caíam no mesmo `{msg.content}`
-                    de texto puro, com as classes `prose` penduradas na div sem
-                    efeito nenhum (o plugin de typography não estava registrado
-                    no `tailwind.config.ts`). O resultado era o `**` do modelo
-                    aparecendo na tela.
-                  */}
-                  {isUser ? (
-                    <div className="text-sm">{msg.content}</div>
-                  ) : (
-                    <RespostaMarkdown content={msg.content} />
-                  )}
-                </div>
+              ⚠️ Esta assimetria é segurança de exibição, não estética, e
+              atravessou a repaginação de propósito. Interpretar Markdown na
+              pergunta reescreveria na tela o que a pessoa digitou.
 
-                <div className="flex items-center gap-2 px-1">
-                  {msg.assunto && isUser && (
-                    <span className="text-[10px] text-primary/80 font-medium bg-primary/10 px-1.5 py-0.5 rounded">
-                      {msg.assunto}
+              Até 2026-08-11 os dois lados caíam no mesmo `{msg.content}` de
+              texto puro, com as classes `prose` penduradas numa div sem efeito
+              nenhum (o plugin de typography não estava registrado no
+              `tailwind.config.ts`). O resultado era o `**` do modelo aparecendo
+              na tela.
+            */
+            if (isUser) {
+              return (
+                <div key={msg.id} className="flex animate-pl-up flex-col items-end gap-1">
+                  <div className="max-w-[76%] rounded-[15px_15px_5px_15px] bg-primary px-[15px] py-[11px] text-sm leading-[1.55] text-primary-foreground">
+                    {msg.content}
+                  </div>
+                  <div className="flex items-center gap-2 px-1">
+                    {msg.assunto && (
+                      <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        {msg.assunto}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      {timeString} · {dateString}
                     </span>
-                  )}
-                  <span className="text-[10px] text-muted-foreground font-medium">
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={msg.id} className="flex animate-pl-up gap-[13px]">
+                <div className="flex h-[27px] w-[27px] flex-none items-center justify-center rounded-[7px] bg-primary font-display text-sm font-bold text-primary-foreground">
+                  P
+                </div>
+                <div className="min-w-0 flex-1">
+                  <RespostaMarkdown content={msg.content} />
+                  <span className="mt-1.5 block text-[10px] font-medium text-muted-foreground">
                     {timeString} · {dateString}
                   </span>
                 </div>
               </div>
+            );
+          })}
+
+          {isProcessing && (
+            <div className="flex animate-pl-in gap-[13px]">
+              <div className="flex h-[27px] w-[27px] flex-none items-center justify-center rounded-[7px] bg-primary font-display text-sm font-bold text-primary-foreground">
+                P
+              </div>
+              <div className="min-w-0 flex-1">
+                <PlumThinkingBar isProcessing={isProcessing} />
+              </div>
             </div>
-          );
-        })}
-        
-        {isProcessing && (
-          <div className="flex justify-start w-full">
-            <PlumThinkingBar isProcessing={isProcessing} />
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
+          )}
 
-      {/* Input Area */}
-      <div className="p-3 bg-card border-t border-border/40">
-        <div className="flex items-end gap-2 bg-background border border-border/50 rounded-2xl p-2 focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
-          <textarea
-            className="flex-1 max-h-32 min-h-[40px] resize-none bg-transparent border-0 focus:ring-0 text-sm px-2 py-2 placeholder:text-muted-foreground outline-none"
-            placeholder={datasets.length === 0 ? "Você não tem acesso a nenhuma base de dados..." : "Pergunte algo aos seus dados..."}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            disabled={isProcessing || datasets.length === 0}
-          />
-          <Button 
-            size="icon" 
-            className="h-10 w-10 rounded-xl shrink-0" 
-            disabled={!input.trim() || isProcessing || datasets.length === 0}
-            onClick={handleSendMessage}
-          >
-            {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-          </Button>
+          <div ref={messagesEndRef} />
         </div>
-        <p className="text-[10px] text-center text-muted-foreground mt-2">
-          A Plum pode cometer erros de interpretação. Verifique os valores retornados.
-        </p>
       </div>
 
+      <div className="flex-none pt-2">
+        <div className="mx-auto max-w-[740px]">
+          <div className="rounded-[13px] border border-input bg-secondary px-[15px] py-[13px] transition-colors duration-150 focus-within:border-primary">
+            <textarea
+              className="max-h-32 min-h-[38px] w-full resize-none border-0 bg-transparent pb-3 text-[14.5px] text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder={datasets.length === 0 ? "Você não tem acesso a nenhuma base de dados" : "Pergunte sobre suas bases…"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              disabled={isProcessing || datasets.length === 0}
+            />
+
+            <div className="flex items-center gap-2">
+              <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId} disabled={isProcessing}>
+                <SelectTrigger className="h-[30px] w-auto max-w-[240px] gap-[7px] rounded-[7px] border-input bg-secondary px-2.5 text-xs text-text-soft transition-colors duration-150 hover:border-line-hover hover:text-foreground">
+                  <Database size={13} strokeWidth={1.8} className="flex-none" />
+                  <SelectValue placeholder="Escolher base" />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map(d => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                  {datasets.length === 0 && (
+                    <SelectItem value="empty" disabled>Nenhuma base liberada</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+
+              <Button
+                size="icon"
+                aria-label="Enviar"
+                className="ml-auto h-8 w-8 shrink-0 rounded-lg"
+                disabled={!input.trim() || isProcessing || datasets.length === 0}
+                onClick={handleSendMessage}
+              >
+                {isProcessing ? (
+                  <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                ) : (
+                  <ArrowUp size={15} strokeWidth={2} />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <p className="mt-2.5 text-center text-[11px] text-muted-foreground">
+            O Plum consulta apenas as bases liberadas para o seu cargo. Verifique os valores
+            retornados.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

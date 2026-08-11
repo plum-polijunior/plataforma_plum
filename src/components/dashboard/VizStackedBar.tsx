@@ -180,7 +180,7 @@ export function VizStackedBar({ colunas, linhas, colunaOrigem, agregacao, slotCo
                 </button>
 
                 {abrirOutros && (
-                  <ul className="mt-1.5 space-y-1 border-l border-border/20 pl-3.5">
+                  <ul className="mt-1.5 space-y-1 border-l border-border pl-3.5">
                     {resto.map((r) => (
                       <li
                         key={r.rotulo}

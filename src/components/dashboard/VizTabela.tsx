@@ -42,7 +42,7 @@ export function VizTabela({ colunas, linhas, colunaOrigem }: Props) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border/20">
+          <tr className="border-b border-border">
             {colunas.map((c, i) => (
               <th
                 key={c}
@@ -58,7 +58,7 @@ export function VizTabela({ colunas, linhas, colunaOrigem }: Props) {
         </thead>
         <tbody>
           {linhas.map((linha, i) => (
-            <tr key={i} className="border-b border-border/10 last:border-0">
+            <tr key={i} className="border-b border-border last:border-0">
               {colunas.map((c, j) => {
                 const bruto = linha[c];
                 const numero = typeof bruto === "number" ? bruto : Number(bruto);
