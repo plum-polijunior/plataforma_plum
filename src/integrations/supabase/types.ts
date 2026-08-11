@@ -323,6 +323,60 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // Histórico do chat, 100% privado por usuário: a RLS é `auth.uid() =
+      // user_id`, nem gestor nem colega lê (CLAUDE.md §5).
+      //
+      // Faltava aqui desde que a tabela foi criada, e ninguém notou porque o
+      // typecheck deste projeto nunca rodou de verdade: `npm run build` é só
+      // `vite build`, e `tsc --noEmit` na raiz não entra nos projetos
+      // referenciados. O comando que verifica é
+      // `tsc -p tsconfig.app.json --noEmit`, e sem esta tabela ele acusava 13
+      // erros em `PlumChat.tsx`.
+      //
+      // Ver migration `create_plum_chat_table.sql` — que está fora da convenção
+      // de nome do CLI (sem prefixo de timestamp), como CLAUDE.md §6 registra.
+      plum_chat: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          // CHECK (role IN ('user','assistant')) no banco.
+          role: "user" | "assistant"
+          content: string
+          // Categoria que o Agente Z atribui à pergunta, gravada em background.
+          assunto: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          role: "user" | "assistant"
+          content: string
+          assunto?: string | null
+          created_at?: string
+        }
+        Update: {
+          assunto?: string | null
+          content?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plum_chat_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plum_chat_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       // Um card do dashboard é um Query Plan salvo, re-executado periodicamente.
       // Ver migration 20260806230000_dashboard_cards.sql, bloco 1.
       dashboard_cards: {

@@ -461,7 +461,7 @@ function GradeDeCards({
     <div className={preencherTela ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4"}>
       {numeros.length > 0 && (
         <div className={preencherTela ? "shrink-0" : ""}>
-          <TiraDeNumeros cards={numeros} acoesDe={acoesDe} />
+          <TiraDeNumeros cards={numeros} acoesDe={acoesDe} formaDe={formaDe} />
         </div>
       )}
 
@@ -506,9 +506,11 @@ function GradeDeCards({
 function TiraDeNumeros({
   cards,
   acoesDe,
+  formaDe,
 }: {
   cards: CardNaTela[];
   acoesDe?: (card: CardNaTela) => AcoesCard;
+  formaDe?: (card: CardNaTela) => TipoViz | undefined;
 }) {
   const porFileira = Math.min(cards.length <= 4 ? cards.length : Math.ceil(cards.length / 2), 4);
   const heroiDuplo = cards.length <= 3;
