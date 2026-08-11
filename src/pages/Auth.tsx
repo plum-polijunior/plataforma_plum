@@ -87,7 +87,7 @@ const Auth = () => {
 
       if (error) throw error;
 
-      window.location.href = '/dashboard';
+      window.location.href = '/inicio';
     } catch (error: any) {
       toast({
         title: "Erro no login",
@@ -108,7 +108,7 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: `${window.location.origin}/inicio`,
           // `hd` (Google) e `tid` (Microsoft) chegam nas claims e são usados
           // como sinal primário pelo trigger.
           scopes: provider === 'azure' ? 'email openid profile' : undefined,
@@ -241,7 +241,7 @@ const Auth = () => {
       });
 
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        window.location.href = '/inicio';
       }, 1500);
 
     } catch (error: any) {
