@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import DatabasePage from "./pages/Cfgdatabase";
+import Inicio from "./pages/Inicio";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -24,6 +25,10 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route element={<DashboardLayout />}>
+            {/* Página Inicial: rota viva, sem item na sidebar de propósito —
+                válvula de rollback da Fase 4 (§2.3 do plano). O link entra na
+                Etapa 6, depois da bateria de verificação passar. */}
+            <Route path="/inicio" element={<Inicio />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/cfgdatabase" element={<DatabasePage />} />
             <Route path="/plum" element={<PlumChat />} />

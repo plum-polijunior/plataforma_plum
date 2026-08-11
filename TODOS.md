@@ -331,7 +331,153 @@ nesse domínio (fica num subdomínio? sai?), e uma janela para a propagação de
 
 ---
 
-## 10. Escala do percentual: 0–1 (nativo) vs 0–100 (texto)
+## 10. Renomear a rota `/dashboard`, que não é um dashboard
+
+**O quê:** `/dashboard` (`src/pages/Dashboard.tsx`, 1007 linhas) é a tela de **gestão da
+organização** — membros, cargos, aprovações, matriz de permissões. Não mostra nenhum dado do
+cliente. O nome deveria ser `/organizacao` ou equivalente.
+
+**Por quê:** com a Página Inicial (`/inicio`) virando o dashboard de verdade, ter uma rota
+chamada `/dashboard` que não é o dashboard é uma armadilha permanente para quem chega no
+código. Já custou tempo de leitura mais de uma vez.
+
+**Os lugares que precisam mudar juntos** (é isso que torna a mudança não-trivial):
+
+1. `src/App.tsx` — a `<Route>`
+2. `src/layouts/DashboardLayout.tsx` — o `<Link to="/dashboard">` e as duas comparações
+   `location.pathname === "/dashboard"` da linha 71
+3. `src/pages/Auth.tsx` — **três** redirecionamentos: `:90`, `:111` e `:244`. O de `:111` é o
+   `redirectTo` do **OAuth**, e o valor precisa estar na allowlist de Redirect URLs do
+   Supabase (Authentication → URL Configuration), que **não é versionada**
+
+**Por que não agora:** o item 3 é o mesmo tipo de configuração fora do repositório que já
+quebrou o SSO uma vez (ver item 9 deste arquivo: o Site URL que nunca saiu de
+`http://localhost:3000`). Trocar a rota sem atualizar a allowlist faz o login por SSO cair
+numa página inexistente, com sintoma confuso. É barato de fazer e caro de fazer errado, então
+merece uma janela própria e não pode pegar carona numa fase de dashboard.
+
+**Contexto:** decisão D3 do plano da Fase 4
+(`docs/fases dashboard/2026-08-10-fase-4-PLANO-pagina-inicial.md`). A Página Inicial nasce em
+`/inicio` justamente para não depender disto.
+
+**Depende de / bloqueado por:** nada técnico. Só de alguém abrir a allowlist do Supabase na
+mesma janela em que troca as rotas, e testar um login por SSO depois.
+
+---
+
+## 11. `sheets.py` comparava o cabeçalho CRU contra o nome normalizado — RESOLVIDO em 2026-08-11
+
+**Corrigido pelo time em `6464677`**, com `src/lib/colunas.ts` como fonte única da
+normalização e teste dos dois lados. O registro abaixo fica como está: ele descreve o
+sintoma, o alcance e — o que mais importa daqui a três meses — o fato de o comentário da
+função afirmar o contrário do que o código fazia, que é como isto sobreviveu tanto tempo.
+
+<details>
+<summary>Registro original</summary>
+
+
+**O quê:** `_ranges_for` (`query_engine/sheets.py`) casa as colunas pedidas contra o cabeçalho
+da planilha por comparação **literal**:
+
+```python
+for idx, h in enumerate(headers):
+    if h in faltando:      # h vem cru, só com .strip()
+```
+
+E o docstring da própria função, três linhas acima, afirma o contrário:
+
+> *"A comparação é feita no nome **normalizado** do cabeçalho, do mesmo jeito que o onboarding
+> normaliza ao montar o schema_metadata."*
+
+**O comentário descreve a intenção; o código não a implementa.** É assim que isto sobreviveu:
+quem lê o docstring conclui que está resolvido.
+
+**Por quê importa:** o onboarding normaliza para `snake_case` ao montar o `schema_metadata`
+(`DatabasePipeline.tsx`), mas **o Plum nunca escreve na planilha do cliente** (invariante R-01).
+Então o cabeçalho continua sendo `Status do Pedido`, `Valor Total (R$)`, `Vendedor(a)` — e o
+executor procura `status_do_pedido`, `valor_total_r`, `vendedor_a`. Nunca casa.
+
+**Alcance:** toda planilha com cabeçalho legível por humano. Isso inclui **qualquer Google
+Sheets em português** e **todo CSV/XLSX importado com cabeçalho original**. As bases que hoje
+funcionam funcionam por coincidência: o arquivo de origem já estava em `snake_case`.
+
+**Como foi encontrado:** na Etapa 0 da Fase 4 do dashboard (2026-08-10), subindo
+`testes/chat/bases/vendas_loja_roupas_teste.csv` para o Sheets. Resposta do executor, HTTP 200:
+
+> `"A planilha nao tem a(s) coluna(s): status_do_pedido, valor_total_r."`
+
+Contornado renomeando a linha 1 da planilha à mão para os nomes normalizados.
+
+**NÃO é o mesmo bug do `gid` da aba,** corrigido em `a334d99` — aquele era *qual aba ler*, este
+é *qual coluna casar dentro da aba*. Confirmado em 2026-08-11, depois daquele merge, que
+`_ranges_for` continua comparando cru.
+
+**Contras de consertar:** a normalização precisa ser **exatamente** a mesma do front, que hoje
+vive em TypeScript (`DatabasePipeline.tsx`). Duas implementações da mesma regra em linguagens
+diferentes divergem — é a mesma armadilha que `_shared/query_plan.ts` documenta para o Query
+Plan. Uma saída melhor seria o onboarding gravar também o nome ORIGINAL de cada coluna no
+`schema_metadata`, e o executor casar por ele: aí não existe normalização em dois lugares,
+existe um mapa gravado uma vez.
+
+**Depende de / bloqueado por:** decisão de quem cuida do `query_engine` sobre qual das duas
+saídas seguir. Enquanto isso, **o onboarding deveria avisar** quando o cabeçalho da planilha
+não bate com o schema — hoje o erro só aparece na primeira pergunta, muito depois.
+
+---
+
+</details>
+
+---
+
+## 12. Planilha em local errado troca dia com mês, e o Plum não tem como perceber
+
+**O quê:** quando um CSV brasileiro (`05/01/2026`) é importado para uma planilha do Google
+cujo **Local** é Estados Unidos, o Sheets lê a data como *month-first* e grava o número de
+série de **1º de maio**. Dias de 1 a 12 ficam trocados; de 13 em diante o Sheets não consegue
+ler como mês e acerta por acidente.
+
+**Por quê é sério:** **12 dos ~30 dias de todo mês ficam errados, em silêncio.** E não é um
+número que falta — é um número **trocado**, com cara de resposta certa. Atinge o chat e o
+dashboard igualmente, porque o dado já está errado na origem.
+
+**Por quê o Plum não detecta:** o serial gravado é legítimo. Ele aponta para 1º de maio de
+verdade. Não existe, do lado de cá, nada que distinga "1º de maio" de "1º de maio escrito
+errado". Todas as camadas fazem a coisa certa com um dado errado.
+
+**Medido em produção, 2026-08-11:** a bateria da Fase 4 do dashboard pediu o faturamento de
+12–16/01 sobre `testes/chat/bases/vendas_loja_roupas_teste.csv`. Gabarito R$ 2.387,92;
+o executor devolveu R$ 1.626,57 — exatamente a soma de 13 a 16, com o dia 12 (R$ 761,35) fora.
+Um card agrupando por data mostrou `01/12/2026` no lugar de `12/01/2026`, e o mesmo padrão em
+05, 06, 07, 08 e 09 de janeiro. Trocado o Local da planilha para Brasil e reimportado, o card
+passou a devolver R$ 2.387,92.
+
+**O que NÃO é a causa** (hipóteses levantadas e derrubadas, para ninguém refazer o caminho):
+
+- `_fmt_data` (`pandas_executor.py:626-639`) está correto: `origin="1899-12-30"`, e
+  `dayfirst=True` por padrão.
+- Os `params` da `formatting_rule` estavam **vazios**, então `dayfirst` não foi desligado pelo
+  Agente 3.
+- `between` em coluna de data é inclusivo nos dois extremos (`:525`).
+- O Query Plan gerado pelo agente estava correto: `between` com `["2026-01-12","2026-01-16"]`.
+
+**Saídas possíveis, nenhuma trivial:**
+
+1. **Avisar no onboarding.** Ao conectar a planilha, comparar as 5 primeiras datas lidas pelo
+   executor com as 5 primeiras do arquivo que o navegador leu. Divergiu, avisa antes de
+   finalizar. É o único momento em que as duas versões existem lado a lado.
+2. **Detectar a suspeita.** Uma coluna de data cujos valores nunca passam do dia 12 é quase
+   certamente uma coluna trocada. Heurística, não prova — mas um aviso vale mais que silêncio.
+3. **Documentar** no material de onboarding: "configure o Local da planilha como Brasil antes
+   de importar". Barato e insuficiente sozinho, porque depende de alguém ler.
+
+**Depende de / bloqueado por:** decisão de quem cuida do onboarding (`ai-agents` /
+`DatabasePipeline.tsx`). A saída 1 é a única que pega o caso de verdade, e é justamente a que
+exige trabalho no pipeline de importação.
+
+
+---
+
+## 13. Escala do percentual: 0–1 (nativo) vs 0–100 (texto)
 
 **Aberto desde 2026-08-11.** Consequência direta da correção do
 `_parse_ptbr_number` (número nativo da planilha deixou de passar pela limpeza
@@ -369,3 +515,24 @@ comportamento acima está fixado por teste — quem mudar, muda de propósito.
 **Impacto real hoje:** nenhuma das bases em produção usa `percentual`
 (conferido em 2026-08-11: doceria, roupas, estudos e riosulense não têm
 coluna com esse `type`). Por isso não foi tratado como bloqueante.
+
+---
+
+**Mitigação no front, aplicada em 2026-08-11 (Fase 5a do dashboard).**
+`src/components/dashboard/formato.ts` assume fração quando o valor é `< 1` e
+multiplica por 100 na EXIBIÇÃO. É `< 1` e não `<= 1` de propósito: média de
+exatamente 1,0 é comum em coluna de pontos (1% médio) e rara em fração.
+
+Isso resolve o caso comum e **falha numa base cujos percentuais sejam todos
+abaixo de 1%** — uma taxa de 0,3% viraria 30%. O modo de falha está comentado no
+ponto exato do código, não só aqui.
+
+Não é conserto, é curativo, e pelo motivo que o texto acima já diz melhor: a tela
+vê um agregado, um número só. O executor vê a **coluna inteira**, e ali dá para
+usar sinal melhor que magnitude — como todos os valores caberem em [0,1]. Melhor
+ainda é o que está proposto acima: o Agente 3 gravar a escala em
+`formatting_rule.params` na importação, único momento com contexto suficiente.
+
+**O chat continua sem mitigação nenhuma:** "qual o desconto médio" devolve o
+número cru para o Agente C, que o repassa como veio.
+

@@ -112,7 +112,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "seu usuario ainda nao tem um cargo definido" }, 403);
   }
 
-  let body: { dataset_id?: string; card_ids?: string[] };
+  let body: { dataset_id?: string; card_ids?: string[]; force?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -185,11 +185,20 @@ Deno.serve(async (req: Request) => {
       continue;
     }
 
+    // `force` pula a consulta de snapshot e vai direto ao executor. Existe
+    // porque o botão de recalcular da tela não teria como funcionar sem isto:
+    // o navegador não pode apagar snapshot (a tabela não tem policy de DELETE
+    // para `authenticated`, de propósito), então dentro do TTL o botão
+    // devolveria o mesmo número e pareceria quebrado.
+    //
+    // Não afrouxa nada: `force` só ignora o CACHE. As sete verificações acima —
+    // JWT, perfil ativo, dataset da organização, allowed_columns, authorizePlan
+    // por card — já rodaram, e nenhuma delas é pulável por aqui.
     const limite = new Date(
       Date.now() - card.refresh_interval_minutes * 60_000,
     ).toISOString();
 
-    const { data: fresco } = await supabase
+    const { data: fresco } = body.force ? { data: null } : await supabase
       .from("dashboard_card_snapshots")
       .select("payload, row_count, suppressed_groups, computed_at")
       .eq("card_id", card.id)
