@@ -452,6 +452,17 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   rebaixa "criar organização" a link secundário, em vez de oferecer os dois como cartões
   irmãos. Mesma lógica dentro do fluxo de entrar: o formulário aparece direto, e "Primeiro
   acesso" fica abaixo dele.
+- **A resposta do chat é Markdown restrito, e é um par de duas metades.** O Agente C emite
+  frase-resposta com o valor principal em `**negrito**` (só ele), tópicos com `- ` quando o
+  resultado tem mais de uma linha, e nada além de parágrafo/lista/negrito — sem título, tabela,
+  link ou emoji. Quem renderiza é `src/components/RespostaMarkdown.tsx`, e **só** a bolha do
+  assistente: a do usuário é texto literal, porque interpretar Markdown na pergunta reescreveria
+  o que ele digitou. Mexeu no contrato de um lado, mexa no outro — prompt novo com front antigo
+  entrega `- ` literal ao usuário. Ver `docs/2026-08-11-formato-da-resposta-do-chat.md`.
+- ⚠️ **O extrator de classes do Tailwind é regex sobre o arquivo e não pula comentário.** Citar
+  o nome de uma classe dentro de um comentário faz o CSS dela ser gerado — utilitário morto no
+  bundle (custou 2,08 kB em 2026-08-11, só por explicar o que havia antes). Descreva a classe
+  em vez de escrever o nome dela.
 
 ---
 
@@ -572,4 +583,5 @@ própria sessão ou digite `/`.
 | `TODOS.md` | Trabalho conscientemente adiado, com o raciocínio junto |
 | `docs/fases dashboard/` | Um arquivo por fase, com resumo estruturado por task |
 | `docs/2026-08-11-entrada-e-guardiao-do-dashboard.md` | Tela de entrada (pouso em `/inicio`, hierarquia, validação) e o Agente Z-dash — inclui o custo de cota aceito e as pendências de deploy/validação |
+| `docs/2026-08-11-formato-da-resposta-do-chat.md` | Por que o `**` aparecia na tela (typography instalado e nunca registrado) e o contrato de formato do Agente C — traz o prompt **literal antes e depois**, a matriz de reversão e o `ezbr_sha256` anterior |
 | `infra/aws/PASSO-A-PASSO.md` | Como subir o executor |
