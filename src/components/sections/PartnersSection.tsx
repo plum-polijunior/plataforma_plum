@@ -44,12 +44,14 @@ export function PartnersSection() {
   const doubled = [...partners, ...partners];
 
   return (
-    <section className="bg-background py-12 pb-16">
-      <div className="text-center text-[13px] font-semibold tracking-wide text-muted-foreground mb-7">
+    <section className="bg-background py-12 pb-16 relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[220px] rounded-full bg-primary/[0.04] blur-[90px] pointer-events-none" />
+
+      <div className="text-center text-[13px] font-semibold tracking-wide text-muted-foreground mb-7 relative z-10">
         Empresas parceiras da Poli Júnior
       </div>
       <div
-        className="overflow-hidden relative"
+        className="overflow-hidden relative z-10"
         style={{
           maskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
           WebkitMaskImage:

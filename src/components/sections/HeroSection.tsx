@@ -7,9 +7,9 @@ interface HeroSectionProps {
 }
 
 const stats = [
-  { value: "+4.800h", label: "economizadas por ano" },
-  { value: "R$585 mil", label: "gerados por ano" },
-  { value: "3.200+", label: "pessoas atendidas" },
+  { value: "Horas economizadas", label: "menos tempo em tarefas manuais, mais tempo decidindo" },
+  { value: "Resultado financeiro", label: "decisões mais rápidas geram mais receita" },
+  { value: "Pessoas atendidas", label: "times inteiros usando o Plum no dia a dia" },
 ];
 
 export function HeroSection({ onNavigate }: HeroSectionProps) {
@@ -18,6 +18,15 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
       id="inicio"
       className="relative overflow-hidden min-h-[92vh] flex items-center justify-center px-6 pt-[120px] pb-20"
     >
+      {/* Dot-grid texture */}
+      <div
+        className="absolute inset-0 opacity-[0.05] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(hsl(329 44% 33%) 1px, transparent 1px)",
+          backgroundSize: "26px 26px",
+        }}
+      />
+
       {/* Glow blobs */}
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[560px] h-[560px] rounded-full bg-primary/[0.14] blur-[90px] animate-glow-pulse" />
       <div
@@ -107,15 +116,15 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.55 }}
-          className="flex justify-center items-start gap-8 flex-wrap mb-3"
+          className="flex justify-center items-stretch gap-8 flex-wrap mb-3"
         >
           {stats.map((stat, i) => (
-            <div key={stat.value} className="flex items-center gap-8">
-              <div className="text-center">
-                <div className="text-[26px] font-extrabold text-foreground">{stat.value}</div>
-                <div className="text-[13px] text-muted-foreground">{stat.label}</div>
+            <div key={stat.value} className="flex items-stretch gap-8">
+              <div className="text-center max-w-[170px]">
+                <div className="text-[15px] font-bold text-foreground mb-1">{stat.value}</div>
+                <div className="text-[12.5px] leading-snug text-muted-foreground">{stat.label}</div>
               </div>
-              {i < stats.length - 1 && <span className="w-px h-9 bg-primary/20" />}
+              {i < stats.length - 1 && <span className="w-px bg-primary/20" />}
             </div>
           ))}
         </motion.div>

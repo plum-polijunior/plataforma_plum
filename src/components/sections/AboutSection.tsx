@@ -51,6 +51,7 @@ export function AboutSection() {
       className="bg-secondary py-[110px] px-6 relative overflow-hidden"
     >
       <div className="absolute top-[20%] left-[8%] w-[380px] h-[380px] rounded-full bg-primary/[0.06] blur-[90px]" />
+      <div className="absolute bottom-[-8%] right-[6%] w-[340px] h-[340px] rounded-full bg-accent/[0.07] blur-[90px] pointer-events-none" />
 
       <div className="max-w-[1100px] mx-auto relative z-10">
         <motion.div

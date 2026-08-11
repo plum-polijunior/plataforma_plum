@@ -59,6 +59,7 @@ export function FeaturesSection() {
       className="bg-background py-[110px] px-6 relative overflow-hidden"
     >
       <div className="absolute bottom-0 left-[10%] w-[400px] h-[400px] rounded-full bg-accent/5 blur-[90px]" />
+      <div className="absolute top-[4%] right-[8%] w-[320px] h-[320px] rounded-full bg-primary/[0.06] blur-[90px] pointer-events-none" />
 
       <div className="max-w-[1100px] mx-auto relative z-10">
         <motion.div

@@ -2,13 +2,16 @@ import { motion } from "framer-motion";
 
 export function LocationSection() {
   return (
-    <section id="localizacao" className="bg-secondary py-[110px] px-6">
+    <section id="localizacao" className="bg-secondary py-[110px] px-6 relative overflow-hidden">
+      <div className="absolute top-[-10%] right-[6%] w-[360px] h-[360px] rounded-full bg-primary/[0.06] blur-[90px] pointer-events-none" />
+      <div className="absolute bottom-[-15%] left-[4%] w-[320px] h-[320px] rounded-full bg-accent/[0.07] blur-[90px] pointer-events-none" />
+
       <motion.div
         initial={{ opacity: 0, y: 28 }}
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7 }}
         viewport={{ once: true }}
-        className="max-w-[900px] mx-auto text-center"
+        className="max-w-[900px] mx-auto text-center relative z-10"
       >
         <div className="text-[13px] font-bold tracking-[1.5px] uppercase text-primary mb-3.5">
           Localização

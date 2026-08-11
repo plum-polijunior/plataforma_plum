@@ -4,8 +4,11 @@ import plumMascot from "@/assets/plum-mascot-transparent.png";
 
 export function ContactSection() {
   return (
-    <section id="contato" className="bg-background py-[110px] px-6">
-      <div className="max-w-[520px] mx-auto">
+    <section id="contato" className="bg-background py-[110px] px-6 relative overflow-hidden">
+      <div className="absolute -top-24 -left-24 w-[380px] h-[380px] rounded-full bg-primary/[0.07] blur-[90px] pointer-events-none" />
+      <div className="absolute -bottom-32 -right-16 w-[420px] h-[420px] rounded-full bg-accent/[0.08] blur-[90px] pointer-events-none" />
+
+      <div className="max-w-[520px] mx-auto relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
