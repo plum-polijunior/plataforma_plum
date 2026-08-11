@@ -1,0 +1,834 @@
+/* Direção Vidro — sistema visual da proposta, transcrito de
+ * `Plum Interno - Vidro v2.dc.html` (projeto de design "Frontend interno da
+ * plataforma Plum").
+ *
+ * ⚠️ ISTO NÃO É TEMA DO PRODUTO. É uma proposta em avaliação, viva só na rota
+ * `/vidro`. O `src/index.css` não foi tocado: `:root` continua sendo o claro da
+ * Direção A e `.dark` continua sendo o opt-in da landing.
+ *
+ * Por que um arquivo CSS num repositório Tailwind: quatro coisas aqui não têm
+ * utilitário equivalente e virariam valor arbitrário ilegível ou simplesmente
+ * não existiriam —
+ *   1. superfície de vidro (backdrop-filter com blur + saturate por camada);
+ *   2. borda de 1px feita de gradiente (elemento externo com padding de 1px);
+ *   3. os fallbacks de `@supports not (backdrop-filter)` e
+ *      `prefers-reduced-transparency`, que precisam de `!important`;
+ *   4. o rail, que abre por `:hover` em CSS puro, sem estado em React.
+ * Geometria, espaçamento e tipografia continuam em utilitários no JSX.
+ *
+ * ESCOPO: todo seletor daqui vive sob `[data-tema]`, que só existe na raiz de
+ * `src/pages/Vidro.tsx`. No protótipo `a`, `input::placeholder` e a barra de
+ * rolagem eram globais — assim escritos apagariam a landing.
+ */
+
+/* ── Paleta ────────────────────────────────────────────────────────────────
+ * Os dois temas da proposta. Hex literal aqui é o lugar certo: este arquivo é
+ * a definição dos tokens, é o único ponto do port com cor crua, e todo o resto
+ * (CSS e JSX) lê por `var()`. Transcrito valor a valor do protótipo. */
+
+[data-tema="claro"] {
+  --fundo: #f7f4f5;
+  --base-a: rgb(255, 255, 255);
+  --base-b: rgb(238, 231, 235);
+
+  --texto: #191317;
+  --texto2: #5f545a;
+  --texto3: #736870;
+  --texto4: #6e636a;
+  --icone-fraco: #8a7f85;
+
+  --vidro: rgba(255, 255, 255, 0.58);
+  --vidro-alto: rgba(255, 255, 255, 0.7);
+  --vidro-baixo: rgba(255, 255, 255, 0.48);
+
+  --borda-a: rgba(255, 255, 255, 0.95);
+  --borda-b: rgba(255, 255, 255, 0.32);
+  --borda-c: rgba(122, 47, 86, 0.12);
+  --linha: rgba(255, 255, 255, 0.75);
+  --realce: rgba(255, 255, 255, 0.92);
+  --regua: rgba(122, 47, 86, 0.1);
+
+  --plum-a: rgba(122, 47, 86, 0.13);
+  --plum-b: rgba(122, 47, 86, 0.05);
+
+  --acento: #7a2f56;
+  --btn: #7a2f56;
+  --btn-h: #9e4472;
+
+  --ativo: rgba(255, 255, 255, 0.8);
+  --ativo-borda: rgba(255, 255, 255, 0.95);
+  --ctrl: rgba(255, 255, 255, 0.45);
+  --ctrl-borda: rgba(255, 255, 255, 0.72);
+  --ctrl-h: rgba(255, 255, 255, 0.9);
+  --divisor: rgba(122, 47, 86, 0.14);
+
+  --ok: #276b4e;
+  --ok-fundo: #e6f3ec;
+  --alerta: #8a5a12;
+  --alerta-fundo: #fbf0df;
+
+  --barra-fraca-a: rgba(122, 47, 86, 0.28);
+  --barra-fraca-b: rgba(122, 47, 86, 0.12);
+  --barra-forte-a: #9e4472;
+  --barra-forte-b: #7a2f56;
+
+  --streak: rgba(122, 47, 86, 0.55);
+  --pontos: rgba(25, 19, 23, 0.13);
+  --mancha-forte: rgba(122, 47, 86, 0.2);
+  --mancha-fraca: rgba(158, 68, 114, 0.1);
+
+  --sombra-1: 0 24px 60px -30px rgba(25, 19, 23, 0.3);
+  --sombra-2: 0 30px 70px -32px rgba(25, 19, 23, 0.3);
+  --sombra-3: 0 34px 80px -34px rgba(25, 19, 23, 0.34);
+  --solido: #fcfafb;
+  --solido-alto: #ffffff;
+
+  /* Item ativo da navegação. Único token que o protótipo resolvia em JS: no
+     claro é a marca, mas no escuro é branco puro, e não o acento (rosa claro),
+     que sumiria contra a superfície ativa. Inativo é `--texto2` nos dois. */
+  --nav-ativo: #7a2f56;
+
+  /* Cromo de fundo: opacidade e modo de mesclagem mudam por tema. */
+  --op-mancha: 0.5;
+  --blend-mancha: multiply;
+  --op-feixes: 0.22;
+  --blend-feixes: multiply;
+  --op-grao: 0.035;
+  --blend-grao: multiply;
+  --op-pontos: 0.5;
+  --op-streak: 0.14;
+  --scroll-polegar: #e0d6db;
+}
+
+[data-tema="escuro"] {
+  --fundo: #0f0c0e;
+  --base-a: rgb(46, 38, 43);
+  --base-b: rgb(12, 10, 11);
+
+  --texto: #f3eef0;
+  --texto2: #c9bec3;
+  --texto3: #b4a8ae;
+  --texto4: #a2969c;
+  --icone-fraco: #8e838a;
+
+  --vidro: rgba(255, 255, 255, 0.06);
+  --vidro-alto: rgba(255, 255, 255, 0.09);
+  --vidro-baixo: rgba(255, 255, 255, 0.05);
+
+  --borda-a: rgba(255, 255, 255, 0.22);
+  --borda-b: rgba(255, 255, 255, 0.07);
+  --borda-c: rgba(122, 47, 86, 0.38);
+  --linha: rgba(255, 255, 255, 0.1);
+  --realce: rgba(255, 255, 255, 0.13);
+  --regua: rgba(255, 255, 255, 0.09);
+
+  --plum-a: rgba(122, 47, 86, 0.34);
+  --plum-b: rgba(122, 47, 86, 0.16);
+
+  --acento: #eabbd1;
+  --btn: #9e4472;
+  --btn-h: #b0537f;
+
+  --ativo: rgba(255, 255, 255, 0.13);
+  --ativo-borda: rgba(255, 255, 255, 0.18);
+  --ctrl: rgba(255, 255, 255, 0.07);
+  --ctrl-borda: rgba(255, 255, 255, 0.14);
+  --ctrl-h: rgba(255, 255, 255, 0.16);
+  --divisor: rgba(255, 255, 255, 0.16);
+
+  --ok: #6fcfa1;
+  --ok-fundo: rgba(111, 207, 161, 0.12);
+  --alerta: #e0ae6d;
+  --alerta-fundo: rgba(224, 174, 109, 0.12);
+
+  --barra-fraca-a: rgba(255, 255, 255, 0.17);
+  --barra-fraca-b: rgba(255, 255, 255, 0.07);
+  --barra-forte-a: #b0537f;
+  --barra-forte-b: #7a2f56;
+
+  --streak: rgba(176, 83, 127, 0.55);
+  --pontos: rgba(255, 255, 255, 0.42);
+  --mancha-forte: rgba(176, 83, 127, 0.3);
+  --mancha-fraca: rgba(122, 47, 86, 0.22);
+
+  --sombra-1: 0 28px 64px -30px rgba(0, 0, 0, 0.78);
+  --sombra-2: 0 30px 70px -32px rgba(0, 0, 0, 0.8);
+  --sombra-3: 0 34px 80px -34px rgba(0, 0, 0, 0.85);
+  --solido: #1d181b;
+  --solido-alto: #221c20;
+
+  --nav-ativo: #ffffff;
+
+  --op-mancha: 0.7;
+  --blend-mancha: screen;
+  --op-feixes: 0.34;
+  --blend-feixes: screen;
+  --op-grao: 0.05;
+  --blend-grao: screen;
+  --op-pontos: 0.2;
+  --op-streak: 0.2;
+  --scroll-polegar: #3b3338;
+}
+
+/* ── Raiz ──────────────────────────────────────────────────────────────── */
+
+.v-raiz {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: Geist, system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+
+  /* Endurecimento em relação ao protótipo, onde a raiz era filha direta do
+     `body`. Aqui ela vive dentro do `#root` de um app que tem tema próprio, e
+     as camadas de fundo usam `mix-blend-mode` — sem um contexto de mesclagem
+     isolado elas mesclariam contra o que estiver atrás da rota. */
+  isolation: isolate;
+}
+
+.v-raiz a {
+  color: var(--acento);
+  text-decoration: none;
+}
+
+.v-raiz a:hover {
+  text-decoration: underline;
+}
+
+.v-raiz input::placeholder {
+  color: var(--texto4);
+}
+
+.v-raiz ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.v-raiz ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.v-raiz ::-webkit-scrollbar-thumb {
+  background: var(--scroll-polegar);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* ── Camadas de fundo ──────────────────────────────────────────────────── */
+
+.v-plano {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(100% 100% at 0% 0%, var(--base-a) 0%, var(--base-b) 100%);
+  -webkit-mask-image: radial-gradient(125% 100% at 0% 0%, #000 0%, rgba(0, 0, 0, 0.22) 88%, rgba(0, 0, 0, 0) 100%);
+  mask-image: radial-gradient(125% 100% at 0% 0%, #000 0%, rgba(0, 0, 0, 0.22) 88%, rgba(0, 0, 0, 0) 100%);
+}
+
+.v-feixes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: blur(18px);
+  opacity: var(--op-feixes);
+  mix-blend-mode: var(--blend-feixes);
+}
+
+.v-streak {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  transform: skewX(45deg);
+  opacity: var(--op-streak);
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0) 0px,
+    var(--streak) 40px,
+    rgba(0, 0, 0, 0) 130px,
+    rgba(0, 0, 0, 0) 240px
+  );
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.25) 62%, rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.25) 62%, rgba(0, 0, 0, 0) 100%);
+}
+
+.v-pontos {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--op-pontos);
+  background-image: radial-gradient(circle at 1px 1px, var(--pontos) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.v-grao {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--op-grao);
+  mix-blend-mode: var(--blend-grao);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+}
+
+/* Manchas: só `transform` e `opacity` — animação de compositor, sem repintura. */
+@keyframes v-mancha-a {
+  0% {
+    transform: translate3d(-30vw, -30vh, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(70vw, 55vh, 0) scale(1.25);
+  }
+  100% {
+    transform: translate3d(-30vw, -30vh, 0) scale(1);
+  }
+}
+
+@keyframes v-mancha-b {
+  0% {
+    transform: translate3d(80vw, 70vh, 0) scale(1.1);
+  }
+  50% {
+    transform: translate3d(-20vw, -15vh, 0) scale(0.9);
+  }
+  100% {
+    transform: translate3d(80vw, 70vh, 0) scale(1.1);
+  }
+}
+
+@keyframes v-mancha-c {
+  0% {
+    transform: translate3d(60vw, -25vh, 0) scale(0.95);
+  }
+  50% {
+    transform: translate3d(-15vw, 65vh, 0) scale(1.2);
+  }
+  100% {
+    transform: translate3d(60vw, -25vh, 0) scale(0.95);
+  }
+}
+
+.v-mancha {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+  opacity: var(--op-mancha);
+  mix-blend-mode: var(--blend-mancha);
+}
+
+.v-mancha-a {
+  width: 46vw;
+  height: 46vw;
+  animation: v-mancha-a 46s ease-in-out infinite;
+  background: radial-gradient(circle at 50% 50%, var(--mancha-forte) 0%, var(--mancha-fraca) 42%, rgba(0, 0, 0, 0) 70%);
+}
+
+.v-mancha-b {
+  width: 38vw;
+  height: 38vw;
+  animation: v-mancha-b 61s ease-in-out infinite;
+  background: radial-gradient(circle at 50% 50%, var(--mancha-fraca) 0%, rgba(0, 0, 0, 0) 66%);
+}
+
+.v-mancha-c {
+  width: 30vw;
+  height: 30vw;
+  animation: v-mancha-c 53s ease-in-out infinite;
+  background: radial-gradient(circle at 50% 50%, var(--mancha-forte) 0%, rgba(0, 0, 0, 0) 64%);
+}
+
+/* ── Vidro ─────────────────────────────────────────────────────────────────
+ * `.v-mold` é a borda: um elemento com 1px de padding e um gradiente de fundo,
+ * porque `border-image` não convive com `border-radius`. `.v-sup` é a
+ * superfície que fica dentro dela.
+ *
+ * Cada modificador `v-como-*` fica na moldura e define TODAS as variáveis do
+ * par — a superfície herda por cascata. É por isso que existe um modificador
+ * por lugar de uso em vez de uma combinação genérica: cada linha é uma
+ * transcrição direta e conferível contra o protótipo. */
+
+.v-mold {
+  padding: 1px;
+  border-radius: var(--v-raio, 18px);
+  box-shadow: var(--v-sombra, none);
+  background: linear-gradient(
+    var(--v-ang, 145deg),
+    var(--borda-a),
+    var(--borda-b) var(--v-parada, 48%),
+    var(--v-fim, var(--borda-b))
+  );
+}
+
+.v-sup {
+  border-radius: calc(var(--v-raio, 18px) - 1px);
+  background: var(--v-fundo, var(--vidro-alto));
+  box-shadow: inset 0 1px 0 var(--realce);
+  backdrop-filter: blur(var(--v-blur, 28px)) saturate(var(--v-sat, 170%));
+  -webkit-backdrop-filter: blur(var(--v-blur, 28px)) saturate(var(--v-sat, 170%));
+}
+
+/* Cromo — superfície com o gradiente da marca por baixo. */
+.v-como-rail {
+  --v-raio: 22px;
+  --v-ang: 150deg;
+  --v-parada: 44%;
+  --v-fim: var(--borda-c);
+  --v-sombra: var(--sombra-1);
+  --v-blur: 24px;
+  --v-sat: 165%;
+  --v-fundo: linear-gradient(180deg, var(--plum-a), var(--plum-b));
+}
+
+.v-como-topo {
+  --v-raio: 18px;
+  --v-ang: 140deg;
+  --v-parada: 50%;
+  --v-fim: var(--borda-c);
+  --v-sombra: var(--sombra-1);
+  --v-blur: 26px;
+  --v-sat: 170%;
+  --v-fundo: linear-gradient(180deg, var(--plum-a), var(--plum-b));
+}
+
+/* Painel do agente do pipeline e cartão do código de convite: mesma receita no
+   protótipo, uma classe só. */
+.v-como-cromo {
+  --v-raio: 18px;
+  --v-parada: 50%;
+  --v-fim: var(--borda-c);
+  --v-sombra: var(--sombra-2);
+  --v-blur: 26px;
+  --v-sat: 170%;
+  --v-fundo: linear-gradient(180deg, var(--plum-a), var(--plum-b));
+}
+
+/* Único sem sombra no protótipo. */
+.v-como-aviso {
+  --v-raio: 16px;
+  --v-ang: 140deg;
+  --v-parada: 50%;
+  --v-fim: var(--borda-c);
+  --v-blur: 22px;
+  --v-sat: 165%;
+  --v-fundo: linear-gradient(180deg, var(--plum-a), var(--plum-b));
+}
+
+/* Conteúdo — superfície de vidro puro. */
+.v-como-kpi {
+  --v-raio: 16px;
+  --v-parada: 100%;
+  --v-sombra: var(--sombra-1);
+  --v-blur: 24px;
+  --v-sat: 165%;
+}
+
+.v-como-passos {
+  --v-raio: 16px;
+  --v-ang: 140deg;
+  --v-parada: 100%;
+  --v-sombra: var(--sombra-1);
+  --v-blur: 24px;
+  --v-sat: 165%;
+}
+
+.v-como-cartao {
+  --v-raio: 20px;
+  --v-sombra: var(--sombra-2);
+}
+
+.v-como-painel {
+  --v-raio: 18px;
+  --v-parada: 100%;
+  --v-sombra: var(--sombra-2);
+}
+
+.v-como-tabela {
+  --v-raio: 20px;
+  --v-parada: 100%;
+  --v-sombra: var(--sombra-2);
+}
+
+.v-como-composer {
+  --v-raio: 24px;
+  --v-parada: 46%;
+  --v-sombra: var(--sombra-3);
+  --v-blur: 30px;
+  --v-sat: 175%;
+}
+
+/* ── Fallbacks ────────────────────────────────────────────────────────────
+ * Sem `backdrop-filter`, ou com transparência reduzida no sistema, a
+ * superfície vira opaca. Sem isto o texto fica sobre o fundo animado cru. */
+
+@supports not ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+  .v-raiz [data-vidro] {
+    background: var(--solido) !important;
+  }
+
+  .v-raiz [data-vidro="alto"] {
+    background: var(--solido-alto) !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .v-raiz [data-vidro] {
+    background: var(--solido) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .v-raiz [data-vidro="alto"] {
+    background: var(--solido-alto) !important;
+  }
+
+  .v-raiz .v-grao,
+  .v-raiz .v-feixes,
+  .v-raiz .v-streak,
+  .v-raiz .v-pontos,
+  .v-raiz .v-mancha {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v-raiz .v-mancha {
+    animation: none !important;
+  }
+
+  .v-raiz .v-entra-cima,
+  .v-raiz .v-entra,
+  .v-raiz .v-ponto,
+  .v-raiz .v-rail:hover .v-rail-rotulo {
+    animation: none !important;
+  }
+}
+
+/* ── Rail ─────────────────────────────────────────────────────────────────
+ * Recolhido, os rótulos saem do fluxo para o ícone ficar centrado no botão.
+ * Abre por `:hover`, sem estado em React — daí não haver `useState` aqui.
+ *
+ * ⚠️ Dívida real da proposta: conteúdo só alcançável por hover contraria a
+ * `DESIGN.md` §9 ("nada acessível só por hover"). Está registrado em
+ * `docs/direcao-vidro.md`; resolver exige decidir o gatilho, não ajustar CSS. */
+
+.v-rail {
+  width: 70px;
+  transition: width 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.v-rail .v-rail-rotulo {
+  display: none;
+}
+
+.v-rail .v-rail-ponto {
+  opacity: 1;
+  transition: opacity 0.22s;
+}
+
+.v-rail .v-rail-item,
+.v-rail .v-rail-topo {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+  gap: 0;
+}
+
+.v-rail:hover {
+  width: 258px;
+}
+
+.v-rail:hover .v-rail-rotulo {
+  display: revert;
+  white-space: nowrap;
+  animation: v-entra 0.22s ease-out both;
+}
+
+.v-rail:hover .v-rail-ponto {
+  opacity: 0;
+}
+
+.v-rail:hover .v-rail-item {
+  justify-content: flex-start;
+  padding-left: 11px;
+  padding-right: 11px;
+  gap: 12px;
+}
+
+.v-rail:hover .v-rail-topo {
+  justify-content: flex-start;
+  padding-left: 20px;
+  padding-right: 20px;
+  gap: 12px;
+}
+
+/* ── Animações de entrada ──────────────────────────────────────────────── */
+
+@keyframes v-entra-cima {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes v-entra {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes v-ponto {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.v-entra-cima {
+  animation: v-entra-cima 0.45s ease-out both;
+}
+
+.v-entra {
+  animation: v-entra 0.3s ease-out both;
+}
+
+.v-ponto {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--acento);
+  animation: v-ponto 1.3s infinite;
+}
+
+/* ── Tinta ─────────────────────────────────────────────────────────────── */
+
+.v-t {
+  color: var(--texto);
+}
+.v-t2 {
+  color: var(--texto2);
+}
+.v-t3 {
+  color: var(--texto3);
+}
+.v-t4 {
+  color: var(--texto4);
+}
+.v-acento {
+  color: var(--acento);
+}
+.v-ok {
+  color: var(--ok);
+}
+.v-alerta {
+  color: var(--alerta);
+}
+.v-icone-fraco {
+  color: var(--icone-fraco);
+}
+
+.v-display {
+  font-family: "Bricolage Grotesque", sans-serif;
+}
+.v-code {
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* ── Controles ─────────────────────────────────────────────────────────── */
+
+/* Superfície neutra do cromo. Vale tanto para botão quanto para caixa parada
+   (o campo do código de convite), por isso cursor e hover ficam de fora daqui:
+   uma caixa que não faz nada não pode acender no hover nem virar mãozinha. */
+.v-ctrl {
+  background: var(--ctrl);
+  border: 1px solid var(--ctrl-borda);
+  color: var(--texto2);
+  transition: background 0.16s, color 0.16s;
+}
+
+button.v-ctrl {
+  cursor: pointer;
+  font: inherit;
+}
+
+button.v-ctrl:hover {
+  background: var(--ctrl-h);
+  color: var(--texto);
+}
+
+/* Botão primário. */
+.v-btn {
+  background: var(--btn);
+  border: 0;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: background 0.16s, transform 0.18s;
+}
+
+.v-btn:hover {
+  background: var(--btn-h);
+}
+
+/* Ação terciária: sem caixa até o hover. */
+.v-fantasma {
+  background: transparent;
+  border: 0;
+  color: var(--texto3);
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.16s, color 0.16s;
+}
+
+.v-fantasma:hover {
+  background: var(--ctrl);
+  color: var(--texto);
+}
+
+/* Pílula de vidro leve — selo de consulta e sugestões do chat. O protótipo usa
+   12px no selo e 14px nas sugestões; a diferença fica na variável em vez de
+   virar uma média que não corresponde a nenhum dos dois. */
+.v-pilula {
+  background: var(--vidro-baixo);
+  border: 1px solid var(--ctrl-borda);
+  backdrop-filter: blur(var(--v-pilula-blur, 12px)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--v-pilula-blur, 12px)) saturate(150%);
+  transition: background 0.16s, color 0.16s;
+}
+
+button.v-pilula {
+  --v-pilula-blur: 14px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--texto2);
+}
+
+button.v-pilula:hover {
+  background: var(--ctrl-h);
+  color: var(--acento);
+}
+
+/* Avatar / caixa de ícone com anel interno. */
+.v-ficha {
+  background: var(--ctrl);
+  box-shadow: inset 0 0 0 1px var(--ctrl-borda);
+}
+
+/* ── Réguas ────────────────────────────────────────────────────────────── */
+
+.v-regua-b {
+  border-bottom: 1px solid var(--regua);
+}
+.v-regua-t {
+  border-top: 1px solid var(--regua);
+}
+.v-linha-b {
+  border-bottom: 1px solid var(--linha);
+}
+.v-linha-t {
+  border-top: 1px solid var(--linha);
+}
+
+.v-divisor {
+  height: 1px;
+  background: linear-gradient(90deg, var(--divisor), rgba(0, 0, 0, 0));
+}
+
+.v-hover-ctrl:hover {
+  background: var(--ctrl);
+}
+
+/* ── Navegação ─────────────────────────────────────────────────────────── */
+
+.v-nav-item {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  color: var(--texto2);
+}
+
+.v-nav-item:hover {
+  background: var(--ctrl);
+}
+
+.v-nav-item[aria-current="page"] {
+  color: var(--nav-ativo);
+  font-weight: 600;
+}
+
+/* Placa da seleção: fica atrás do conteúdo do botão, que é `position:relative`. */
+.v-nav-placa {
+  position: absolute;
+  inset: 0;
+  border-radius: 13px;
+  background: var(--ativo);
+  border: 1px solid var(--ativo-borda);
+  box-shadow: inset 0 1px 0 var(--realce);
+}
+
+/* ── Barras do gráfico ─────────────────────────────────────────────────── */
+
+.v-barra {
+  width: 100%;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, var(--barra-fraca-a), var(--barra-fraca-b));
+}
+
+.v-barra-destaque {
+  background: linear-gradient(180deg, var(--barra-forte-a), var(--barra-forte-b));
+}
+
+/* ── Passos do pipeline ────────────────────────────────────────────────────
+ * Concluído, atual e futuro. Ficam aqui, e não em utilitário no JSX, porque o
+ * branco do passo atual é cor crua — e cor crua só existe neste arquivo. */
+
+.v-passo-ok {
+  background: var(--ok-fundo);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.v-passo-atual {
+  background: var(--btn);
+  color: #ffffff;
+  border-color: var(--btn);
+}
+
+.v-passo-futuro {
+  background: transparent;
+  color: var(--texto4);
+  border-color: var(--ctrl-borda);
+}
+
+/* ── Bolha do usuário ──────────────────────────────────────────────────────
+ * Fundo fixo `#7A2F56` nos dois temas, como no protótipo: é a marca, não uma
+ * superfície, e por isso não acompanha `--btn` (que clareia no escuro). */
+.v-bolha {
+  background: #7a2f56;
+  color: #ffffff;
+}

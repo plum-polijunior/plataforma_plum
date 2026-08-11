@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import DatabasePage from "./pages/Cfgdatabase";
 import Inicio from "./pages/Inicio";
+import Vidro from "./pages/Vidro";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -24,6 +25,12 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          {/* Direção Vidro: proposta visual do ambiente interno, com dados
+              falsos e tema próprio. Fora do DashboardLayout porque traz o
+              próprio shell, e sem guard de organização porque não lê dado
+              nenhum. Contraria o DESIGN.md §1 e §10 de propósito — é a
+              decisão que ela existe para provocar. Ver docs/direcao-vidro.md. */}
+          <Route path="/vidro" element={<Vidro />} />
           <Route element={<DashboardLayout />}>
             {/* Página Inicial: rota viva, sem item na sidebar de propósito —
                 válvula de rollback da Fase 4 (§2.3 do plano). O link entra na
