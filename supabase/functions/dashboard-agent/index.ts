@@ -125,7 +125,18 @@ REGRAS QUE NÃO PODEM SER QUEBRADAS:
 4. group_by aceita UMA coluna, e ela precisa ser categórica (texto com poucos
    valores distintos: loja, categoria, status, forma de pagamento).
 
-5. Não some colunas de percentual — para elas use "avg".`;
+5. Não some colunas de percentual — para elas use "avg".
+
+6. INTERVALO DE DATAS É INCLUSIVO NOS DOIS EXTREMOS. Em português, "entre 12 e
+   16 de janeiro", "de 12 a 16" e "da segunda à sexta" INCLUEM o primeiro e o
+   último dia. Use {"left": "coluna_de_data", "op": "between", "right":
+   ["2026-01-12", "2026-01-16"]} — nunca ">" e "<", que descartariam os dois
+   extremos em silêncio.
+
+   Isto não é preciosismo: num teste real com esta regra ausente, o plano
+   perdeu o primeiro dia do intervalo e devolveu R$ 1.626,57 no lugar de
+   R$ 2.387,92. O número saiu errado com cara de certo, que é o pior tipo de
+   erro que este produto pode cometer.`;
 
 async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Response> {
   if (!GEMINI_API_KEY) return json({ error: "GEMINI_API_KEY nao configurada." }, 500);
@@ -169,12 +180,27 @@ async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Re
       // Cota estourada chega aqui. Vale uma mensagem que diga o que fazer, em
       // vez de repassar o texto do Google cru para o usuário final.
       const msg = String(data?.error?.message ?? "");
-      const cota = /quota|exhaust|rate/i.test(msg);
+      const cota = /quota|exhaust|rate|RESOURCE_EXHAUSTED/i.test(msg) || data?.error?.code === 429;
+
+      // 200 com `card.erro`, e NÃO 5xx: `functions.invoke` no front trata
+      // qualquer não-2xx como falha de transporte e mostra uma mensagem
+      // genérica, jogando fora a explicação que importa. Aconteceu no teste —
+      // a cota estourou e o usuário leu "Não consegui montar o card agora"
+      // em vez de "o limite de uso da IA foi atingido".
+      //
+      // Isto não é um erro de servidor: o servidor funcionou e a resposta é
+      // "não deu, por este motivo". O status certo para isso é 200.
+      const espera = String(data?.error?.details?.find?.(
+        (d: { retryDelay?: string }) => d?.retryDelay,
+      )?.retryDelay ?? "");
+
       return json({
-        error: cota
-          ? "O limite de uso da IA foi atingido. Tente daqui a pouco — os cards já publicados continuam funcionando normalmente."
-          : "Não consegui interpretar a pergunta agora.",
-      }, 502);
+        card: {
+          erro: cota
+            ? `O limite diário de uso da IA foi atingido${espera ? ` (tente de novo em ~${espera})` : ""}. Os cards já publicados continuam funcionando normalmente — eles não usam IA para recalcular.`
+            : "Não consegui interpretar a pergunta agora. Tente reescrevê-la.",
+        },
+      });
     }
 
     const texto: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -188,7 +214,7 @@ async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Re
     }
   }
 
-  return json({ error: "Não consegui montar o card a partir dessa pergunta." }, 502);
+  return json({ card: { erro: "Não consegui montar um cálculo para essa pergunta. Tente ser mais específico sobre qual número você quer." } });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

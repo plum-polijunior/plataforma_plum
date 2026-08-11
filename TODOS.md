@@ -413,3 +413,50 @@ existe um mapa gravado uma vez.
 **Depende de / bloqueado por:** decisão de quem cuida do `query_engine` sobre qual das duas
 saídas seguir. Enquanto isso, **o onboarding deveria avisar** quando o cabeçalho da planilha
 não bate com o schema — hoje o erro só aparece na primeira pergunta, muito depois.
+
+---
+
+## 12. Planilha em local errado troca dia com mês, e o Plum não tem como perceber
+
+**O quê:** quando um CSV brasileiro (`05/01/2026`) é importado para uma planilha do Google
+cujo **Local** é Estados Unidos, o Sheets lê a data como *month-first* e grava o número de
+série de **1º de maio**. Dias de 1 a 12 ficam trocados; de 13 em diante o Sheets não consegue
+ler como mês e acerta por acidente.
+
+**Por quê é sério:** **12 dos ~30 dias de todo mês ficam errados, em silêncio.** E não é um
+número que falta — é um número **trocado**, com cara de resposta certa. Atinge o chat e o
+dashboard igualmente, porque o dado já está errado na origem.
+
+**Por quê o Plum não detecta:** o serial gravado é legítimo. Ele aponta para 1º de maio de
+verdade. Não existe, do lado de cá, nada que distinga "1º de maio" de "1º de maio escrito
+errado". Todas as camadas fazem a coisa certa com um dado errado.
+
+**Medido em produção, 2026-08-11:** a bateria da Fase 4 do dashboard pediu o faturamento de
+12–16/01 sobre `testes/chat/bases/vendas_loja_roupas_teste.csv`. Gabarito R$ 2.387,92;
+o executor devolveu R$ 1.626,57 — exatamente a soma de 13 a 16, com o dia 12 (R$ 761,35) fora.
+Um card agrupando por data mostrou `01/12/2026` no lugar de `12/01/2026`, e o mesmo padrão em
+05, 06, 07, 08 e 09 de janeiro. Trocado o Local da planilha para Brasil e reimportado, o card
+passou a devolver R$ 2.387,92.
+
+**O que NÃO é a causa** (hipóteses levantadas e derrubadas, para ninguém refazer o caminho):
+
+- `_fmt_data` (`pandas_executor.py:626-639`) está correto: `origin="1899-12-30"`, e
+  `dayfirst=True` por padrão.
+- Os `params` da `formatting_rule` estavam **vazios**, então `dayfirst` não foi desligado pelo
+  Agente 3.
+- `between` em coluna de data é inclusivo nos dois extremos (`:525`).
+- O Query Plan gerado pelo agente estava correto: `between` com `["2026-01-12","2026-01-16"]`.
+
+**Saídas possíveis, nenhuma trivial:**
+
+1. **Avisar no onboarding.** Ao conectar a planilha, comparar as 5 primeiras datas lidas pelo
+   executor com as 5 primeiras do arquivo que o navegador leu. Divergiu, avisa antes de
+   finalizar. É o único momento em que as duas versões existem lado a lado.
+2. **Detectar a suspeita.** Uma coluna de data cujos valores nunca passam do dia 12 é quase
+   certamente uma coluna trocada. Heurística, não prova — mas um aviso vale mais que silêncio.
+3. **Documentar** no material de onboarding: "configure o Local da planilha como Brasil antes
+   de importar". Barato e insuficiente sozinho, porque depende de alguém ler.
+
+**Depende de / bloqueado por:** decisão de quem cuida do onboarding (`ai-agents` /
+`DatabasePipeline.tsx`). A saída 1 é a única que pega o caso de verdade, e é justamente a que
+exige trabalho no pipeline de importação.

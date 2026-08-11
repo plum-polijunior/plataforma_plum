@@ -445,12 +445,20 @@ rodar, e a tentação é usar a base de um cliente — que é exatamente o que o
 da §8 proíbe. O ambiente de teste é pré-requisito da primeira etapa, não preparação
 da última.
 
-1. Subir `testes/chat/bases/vendas_loja_roupas_teste.csv` para o Google Sheets (separador `;`; o
+1. **Antes de subir qualquer coisa: pôr o Local da planilha em Brasil**
+   (Arquivo → Configurações da planilha → Local). Em local dos Estados Unidos o
+   Sheets lê `05/01/2026` como 1º de maio e grava o serial errado — dias de 1 a
+   12 ficam com dia e mês trocados, de 13 em diante acerta por acidente. O
+   Plum **não tem como perceber**: o serial gravado é legítimo, só aponta para
+   o dia errado. Custou uma investigação inteira em 2026-08-11 (ver
+   `TODOS.md` #12). O Local não reinterpreta o que já foi importado, então tem
+   que ser antes.
+2. Subir `testes/chat/bases/vendas_loja_roupas_teste.csv` para o Google Sheets (separador `;`; o
    arquivo tem BOM no cabeçalho — conferir se a primeira coluna importou como
    `Código do Pedido` e não com lixo na frente).
-2. Compartilhar a planilha com
+3. Compartilhar a planilha com
    `plum-polijunior@plataforma-plum.iam.gserviceaccount.com` como **Leitor**.
-3. **Renomear a aba para `Sheet1`.** Descoberto na execução (2026-08-10): o front
+4. **Renomear a aba para `Sheet1`.** Descoberto na execução (2026-08-10): o front
    **nunca grava `google_sheet_tab`** — `DatabasePipeline.tsx` grava
    `google_sheet_id` e `google_sheet_url` e mais nada, então a coluna fica no
    default `'Sheet1'` do banco. Ao subir um CSV, o Sheets batiza a aba com o nome do
@@ -458,7 +466,7 @@ da última.
    Bug de produção, não do teste: atinge todo Sheets em português (aba padrão
    "Página1") e todo CSV/XLSX importado. **Tem dono** — `origin/fix/gid-da-aba`,
    ainda não em `plataforma`. Aqui, renomear resolve.
-4. Criar uma **organização nova, dedicada a teste** (decisão do furo #2), e passar a
+5. Criar uma **organização nova, dedicada a teste** (decisão do furo #2), e passar a
    planilha pelo pipeline de importação normal (`/cfgdatabase`). Org nova, e não
    Babygoat/Machado Lmtd, por dois motivos: garante que nada nesta fase encosta em
    dado real, e dá um lugar limpo para criar o cargo sem permissão que a §8.2(4)

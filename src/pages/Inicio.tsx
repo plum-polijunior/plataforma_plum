@@ -365,24 +365,7 @@ function GradeDeCards({
 
   return (
     <div className="space-y-4">
-      {numeros.length > 0 && (
-        // Flex, não grid: com `flex-1` cada tile CRESCE para ocupar a sobra, e
-        // a última fileira fica cheia mesmo quando o número de KPIs não divide
-        // certo pelas colunas. Numa grade fixa de 4, cinco tiles deixam três
-        // buracos na segunda linha — foi exatamente o vazio que aparecia.
-        // O herói leva `flex-[2]`: o dobro da fatia dos outros, seja qual for
-        // a quantidade.
-        <div className="flex flex-wrap gap-4">
-          {numeros.map((card, i) => (
-            <div
-              key={card.id}
-              className={`min-w-[9.5rem] ${i === 0 ? "flex-[2]" : "flex-1"}`}
-            >
-              <CardDashboard card={card} compacto heroi={i === 0} acoes={acoesDe?.(card)} />
-            </div>
-          ))}
-        </div>
-      )}
+      {numeros.length > 0 && <TiraDeNumeros cards={numeros} acoesDe={acoesDe} />}
 
       {graficos.length > 0 && (
         <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -391,6 +374,52 @@ function GradeDeCards({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A tira de números, em fileiras EQUILIBRADAS.
+ *
+ * O problema que isto resolve: com `flex-wrap` puro e uma largura mínima, seis
+ * tiles cabiam apertados numa fileira só, e a quebra — quando acontecia —
+ * deixava uma fileira cheia e outra com um tile solto esticado.
+ *
+ * Agora a quantidade por fileira é decidida antes: até 4 números cabem em uma
+ * fileira; acima disso vira metade em cada uma. Com 6 dá 3 e 3; com 5 dá 3 e 2,
+ * e como cada tile mantém `flex-grow`, a fileira curta **estica para fechar**
+ * em vez de deixar buraco. Nunca mais de 4 por fileira: acima disso o número
+ * grande não cabe sem truncar.
+ *
+ * O herói só ganha o dobro de largura quando há espaço de sobra (até 3 tiles).
+ * Com a tira cheia, largura dupla apertaria os vizinhos — e o corpo maior da
+ * fonte já basta para dar o foco.
+ */
+function TiraDeNumeros({
+  cards,
+  acoesDe,
+}: {
+  cards: CardNaTela[];
+  acoesDe?: (card: CardNaTela) => AcoesCard;
+}) {
+  const porFileira = Math.min(cards.length <= 4 ? cards.length : Math.ceil(cards.length / 2), 4);
+  const heroiDuplo = cards.length <= 3;
+
+  // `calc` com o gap descontado: sem isso o último tile de cada fileira estoura
+  // a largura e quebra sozinho, produzindo justamente a fileira órfã.
+  const base = `calc((100% - ${porFileira - 1} * 1rem) / ${porFileira})`;
+
+  return (
+    <div className="flex flex-wrap gap-4">
+      {cards.map((card, i) => (
+        <div
+          key={card.id}
+          className="grow"
+          style={{ flexBasis: heroiDuplo && i === 0 ? `calc(2 * ${base})` : base }}
+        >
+          <CardDashboard card={card} compacto heroi={i === 0} acoes={acoesDe?.(card)} />
+        </div>
+      ))}
     </div>
   );
 }
