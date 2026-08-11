@@ -314,6 +314,94 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // Um card do dashboard é um Query Plan salvo, re-executado periodicamente.
+      // Ver migration 20260806230000_dashboard_cards.sql, bloco 1.
+      dashboard_cards: {
+        Row: {
+          id: string
+          organization_id: string
+          dataset_id: string
+          created_by: string | null
+          title: string
+          // 'pinned' = nasceu de uma pergunta real; 'suggested' = proposto pelo
+          // gerador (a coluna existe, o gerador ainda não).
+          source: string
+          origin_question: string | null
+          query_plan: Json
+          // Enum fechado por CHECK no banco. 'donut'/'pie' NÃO existem de
+          // propósito — ver DESIGN.md §3 e §10.
+          viz: "kpi" | "line" | "bar" | "stacked_bar" | "meter" | "table"
+          // true=subir é bom, false=subir é ruim, null=neutro (delta sem cor).
+          higher_is_better: boolean | null
+          refresh_interval_minutes: number
+          position: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          dataset_id: string
+          // A policy de INSERT exige created_by = auth.uid(). Omitir faz o
+          // Postgres recusar sem dizer qual condição falhou.
+          created_by: string
+          title: string
+          source?: string
+          origin_question?: string | null
+          query_plan: Json
+          viz: "kpi" | "line" | "bar" | "stacked_bar" | "meter" | "table"
+          higher_is_better?: boolean | null
+          refresh_interval_minutes?: number
+          position?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          viz?: "kpi" | "line" | "bar" | "stacked_bar" | "meter" | "table"
+          higher_is_better?: boolean | null
+          refresh_interval_minutes?: number
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_cards_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      // Histórico de execuções, chaveado pela IMPRESSÃO DIGITAL DA PERMISSÃO e
+      // não por role_id — revogar coluna invalida o cache sozinho. Só a Edge
+      // Function escreve aqui (service role): sem policy de INSERT para
+      // `authenticated`, o navegador não fabrica resultado.
+      dashboard_card_snapshots: {
+        Row: {
+          card_id: string
+          permissions_fingerprint: string
+          organization_id: string
+          role_id: string | null
+          payload: Json
+          row_count: number
+          // Vestigial: o k-anonimato foi removido em 2026-08-08 e isto volta
+          // sempre 0. Mantido por compatibilidade de contrato.
+          suppressed_groups: number
+          computed_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_card_snapshots_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_cards"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       Leads: {
         Row: {
           created_at: string

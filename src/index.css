@@ -47,6 +47,27 @@
     --gradient-text: linear-gradient(90deg, hsl(270 80% 85%), hsl(280 70% 80%), hsl(270 90% 90%));
     --gradient-glow: radial-gradient(circle, hsl(270 70% 60% / 0.3), transparent);
 
+    /* ── Tokens de App UI (DESIGN.md §2 e §3) ───────────────────────────────
+       Aditivos: nada acima foi alterado. A landing continua com gradiente,
+       glow e vidro; as rotas de app (/inicio) usam estes.
+
+       Paleta de série VALIDADA (§3), não estimada: pior par adjacente a
+       ΔE 19,3 em visão normal e 8,4 sob daltonismo, contra a superfície do
+       card. Ordem fixa, atribuída por posição — nunca ciclar, nunca gerar
+       cor nova. O roxo da marca NÃO entra aqui de propósito: ele pertence
+       só ao cromo interativo. */
+    --serie-1: 212 78% 56%;   /* azul     #3987E5 */
+    --serie-2: 16 70% 50%;    /* laranja  #D95926 */
+    --serie-3: 162 72% 36%;   /* aqua     #199E70 */
+    --serie-4: 40 100% 39%;   /* amarelo  #C98500 */
+    --serie-5: 340 58% 58%;   /* magenta  #D55181 */
+    --serie-6: 120 100% 26%;  /* verde    #008300 */
+    --serie-7: 0 71% 65%;     /* vermelho #E66767 */
+
+    /* Cromo de gráfico: recessivo por definição. */
+    --grid: 60 2% 17%;
+    --axis: 60 2% 22%;
+
     --sidebar-background: 260 30% 6%;
     --sidebar-foreground: 270 20% 90%;
     --sidebar-primary: 270 70% 60%;
