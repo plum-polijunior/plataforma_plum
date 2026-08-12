@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import plumMascote from "@/assets/plum-mascot-transparent.png";
+import { MascoteAnimado } from "./MascoteAnimado";
 
 interface HeroSectionProps {
   onNavigate: (sectionId: string) => void;
@@ -92,16 +92,15 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
       />
 
       <div className="relative z-10 mx-auto max-w-[800px] text-center">
-        <motion.img
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6 }}
-          src={plumMascote}
-          alt=""
-          aria-hidden="true"
-          className="mx-auto h-[150px] object-contain"
+          className="mx-auto w-[150px]"
           style={{ filter: "drop-shadow(0 14px 24px hsl(329 44% 33% / 0.3))" }}
-        />
+        >
+          <MascoteAnimado className="aspect-square" />
+        </motion.div>
 
         {/* As três linhas vivem num elemento só, e não em dois como no
             protótipo (onde "Plum" era um `<p>` de 50px acima de um `<h1>` de

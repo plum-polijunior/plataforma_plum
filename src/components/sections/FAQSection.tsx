@@ -5,7 +5,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import plumMascote from "@/assets/plum-mascot-transparent.png";
+import { MascoteAnimado } from "./MascoteAnimado";
 
 const PERGUNTAS = [
   {
@@ -60,12 +60,12 @@ export function FAQSection() {
               </span>
               <div className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-b border-r border-border bg-card" />
             </div>
-            <img
-              src={plumMascote}
-              alt=""
-              className="mx-auto w-[172px] animate-cloud-float object-contain"
+            <div
+              className="mx-auto w-[172px] animate-cloud-float"
               style={{ filter: "drop-shadow(0 14px 24px hsl(329 44% 33% / 0.22))" }}
-            />
+            >
+              <MascoteAnimado className="aspect-square" />
+            </div>
           </div>
 
           <div className="text-center sm:pb-6 sm:text-left">
