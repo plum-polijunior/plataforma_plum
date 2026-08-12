@@ -3,7 +3,7 @@ import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-d
 import { Bot, Building2, ChevronRight, Database, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import plumLogo from "@/assets/plum-logo.png";
+import plumLogo from "@/assets/plum-mascot-transparent.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgAccess } from "@/hooks/use-org-access";
 import AccessPending from "@/pages/AccessPending";
