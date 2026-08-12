@@ -40,17 +40,45 @@ import type { CardNaTela, TipoViz } from "./tipos";
 /**
  * O que fica GRAVADO no card, ou seja, o padrão que toda a organização vê.
  *
- * `line` e `meter` não entram: `line` depende de agrupamento por período, que o
- * executor ainda não faz, e `meter` precisa de uma meta, que não existe onde
- * guardar. Oferecer qualquer um dos dois hoje seria publicar um card que não
- * desenha nada.
+ * `meter` não entra: precisa de uma meta, e não existe onde guardar (nem coluna
+ * em `dashboard_cards`, nem decisão de produto). Oferecê-lo seria publicar um
+ * card que não desenha nada.
+ *
+ * ⭐ `line` entrou na Fase 5b, mas é CONDICIONAL — ver `VIZ_PARA` abaixo. Antes
+ * dela, `line` estava fora por dois motivos, e só um deixou de valer: o executor
+ * não sabia agrupar por período (resolvido), e uma linha sobre categoria não
+ * ordenada não significa nada (continua valendo, e é por isso que a lista é
+ * função do card e não uma constante).
  */
-const VIZ: { valor: TipoViz; rotulo: string }[] = [
+const VIZ_BASE: { valor: TipoViz; rotulo: string }[] = [
   { valor: "kpi", rotulo: "Número" },
   { valor: "bar", rotulo: "Barras" },
   { valor: "stacked_bar", rotulo: "Parte do todo" },
   { valor: "table", rotulo: "Tabela" },
 ];
+
+/**
+ * As opções graváveis para ESTE card.
+ *
+ * `line` só aparece quando o `group_by` do plano tem truncamento de período —
+ * a mesma regra que `formasCompativeis` aplica ao alternador "Ver como", e pelo
+ * mesmo motivo: ligar Sul, Norte e Centro com um traço sugere uma progressão
+ * entre eles que não existe.
+ *
+ * A diferença é a consequência. O alternador não grava nada; aqui grava, e um
+ * `line` publicado sobre categoria seria o padrão da organização inteira.
+ */
+function vizPara(card: CardNaTela | null): { valor: TipoViz; rotulo: string }[] {
+  if (!card?.periodo) return VIZ_BASE;
+  // Depois de "Barras", como em `formasCompativeis` — a ordem da lista é a
+  // ordem do menu, e barras continua leitura legítima num card de período.
+  return [
+    VIZ_BASE[0],
+    VIZ_BASE[1],
+    { valor: "line", rotulo: "Linha" },
+    ...VIZ_BASE.slice(2),
+  ];
+}
 
 interface Props {
   card: CardNaTela | null;
@@ -131,7 +159,7 @@ export function EditarCardDialog({ card, onFechar, onSalvo }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {VIZ.map((v) => (
+                {vizPara(card).map((v) => (
                   <SelectItem key={v.valor} value={v.valor}>
                     {v.rotulo}
                   </SelectItem>

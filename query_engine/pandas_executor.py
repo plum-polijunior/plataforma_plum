@@ -227,19 +227,49 @@ def _avaliar_expressao(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Agrupamento: validação de tipo do `group_by`
+# Agrupamento: validação de tipo do `group_by` e truncamento por período
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Os quatro truncamentos aceitos (decisão D2 da Fase 5b). Fechado de propósito,
+# como `_OPS_ARITMETICOS`: nada que o agente possa inventar entra aqui.
+#
+# `day` NÃO está na lista, e a ausência é deliberada: agrupar pela coluna de data
+# crua já agrupa por dia, e os dois rótulos DIVERGIRIAM — `_serialize_df` render-
+# iza datetime como `%d/%m/%Y` ("05/01/2026") e um período `day` sairia
+# "2026-01-05". Duas formas de pedir a mesma coisa com duas respostas na tela.
+_TRUNC_PARA_PERIODO = {
+    "week": "W",
+    "month": "M",
+    "quarter": "Q",
+    "year": "Y",
+}
+
+# Rótulo das linhas cuja data não pôde ser lida (decisão D6).
+#
+# `groupby(dropna=False)` MANTÉM o grupo nulo, e é isso que queremos: descartar
+# essas linhas faria o total do gráfico não fechar com o total da base, em
+# silêncio — o mesmo erro que `_grouped_agg` se recusa a cometer com coluna
+# ausente. O que não pode é o rótulo vazar como "NaT"/"nan", que é representação
+# interna do pandas chegando ao usuário final.
+_SEM_DATA = "Sem data"
 
 
 def _colunas_de_group_by(group_by_raw: object) -> list:
     """
-    Os nomes de coluna de `group_by`, validando o TIPO de cada item.
+    Os pares `(coluna, trunc)` de `group_by`, validando o TIPO de cada item.
 
-    Existe porque item de tipo inesperado não estourava aqui — ele ATRAVESSAVA.
-    `_strip_table({...})` devolve o dict intacto, porque `"." in dict` testa as
-    *chaves* do dict e dá False. O erro só aparecia lá embaixo, em
-    `_grouped_agg`, no `c not in df.columns` → `pandas.Index.__contains__` →
-    `hash(dict)` → `TypeError: unhashable type: 'dict'`.
+    `trunc` é `None` na forma antiga (item string) e um dos `_TRUNC_PARA_PERIODO`
+    na forma objeto. Duas formas aceitas:
+
+        "data_da_venda"                              -> ("data_da_venda", None)
+        {"col": "data_da_venda", "trunc": "month"}   -> ("data_da_venda", "month")
+        {"col": "regiao"}                            -> ("regiao", None)
+
+    A validação de tipo existe porque item de tipo inesperado não estourava aqui
+    — ele ATRAVESSAVA. `_strip_table({...})` devolve o dict intacto, porque
+    `"." in dict` testa as *chaves* do dict e dá False. O erro só aparecia lá
+    embaixo, em `_grouped_agg`, no `c not in df.columns` →
+    `pandas.Index.__contains__` → `hash(dict)` → `TypeError: unhashable type`.
 
     E `TypeError` não é `ExecutorError`. Ele escapava do `except` do `main.py` —
     e não só do `except`: escapava do LAÇO `for pedido in aprovados`. Ou seja,
@@ -249,13 +279,9 @@ def _colunas_de_group_by(group_by_raw: object) -> list:
     "Um card ruim não pode derrubar o dashboard inteiro."
 
     É a quarta ocorrência do mesmo padrão que `select`, `order_by` e `where` já
-    tratam neste arquivo, e a de maior alcance das quatro.
-
-    A forma objeto tem mensagem PRÓPRIA, separada de "tipo inválido", porque ela
-    é o que a Fase 5b vai introduzir (`{"col": ..., "trunc": "month"}`): quem
-    emitiu o plano pediu algo que este executor ainda não faz, e "ainda não sei
-    agrupar por período" é um diagnóstico diferente de "isto não é nome de
-    coluna". Quando o `trunc` entrar (PR 2), é este ramo que passa a aceitar.
+    tratam neste arquivo, e a de maior alcance das quatro. A trava entrou no PR 1
+    da Fase 5b, um PR antes de a forma objeto passar a ser aceita — fechadura
+    antes de abrir a porta.
     """
     if group_by_raw is None:
         return []
@@ -270,7 +296,7 @@ def _colunas_de_group_by(group_by_raw: object) -> list:
             f"do valor em vez de por coluna."
         )
 
-    cols: list = []
+    pares: list = []
     for item in group_by_raw:
         # Item vazio/nulo continua sendo ignorado, como sempre foi: sobra de
         # lista do LLM não é motivo para perder a pergunta inteira.
@@ -278,24 +304,131 @@ def _colunas_de_group_by(group_by_raw: object) -> list:
             continue
 
         if isinstance(item, dict):
-            raise ExecutorError(
-                "Agrupar por periodo ainda nao e suportado: 'group_by' recebeu "
-                f"um objeto (chaves: {', '.join(sorted(map(str, item)))}) em vez "
-                f"de um nome de coluna. Agrupe por uma coluna, ou filtre por "
-                f"intervalo de datas no 'where'."
-            )
+            bruto = item.get("col")
+            if not isinstance(bruto, str) or not bruto.strip():
+                raise ExecutorError(
+                    f"Item de 'group_by' em forma de objeto precisa de 'col' com "
+                    f"o nome da coluna em texto (chaves recebidas: "
+                    f"{', '.join(sorted(map(str, item))) or 'nenhuma'})."
+                )
+
+            trunc_bruto = item.get("trunc")
+            if trunc_bruto is None:
+                trunc = None
+            elif not isinstance(trunc_bruto, str):
+                raise ExecutorError(
+                    f"'trunc' de 'group_by' precisa ser texto, veio "
+                    f"{type(trunc_bruto).__name__}."
+                )
+            else:
+                trunc = trunc_bruto.strip().lower()
+                if trunc not in _TRUNC_PARA_PERIODO:
+                    raise ExecutorError(
+                        f"Truncamento de periodo '{trunc_bruto}' nao e suportado. "
+                        f"Aceitos: {', '.join(_TRUNC_PARA_PERIODO)}."
+                    )
+
+            col = _strip_table(bruto.strip())
+            if col:
+                pares.append((col, trunc))
+            continue
 
         if not isinstance(item, str):
             raise ExecutorError(
-                f"Item de 'group_by' invalido: esperava nome de coluna em texto, "
-                f"veio {type(item).__name__}."
+                f"Item de 'group_by' invalido: esperava nome de coluna em texto "
+                f"ou objeto {{col, trunc}}, veio {type(item).__name__}."
             )
 
         col = _strip_table(item.strip())
         if col:
-            cols.append(col)
+            pares.append((col, None))
 
-    return cols
+    return pares
+
+
+def _rotulo_de_periodo(
+    df: pd.DataFrame, col: str, trunc: str, roles: Dict[str, str]
+) -> pd.Series:
+    """
+    A coluna de data virada em rótulo de período, como TEXTO ordenável.
+
+    ── Por que texto, e por que ISO (decisão D3) ────────────────────────────
+    `Period` do pandas não é serializável em JSON ("Object of type Period is not
+    JSON serializable") e `_serialize_df` só trata datetime/float/int — um dtype
+    `period` passaria incólume e estouraria no FastAPI. Materializar como string
+    aqui evita isso e, mais importante, deixa `order_by`, `rename_map` e a
+    ordenação de colunas de `_grouped_agg` sem UMA linha alterada.
+
+    O formato é ISO porque **o rótulo tem que ordenar como texto**. O `order_by`
+    ordena a coluna de saída e o gráfico de linha desenha na ordem das linhas; um
+    rótulo "jan/2026" ordenaria alfabeticamente (abr, ago, dez, fev...) e a linha
+    sairia embaralhada sem nenhum erro no caminho. A tradução para português é
+    responsabilidade do front (`src/components/dashboard/formato.ts`), onde as
+    outras traduções já moram.
+
+        month    -> "2026-01"
+        quarter  -> "2026Q1"
+        year     -> "2026"
+        week     -> "2026-01-05"   (a SEGUNDA-feira que abre a semana)
+
+    ── Por que a semana é rotulada pela data de início ──────────────────────
+    O rótulo óbvio, `f"{p.year}-S{p.week}"`, MENTE na virada do ano: para
+    2027-01-03 o pandas dá `p.year=2027, p.week=53`, ou seja "2027-S53" — semana
+    53 de um ano que acabou de começar (a ISO diz 2026-W53). E "2027-S53"
+    ordenaria no extremo direito de 2027, desenhando a primeira semana do ano no
+    fim dele. A data de início não mente e ordena certo.
+
+    Nota medida, para ninguém "consertar" depois: `to_period("W")` do pandas é
+    `period[W-SUN]`, que significa semana que TERMINA no domingo, isto é, que
+    COMEÇA na segunda. É já a convenção brasileira, e também a ISO 8601. Não há
+    nada a configurar aqui.
+
+    ── Fuso horário (decisão D5) ────────────────────────────────────────────
+    Nenhuma conversão de fuso, em lugar nenhum. As datas chegam `naive` e o
+    agrupamento usa o dia como ele está na planilha, que é o comportamento certo
+    para dado de negócio brasileiro. Converter faria a venda de 1º de março às
+    23h "aparecer em fevereiro".
+    """
+    if col not in df.columns:
+        # `df[col]` numa coluna ausente é KeyError, que não é ExecutorError:
+        # escaparia do laço por card e viraria 500 do lote, a mesma falha que o
+        # PR 1 fechou uma função acima.
+        raise MissingColumnError(
+            f"Coluna '{col}' pedida em group_by nao existe nos dados."
+        )
+
+    s = df[col]
+
+    # Papel `ano` é Int64, não datetime — `.dt` levanta AttributeError, que é
+    # outro 500. E o pedido é redundante: agrupar por essa coluna como string
+    # simples JÁ devolve baldes de ano. É o caso da base `tabela-de-estudos`,
+    # cuja coluna de conclusão mistura "2005" com "01/12/2005".
+    if _is_ano(col, roles):
+        raise ExecutorError(
+            f"A coluna '{col}' e de ano, e agrupar por periodo nao se aplica a "
+            f"ela: agrupe por '{col}' direto, sem 'trunc', que o resultado ja "
+            f"sai por ano."
+        )
+
+    if not pd.api.types.is_datetime64_any_dtype(s):
+        # Nunca converter em silêncio. Uma coluna de texto que "parece data" só
+        # parece: `pd.to_datetime` acertaria algumas linhas, erraria outras e o
+        # gráfico sairia com meses inventados e cara de certo.
+        raise ExecutorError(
+            f"Nao da para agrupar '{col}' por periodo: a coluna nao e de data "
+            f"(tipo atual: {s.dtype}). Para virar periodo ela precisa estar "
+            f"tipada como 'data' no dicionario da base."
+        )
+
+    periodo = s.dt.to_period(_TRUNC_PARA_PERIODO[trunc])
+
+    if trunc == "week":
+        rotulo = periodo.dt.start_time.dt.strftime("%Y-%m-%d")
+    else:
+        rotulo = periodo.astype(str)
+
+    # Linha sem data vira rótulo explícito, nunca "NaT"/"nan" (D6).
+    return rotulo.where(s.notna(), _SEM_DATA)
 
 
 def execute_plan(
@@ -453,7 +586,27 @@ def execute_plan(
     # Trava de tipo antes de qualquer uso: ver `_colunas_de_group_by`. Item que
     # não é nome de coluna vira ExecutorError aqui, e não TypeError trinta linhas
     # adiante — que escapava do laço por card e derrubava o lote inteiro.
-    gb_cols = _colunas_de_group_by(group_by_raw)
+    gb_pares = _colunas_de_group_by(group_by_raw)
+    gb_cols = [col for col, _ in gb_pares]
+
+    # ── TRUNCAMENTO POR PERÍODO ──────────────────────────────────────────────
+    # O rótulo é materializado NA PRÓPRIA COLUNA, mantendo o nome original, e
+    # depois do `where` (que já filtrou por data crua, como deve).
+    #
+    # Escrever na mesma coluna, em vez de criar uma sintética como
+    # `_PREFIXO_DERIVADA` faz para expressão aritmética, é o que mantém tudo a
+    # jusante intocado: `_grouped_agg`, `rename_map`, a ordenação de colunas,
+    # `order_by` e `_serialize_df` continuam vendo "uma coluna de texto chamada
+    # data_da_venda" e não precisam saber que período existe.
+    for col, trunc in gb_pares:
+        if trunc is None:
+            continue
+        if not df_copiado:
+            # `df` aqui costuma ser a fatia `df[mask]` do where, não um frame
+            # próprio: escrever sem copiar cai em SettingWithCopyWarning.
+            df = df.copy()
+            df_copiado = True
+        df[col] = _rotulo_de_periodo(df, col, trunc, roles)
 
     # ── COM AGRUPAMENTO ──────────────────────────────────────────────────────
     # Nada de descartar coluna de group_by ausente em silêncio: agrupar por

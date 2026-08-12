@@ -259,9 +259,32 @@
     --danger: 349 55% 60%;
     --danger-line: 349 40% 32%;
 
-    /* A paleta de série do dashboard (`src/components/dashboard/cores.ts`)
-       continua calibrada só para o cartão claro — fora de escopo aqui, ver
-       o plano. Gráficos no escuro herdam a rampa do claro sem adaptação. */
+    /* ── Grade e eixo do gráfico — MEDIDOS, não escolhidos (Fase 5b, D8) ──
+       Estes dois FALTAVAM, e no gráfico de linha a falta é visível: sem eles a
+       gridline herdava o valor do claro (`--grid: 330 17% 91%`, L 91%) e virava
+       uma linha quase branca sobre o cartão escuro (L 10%). O `DESIGN.md` §4
+       exige gridline "sólida, recessiva" — era o oposto: a coisa mais chamativa
+       do card.
+
+       O alvo não foi estética, foi igualar o contraste que o claro já tem e que
+       já passou por revisão. Medido com a fórmula de luminância da WCAG contra
+       `--card` de cada tema:
+
+                        claro (referência)   escuro com valor do claro   escolhido
+         --grid              1.248                   14.283               1.262
+         --axis              1.418                   12.570               1.405
+
+       Matiz 320, a mesma do resto do tema escuro, para a grade não puxar para
+       outro lugar do círculo. */
+    --grid: 320 12% 18%;
+    --axis: 320 12% 21%;
+
+    /* ⚠️ A paleta de SÉRIE (`src/components/dashboard/cores.ts`, `--serie-1..7`)
+       continua calibrada só para o cartão claro, e isto vale para TODAS as viz
+       — `VizBar`, `VizPie`, `VizStackedBar` e a `VizLinha` nova. Fora de escopo
+       aqui de propósito: é medição por matiz, com faixa de luminosidade e ΔE,
+       e `src/lib/contraste-serie.test.ts` trava só o claro. Ver a Parte C de
+       `docs/2026-08-12-PLANO-merge-landing-page.md`. */
   }
 }
 

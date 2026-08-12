@@ -33,6 +33,22 @@ export function formasCompativeis(card: CardNaTela): FormaVisual[] {
   }
 
   const formas: FormaVisual[] = ["bar"];
+
+  // ⭐ Linha SÓ quando o agrupamento é de período.
+  //
+  // É a regra mais importante desta função, e não é preciosismo: ligar Sul,
+  // Norte e Centro com um traço sugere uma progressão entre eles que não existe.
+  // A linha comunica "isto evoluiu nesta ordem", e categoria não tem ordem.
+  //
+  // `card.periodo` só vem preenchido quando o `group_by` usou a forma objeto com
+  // `trunc` (ver `truncDoPlano` em `use-dashboard-cards.ts`). Agrupar pela
+  // coluna de data crua NÃO conta: são ~250 pontos num ano, um por dia, que é
+  // ruído e não evolução — foi justamente o que a Fase 5b existiu para resolver.
+  //
+  // Vem depois de `bar` de propósito: mesmo num card de período, barras
+  // continuam uma leitura legítima, e a ordem desta lista é a ordem do menu.
+  if (card.periodo) formas.push("line");
+
   // Parte-do-todo exige que as partes somem um todo. Média por categoria não
   // soma nada — ver o comentário em VizStackedBar.
   if (SOMAVEIS.has(card.agregacao ?? "")) formas.push("stacked_bar", "pie");

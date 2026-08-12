@@ -216,7 +216,27 @@ export function extractColumns(plan: QueryPlan | null | undefined): Set<string> 
   // aqui um nome é sempre coluna de verdade. Continua estrito de propósito: um
   // alias em `group_by` seria uma coluna real sendo lida, e dispensá-lo abriria
   // exatamente o bypass que este arquivo existe para fechar.
-  for (const c of plan.group_by ?? []) addCol(cols, c);
+  //
+  // Duas formas, desde a Fase 5b (agrupar por período):
+  //   "data_da_venda"                              ← forma de sempre
+  //   {"col": "data_da_venda", "trunc": "month"}   ← truncamento de data
+  //
+  // O `col` é lido com `addCol` igual à forma string, porque é a MESMA coluna
+  // de origem: truncar não muda o que precisa ser lido da planilha nem o que o
+  // RBAC precisa autorizar. O `trunc` em si não é coluna e não entra.
+  //
+  // Sem este ramo, `addCol` descartaria o objeto calado (ele só aceita string) e
+  // a coluna de data não entraria em `required` — o executor não a carregaria e
+  // o card morreria em `MissingColumnError`. Falha fechada, não vazamento (o
+  // executor só lê o conjunto assinado), mas um card quebrado sem motivo
+  // aparente. Mesmo raciocínio do `else` da expressão aritmética acima.
+  for (const c of plan.group_by ?? []) {
+    if (c && typeof c === "object" && !Array.isArray(c)) {
+      addCol(cols, (c as Record<string, unknown>).col);
+    } else {
+      addCol(cols, c);
+    }
+  }
 
   // `order_by` é o oposto: roda depois da agregação, sobre o frame de saída,
   // cujas colunas são os aliases. Ordenar por um alias não lê nada da planilha
