@@ -201,9 +201,29 @@ conhecido, aberto, de outra propriedade. **Consequência prática enquanto isso 
 
 ## 7. Usar `plum_chat.assunto` para descobrir quais cards criar
 
+> ⚠️ **ATUALIZADO EM 2026-08-12.** O Agente Z **parou de preencher** o `assunto`: era `STRING`
+> livre com uma lista aberta de exemplos no prompt, e a mesma pergunta saía como "Vendas" numa
+> execução e "Venda" ou "Estudos Técnicos" na seguinte — ou seja, o ranking que este item
+> propõe seria calculado sobre categorias que não são estáveis.
+>
+> **A coluna foi mantida no banco de propósito**, e não só por a migration ser não destrutiva:
+> ela é o registro de que esta ideia existe e continua boa. O que caiu foi a *implementação*
+> (classificar por LLM com taxonomia aberta), não a *intenção* (montar o dashboard a partir das
+> perguntas reais, não do schema).
+>
+> **O que existe agora, e serve melhor:** `plum_chat.plan_query` guarda o Query Plan de cada
+> pergunta, e `dataset_id` diz contra qual base. Agrupar por plano canonicalizado
+> (`canonicalizarPlano`, `src/lib/plano-cache.ts`) dá um ranking do que as pessoas perguntam
+> que é **exato** — dois planos iguais são a mesma pergunta de verdade, sem depender de um
+> modelo concordar consigo mesmo sobre o rótulo.
+>
+> **Se um dia o `assunto` voltar**, o caminho provável é enum fechado com `response_schema`, ou
+> derivar a categoria do próprio plano (que coluna, que agregação) em vez de perguntar ao LLM.
+> Os valores antigos na coluna são a amostra de como a versão livre se comportava.
+
 **O quê:** consultar o histórico de perguntas já feitas no chat, agrupado pelo campo `assunto`
-que o Agente Z preenche em toda mensagem (`src/pages/PlumChat.tsx:126-128`), e usar o ranking
-para decidir quais cards o dashboard deve sugerir primeiro.
+que o Agente Z preenchia em toda mensagem, e usar o ranking para decidir quais cards o dashboard
+deve sugerir primeiro.
 
 **Por quê:** é a única fonte empírica que existe hoje sobre o que as pessoas realmente querem
 saber. Todo o resto do desenho do dashboard é inferência a partir do schema.

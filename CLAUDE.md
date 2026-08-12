@@ -144,7 +144,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `public_email_domains` | denylist | 15 domínios públicos seed (gmail, outlook, …) |
 | `domain_binding_audit` | auditoria de vínculo | `signal`, `result` |
 | `profile_changes_audit` | auditoria append-only | `field`, `old_value`, `new_value` — só o trigger escreve |
-| `plum_chat` | histórico do chat | `role` ∈ `user`\|`assistant`, `content`, `assunto` |
+| `plum_chat` | histórico do chat | `role` ∈ `user`\|`assistant`, `content`, `plan_query jsonb` ⭐ (o Query Plan, guardado para reuso), `dataset_id`. `assunto` é **vestigial** desde 2026-08-12: não é escrita nem lida |
 | `Leads` | landing page | dívida conhecida (§5, D-13) |
 
 `profile_status = ('pendente','ativo','rejeitado')` (docs também mencionam `desativado`).
@@ -302,12 +302,25 @@ Rascunhos intermediários vivem em `datasets.sketch` e viram `NULL` na finaliza�
 Três invocações sequenciais, todas recebendo `schemaMetadata`:
 
 1. `guard` — **Agente Z** (Guardião de Contexto e Viabilidade). Retorna
-   `{status: PERMITIDO|BLOQUEADO|INVIAVEL, message, assunto}`. `INVIAVEL` = a pergunta é
+   `{status: PERMITIDO|BLOQUEADO|INVIAVEL, message}`. `INVIAVEL` = a pergunta é
    sobre dados mas as colunas necessárias não existem (ex.: pedir lucro sem coluna de custo).
-   O `assunto` é gravado na linha do usuário em background e alimenta busca/dashboards.
+   Roda **sempre**, inclusive quando o plano vem do cache — é ele que barra pergunta fora de
+   escopo. O campo `assunto` saiu em 2026-08-12: era `STRING` livre com lista aberta de
+   exemplos no prompt, saía inconsistente para a mesma pergunta, e nada o consumia.
 2. `plan_query` — **Agente A** (Planejador Semântico). Vê só o `schema_metadata`, **nunca as
    linhas de dados**. Emite um Query Plan JSON: `from`, `target_columns`, `select`, `where`,
    `group_by`, `order_by`, `limit`.
+   ⭐ **Pode ser PULADO desde 2026-08-12**: se a mesma pessoa já fez exatamente aquela
+   pergunta, na mesma base, e o plano saiu idêntico `REPETICOES_PARA_REUSAR` vezes, o plano
+   guardado em `plum_chat.plan_query` é reusado. Ver `src/lib/plano-cache.ts`.
+   ⚠️ **Reusa-se o PLANO, nunca o RESULTADO.** O plano reusado continua entrando por
+   `execute_plan` e passando por `authorizePlan` com o `allowed_columns` de quem pergunta
+   agora — mesmo modelo dos `dashboard_cards`. Cachear o número pularia o RBAC por definição
+   e exigiria `permissions_fingerprint` na chave, como `dashboard_card_snapshots` faz.
+   ⚠️ **Plano com data absoluta nunca é guardado** (`planoTemData`): "quanto faturei hoje"
+   vira `["2026-08-12", ...]`, e reusar amanhã devolveria o dia errado em silêncio. Estender
+   o cache a datas relativas foi avaliado e **recusado** — ver
+   `PLANO-cache-de-perguntas-com-data.md`.
 3. `synthesize_answer` — **Agente C** (Sintetizador). Vê a pergunta + o vetor de resultados
    do executor, **nunca a base**. Não inventa número que não esteja no resultado.
 

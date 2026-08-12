@@ -292,12 +292,19 @@ async function handleExecutePlan(
 // ou vírgulas soltas. Em 2026-08-10 um `{..., "assunto": "Estudos Técnicos" " }`
 // derrubou a pergunta inteira no guard — e o veredito nem era de bloqueio,
 // era PERMITIDO.
+//
+// ⚠️ O campo `assunto` saiu em 2026-08-12. Ele era uma `STRING` livre, e o
+// prompt oferecia só uma lista ABERTA de exemplos — nada restringia o valor,
+// então a mesma pergunta saía como "Vendas" numa execução e "Venda" ou
+// "Estudos Técnicos" na seguinte. Previsão de assunto não escala em
+// multi-tenant sem empurrar a taxonomia para o usuário, e nada no produto
+// chegou a consumir o campo (`TODOS.md` #7). Note a ironia registrada acima:
+// foi justamente o `assunto` que causou o incidente que motivou este schema.
 const SCHEMA_GUARD = {
   type: "OBJECT",
   properties: {
     status: { type: "STRING", enum: ["PERMITIDO", "BLOQUEADO", "INVIAVEL"] },
     message: { type: "STRING", nullable: true },
-    assunto: { type: "STRING", nullable: true },
   },
   required: ["status"],
 };
@@ -332,8 +339,7 @@ Sua missão é realizar duas verificações estritas:
 
 Sempre retorne ESTRITAMENTE um JSON com as chaves:
 "status": ("PERMITIDO" | "BLOQUEADO" | "INVIAVEL")
-"message": (string com a mensagem amigável para o usuário caso status seja BLOQUEADO ou INVIAVEL, ou null se PERMITIDO)
-"assunto": (string curta categorizando a pergunta corporativa. Ex: "Faturamento / Receita", "RH", "Vendas", "Comparação", "Estoque", "Outros". Null se bloqueado.)`;
+"message": (string com a mensagem amigável para o usuário caso status seja BLOQUEADO ou INVIAVEL, ou null se PERMITIDO)`;
 
     userPrompt = `Pergunta do Usuário: "${prompt}"\nSchema Metadata (JSON de Contexto): ${JSON.stringify(schemaMetadata || {})}`;
   } else if (action === "plan_query") {

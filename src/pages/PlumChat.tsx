@@ -7,12 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { PlumThinkingBar } from "@/components/PlumThinkingBar";
 import { RespostaMarkdown } from "@/components/RespostaMarkdown";
+import {
+  REPETICOES_PARA_REUSAR,
+  escolherPlanoDominante,
+  planoTemData,
+} from "@/lib/plano-cache";
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  assunto?: string;
   created_at: string;
 }
 
@@ -86,6 +90,54 @@ export default function PlumChat() {
     }
   };
 
+  /**
+   * Procura um plano já usado para EXATAMENTE esta pergunta, nesta base.
+   *
+   * ⚠️ ESCOPO: só as perguntas do próprio usuário. A RLS de `plum_chat` é
+   * `auth.uid() = user_id`, e o CLAUDE.md declara "Chat é 100% privado por
+   * usuário" — contar as repetições da organização inteira exigiria uma RPC
+   * `SECURITY DEFINER` que devolvesse só {plano, contagem}, nunca linhas de
+   * chat. Decisão consciente de 2026-08-12: ficou de fora. O custo é que o
+   * reuso dispara pouco, porque exige a MESMA pessoa repetindo a MESMA
+   * pergunta — por isso os dois `console.log` abaixo, para dar como medir se
+   * vale a pena ampliar depois.
+   *
+   * ⚠️ NÃO É CACHE DE RESULTADO. Devolve o PLANO, que segue por
+   * `execute_plan` e passa por `authorizePlan` com as permissões de quem
+   * pergunta agora. Um plano que cite coluna que o cargo não vê volta
+   * `forbidden`, igual a um plano recém-gerado.
+   *
+   * Falha em silêncio de propósito: se o lookup der erro, devolve null e o
+   * fluxo cai no Agente A, que é o comportamento de sempre. Uma otimização
+   * nunca deve derrubar a pergunta.
+   */
+  const buscarPlanoReusavel = async (pergunta: string): Promise<unknown | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('plum_chat')
+        .select('plan_query')
+        .eq('user_id', session.user.id)
+        .eq('dataset_id', selectedDatasetId)
+        .eq('content', pergunta)
+        .not('plan_query', 'is', null);
+
+      if (error || !data?.length) return null;
+
+      const planos = data.map((linha: { plan_query: unknown }) => linha.plan_query);
+      const escolhido = escolherPlanoDominante(planos);
+
+      if (!escolhido) {
+        console.log(
+          `[plano] sem reuso — ${planos.length} plano(s) guardado(s), limiar e ${REPETICOES_PARA_REUSAR}`,
+        );
+      }
+      return escolhido;
+    } catch (e) {
+      console.error('[plano] lookup falhou, seguindo para o Agente A:', e);
+      return null;
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!input.trim() || !selectedDatasetId) return;
     
@@ -94,7 +146,6 @@ export default function PlumChat() {
     setIsProcessing(true);
 
     const dataset = datasets.find(d => d.id === selectedDatasetId);
-    let assuntoMsg = null;
 
     try {
       // 1. Insert user message in DB immediately for optimistic UI
@@ -104,29 +155,30 @@ export default function PlumChat() {
           organization_id: organizationId,
           user_id: session.user.id,
           role: 'user',
-          content: userMsgContent
+          content: userMsgContent,
+          // Guardado desde o INSERT: é metade da chave de reuso do plano (a
+          // mesma frase contra outra base é outra pergunta).
+          dataset_id: selectedDatasetId,
         })
         .select()
         .single();
-        
+
       if (insertErr) throw insertErr;
-      
+
       setMessages(prev => [...prev, userMsgData as ChatMessage]);
 
       // 2. Chama Agente Z (Guardião)
+      //
+      // ⚠️ O guardião roda SEMPRE, inclusive quando o plano vem do cache. Ele
+      // é quem barra pergunta fora de escopo e pergunta inviável para a base —
+      // pular por causa de um plano guardado deixaria passar o que ele existe
+      // para segurar.
       const guardRes = await supabase.functions.invoke('ai-plum-chat', {
         body: { action: 'guard', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata }
       });
-      
+
       if (guardRes.error) throw guardRes.error;
       const guardData = guardRes.data.result;
-      
-      assuntoMsg = guardData.assunto;
-
-      // Update user message with "assunto" in background
-      if (assuntoMsg) {
-        supabase.from('plum_chat').update({ assunto: assuntoMsg }).eq('id', userMsgData.id).then();
-      }
 
       if (guardData.status !== "PERMITIDO") {
         await saveAndShowAssistantMsg(guardData.message || "Requisição bloqueada.");
@@ -134,12 +186,33 @@ export default function PlumChat() {
         return;
       }
 
-      // 3. Chama Agente A (Plan)
-      const planRes = await supabase.functions.invoke('ai-plum-chat', {
-        body: { action: 'plan_query', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata }
-      });
-      if (planRes.error) throw planRes.error;
-      const plan = planRes.data.result;
+      // 3. O plano: reusado, se esta mesma pergunta já produziu o mesmo plano
+      // vezes suficientes; senão, gerado pelo Agente A.
+      let plan = await buscarPlanoReusavel(userMsgContent);
+
+      if (plan) {
+        console.log('[plano] reuso — Agente A pulado');
+      } else {
+        const planRes = await supabase.functions.invoke('ai-plum-chat', {
+          body: { action: 'plan_query', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata }
+        });
+        if (planRes.error) throw planRes.error;
+        plan = planRes.data.result;
+
+        // Só guarda o que pode ser reusado depois. Plano com data absoluta
+        // fica de fora: "quanto faturei hoje" gera `["2026-08-12", ...]`, e
+        // reusar isso amanhã devolveria o número do dia errado, em silêncio.
+        // Ver `src/lib/plano-cache.ts` e o PLANO-cache-de-perguntas-com-data.md.
+        if (plan && !planoTemData(plan)) {
+          supabase
+            .from('plum_chat')
+            .update({ plan_query: plan })
+            .eq('id', userMsgData.id)
+            .then(({ error }) => {
+              if (error) console.error('[plano] falha ao guardar:', error.message);
+            });
+        }
+      }
 
       // 4. Executa o Pandas Executor de verdade (Lambda), via execute_plan.
       // A Edge Function resolve as colunas do plano, confere contra
@@ -268,12 +341,11 @@ export default function PlumChat() {
                   <div className="max-w-[76%] rounded-[15px_15px_5px_15px] bg-primary px-[15px] py-[11px] text-sm leading-[1.55] text-primary-foreground">
                     {msg.content}
                   </div>
+                  {/* O badge de `assunto` que ficava aqui saiu em 2026-08-12
+                      junto com a coluna: o Agente Z o classificava a partir de
+                      uma lista aberta e o valor saía inconsistente para a mesma
+                      pergunta. Nada consumia o campo. */}
                   <div className="flex items-center gap-2 px-1">
-                    {msg.assunto && (
-                      <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        {msg.assunto}
-                      </span>
-                    )}
                     <span className="text-[10px] font-medium text-muted-foreground">
                       {timeString} · {dateString}
                     </span>

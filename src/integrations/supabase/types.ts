@@ -343,8 +343,19 @@ export type Database = {
           // CHECK (role IN ('user','assistant')) no banco.
           role: "user" | "assistant"
           content: string
-          // Categoria que o Agente Z atribui à pergunta, gravada em background.
+          // ⚠️ VESTIGIAL desde 2026-08-12 (migration 20260812140000): não é
+          // mais escrita nem lida. O Agente Z classificava o assunto a partir
+          // de uma lista aberta e o valor saía inconsistente para a mesma
+          // pergunta. A coluna ficou no banco por a migration ser não
+          // destrutiva (CLAUDE.md §4.9).
           assunto: string | null
+          // Query Plan gerado pelo Agente A, guardado para reuso quando a
+          // mesma pergunta se repete. NULL na mensagem do assistente e em
+          // pergunta bloqueada pelo Agente Z.
+          plan_query: Json | null
+          // Base contra a qual a pergunta foi feita — faz parte da chave de
+          // reuso do plano.
+          dataset_id: string | null
           created_at: string
         }
         Insert: {
@@ -354,11 +365,15 @@ export type Database = {
           role: "user" | "assistant"
           content: string
           assunto?: string | null
+          plan_query?: Json | null
+          dataset_id?: string | null
           created_at?: string
         }
         Update: {
           assunto?: string | null
           content?: string
+          plan_query?: Json | null
+          dataset_id?: string | null
         }
         Relationships: [
           {
@@ -373,6 +388,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plum_chat_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
             referencedColumns: ["id"]
           }
         ]

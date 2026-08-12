@@ -157,3 +157,41 @@ origin/plataforma` sem pressa é mais barato que descobrir a divergência só no
    saiu da branch — quem resolve: o usuário — D.O.D.: comunicação direta com o colega, e decisão
    sobre se algo do alternador de tema claro/escuro que ficou só em `16d4747`/`rafaela` deve
    voltar em um commit separado.]
+
+### Task: mascote animado com fundo transparente (chroma key)
+
+1. **O que foi feito** — o mascote do hero e do FAQ passou a ser um vídeo com fundo
+   transparente de verdade (`public/mascote-animado.webm`, 562 kB). O arquivo de origem
+   (`z_mascot_and_background/plum_mascot_2.mp4`) vinha com **fundo verde**, e o verde foi
+   removido na origem, não em runtime. O recorte circular que existia antes **saiu**: ele só
+   existia para esconder o fundo preto opaco do vídeo anterior, e teria cortado as pontas
+   irregulares deste mascote.
+2. **Decisão técnica** — MP4/H.264 não tem canal alfa e o navegador não faz chroma key
+   sozinho, então havia duas saídas: chroma key por `<canvas>` a cada quadro (JS manipulando
+   ~920k pixels por frame) ou converter para **WebM VP9 com canal alfa**, que o navegador
+   decodifica nativamente. A segunda ganha por não ter custo de runtime nenhum. Três
+   parâmetros foram MEDIDOS, não escolhidos no olho:
+   - `chromakey` (YUV) em vez de `colorkey` (RGB): em RGB, a `similarity` que limpava o fundo
+     já comia os tons azulados do mascote — o corpo ficava semitransparente sobre fundo
+     colorido. Resíduo verde: 1,45% (RGB) contra 0,87% (YUV).
+   - `despill=type=green` depois do key: derrubou o resíduo de 0,87% para **zero**, sem mudar
+     a cor do mascote a olho nu.
+   - `scale=480`: o maior uso na tela é 172px, então 480px cobre tela 2x. Sem isso o arquivo
+     sairia ~4x maior sem ganho visível. O comando completo está no cabeçalho de
+     `src/components/sections/MascoteAnimado.tsx`, para quem precisar refazer.
+3. **Integrações tocadas** — N/A. Nenhuma rede, nenhum backend.
+4. **Safeguard** — o defeito, achado na verificação e não no pedido: a primeira versão do
+   fallback **empilhava** o PNG estático atrás do vídeo. Como o PNG é a arte ANTIGA (blob
+   liso) e o vídeo é a nova (com pontas), o mascote velho vazava por baixo formando um halo.
+   Corrigido para renderizar por **troca** (`onError`), nunca os dois ao mesmo tempo — e o
+   comentário no componente registra que empilhar só seria seguro se as duas artes fossem
+   iguais.
+5. **Como validar** — abrir `/`, conferir hero e FAQ: fundo do mascote transparente, sem
+   franja verde e sem halo de outro desenho por trás. Para testar o fallback, apontar o `src`
+   do vídeo para um arquivo inexistente e confirmar que o PNG aparece sozinho.
+6. **Lacunas e pendências** — [LACUNA: o fallback nunca foi exercitado num Safari real —
+   quem resolve: quem tiver um Mac/iPhone à mão — D.O.D.: abrir a landing no Safari e
+   confirmar se o WebM com alfa toca (Safari 16+ lê WebM, mas o suporte a canal alfa é
+   historicamente irregular); se não tocar, o PNG estático deve aparecer no lugar.]
+   [LACUNA: `public/hero-fundo.mp4` (2,7 MB) continua sem compressão — quem resolve: não
+   atribuído — D.O.D.: o vídeo de fundo não foi tocado nesta leva, a pedido do usuário.]
