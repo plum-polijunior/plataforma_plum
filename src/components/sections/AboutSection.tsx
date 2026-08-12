@@ -1,100 +1,85 @@
 import { motion } from "framer-motion";
-import { Users, Target, Zap } from "lucide-react";
-import DatabaseWithRestApi from "@/components/ui/database-with-rest-api";
 
-const cards = [
-  {
-    icon: Users,
-    title: "O Problema",
-    description: "Burocracia, lentidão e alta complexidade na obtenção de dados - os quais acabam sendo subutilizados.",
-  },
-  {
-    icon: Target,
-    title: "O Contexto",
-    description: "Necessidade por um mecanismo de simples obtenção de informações, de modo que seja fácil tornar esses dados em insights práticos.",
-  },
-  {
-    icon: Zap,
-    title: "A Solução",
-    description: "O Plum propõe um chatbot de consulta e avisos operacionais programáveis, conectando funcionários à base de dados e facilitando a busca e o recebimento de informações pontuais.",
-  },
+const SETORES = [
+  "Varejo",
+  "Indústria",
+  "E-commerce",
+  "Financeiro",
+  "Agências de Marketing",
+  "Consultórios",
 ];
 
+/**
+ * "O que somos".
+ *
+ * Reescrito em 2026-08-12 com o novo design. O que saiu da versão anterior: os
+ * três cartões "O Problema / O Contexto / A Solução" e o bloco animado
+ * "Para quem" (`ui/database-with-rest-api.tsx`, removido) — os mesmos seis
+ * setores agora são uma linha de texto, que diz a mesma coisa sem uma animação
+ * de fios entre caixas.
+ *
+ * Duas coisas do protótipo NÃO foram portadas, de propósito:
+ *
+ *   1. Os três cartões "Multi-canal / Níveis de acesso / Automação e alertas".
+ *      Eles viraram cartões de Funcionalidades, onde não competem com a
+ *      explicação do que o produto é.
+ *
+ *   2. O bloco de depoimento em vídeo. Ele traz um botão de play que não toca
+ *      nada e a frase "Veja como o Plum mudou a rotina da nossa operação" entre
+ *      aspas, que se apresenta como fala de um cliente. Não existe esse cliente
+ *      nem esse vídeo. Entra quando houver os dois.
+ */
 export function AboutSection() {
   return (
-    <section
-      id="sobre"
-      className="min-h-screen flex items-center justify-center py-20 px-4 relative overflow-hidden scroll-snap-start"
-    >
-      {/* Background glow */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+    <section id="sobre" className="relative overflow-hidden bg-secondary px-6 py-[110px]">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-20 left-1/4 h-[380px] w-[380px] rounded-full bg-primary/[0.06] blur-3xl"
+      />
 
-      <div className="container mx-auto max-w-6xl relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="text-center mb-16"
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.6 }}
+        className="relative mx-auto max-w-[1100px]"
+      >
+        <p className="text-[12.5px] font-semibold uppercase tracking-[1.5px] text-primary">
+          O que somos
+        </p>
+
+        <h2
+          className="text-gradient mt-3 font-bold leading-[1.15] tracking-[-0.02em]"
+          style={{ fontSize: "clamp(30px, 4vw, 44px)" }}
         >
-          <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            O que somos
-          </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Transformando dados operacionais em insights acessíveis via WhatsApp.
-          </p>
-        </motion.div>
+          Mais do que um chatbot.
+        </h2>
 
-        {/* Cards */}
-        <div className="grid md:grid-cols-3 gap-6 mb-16">
-          {cards.map((card, index) => (
-            <motion.div
-              key={card.title}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.15 }}
-              viewport={{ once: true }}
-              className="glass rounded-2xl p-6 hover:border-primary/30 transition-all duration-300 group"
-            >
-              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-4 group-hover:bg-primary/30 transition-colors">
-                <card.icon className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3 text-foreground">
-                {card.title}
-              </h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {card.description}
-              </p>
-            </motion.div>
-          ))}
+        <p className="mt-6 max-w-[720px] text-[17px] leading-[1.65] text-muted-foreground">
+          Dados dispersos custam tempo e atrasam decisões. Plum conecta sua equipe ao banco
+          de dados da empresa e transforma qualquer pergunta em resposta imediata.
+        </p>
+
+        <p className="text-gradient mt-4 text-[19px] font-bold">
+          Dados viram insights. Insights viram ação.
+        </p>
+
+        <div className="mt-12">
+          <p className="text-[13px] font-semibold text-foreground">No seu setor:</p>
+          <ul className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+            {SETORES.map((setor, i) => (
+              <li key={setor} className="flex items-center gap-3">
+                {i > 0 && (
+                  <span aria-hidden="true" className="text-muted-foreground/40">
+                    ·
+                  </span>
+                )}
+                <span className="text-[15px] text-secondary-foreground">{setor}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-
-        {/* Para quem - Subtitle + Database with animated wires */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
-          viewport={{ once: true }}
-          className="flex flex-col items-center"
-        >
-          <h3 className="text-2xl md:text-3xl font-semibold text-foreground mb-8">
-            Para quem
-          </h3>
-          <DatabaseWithRestApi
-            circleText="Uso de dados"
-            lightColor="#A855F7"
-            badgeTexts={{
-              first: "Varejistas",
-              second: "Agências de Marketing",
-              third: "Financeiro",
-              fourth: "Indústrias",
-              fifth: "E-commerce",
-              sixth: "Consultórios",
-            }}
-          />
-        </motion.div>
-      </div>
+      </motion.div>
     </section>
   );
 }

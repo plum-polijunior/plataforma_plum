@@ -79,16 +79,25 @@
 
     --radius: 0.75rem;
 
-    /* Custom tokens */
-    --glow-purple: 270 70% 60%;
-    --glow-violet: 280 60% 50%;
-    --glass-bg: 260 30% 8% / 0.6;
-    --glass-border: 270 30% 30% / 0.3;
-    
+    /* ── Tokens da landing ──────────────────────────────────────────────────
+       Retunados de roxo para o vinho da marca em 2026-08-12, junto com o merge
+       do novo design: a landing deixou de optar pelo `.dark` e passou a rodar
+       sobre este `:root` claro. Os valores roxos (`270 70% 60%`) foram feitos
+       para o fundo escuro — no branco, o gradiente de texto antigo
+       (`270 80% 85%`, um lilás quase branco) sumia.
+
+       `--glow-purple` mantém o nome apesar de já não ser roxo: renomear
+       obrigaria a mexer na classe `.glow-purple` e em quem a usa, e o ganho
+       seria só cosmético. */
+    --glow-purple: 329 44% 33%;
+    --glow-violet: 331 36% 45%;
+    --glass-bg: 300 30% 98% / 0.85;
+    --glass-border: 329 44% 33% / 0.14;
+
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(270 70% 60%), hsl(280 60% 50%));
-    --gradient-text: linear-gradient(90deg, hsl(270 80% 85%), hsl(280 70% 80%), hsl(270 90% 90%));
-    --gradient-glow: radial-gradient(circle, hsl(270 70% 60% / 0.3), transparent);
+    --gradient-primary: linear-gradient(135deg, hsl(330 45% 25%), hsl(331 36% 45%));
+    --gradient-text: linear-gradient(90deg, hsl(330 45% 25%), hsl(329 44% 33%), hsl(331 36% 45%));
+    --gradient-glow: radial-gradient(circle, hsl(329 44% 33% / 0.16), transparent);
 
     /* ── Tokens de App UI (DESIGN.md §2 e §3) ───────────────────────────────
        ⚠️ VESTIGIAIS, e agora também DESATUALIZADOS. Nenhum arquivo TS/TSX lê
@@ -127,15 +136,24 @@
     --sidebar-ring: 329 44% 33%;
   }
 
-  /* ── Tema escuro — a landing, e só ela ──────────────────────────────────
-     Valores idênticos aos que `:root` tinha antes de 2026-08-12. Nada aqui
-     mudou de valor: o bloco só deixou de ser cópia inútil de `:root` e passou
-     a selecionar de verdade, via `className="dark"` na raiz de `Index.tsx` e
-     `NotFound.tsx`.
+  /* ── Tema escuro — hoje SEM NENHUM CONSUMIDOR ───────────────────────────
+     Valores idênticos aos que `:root` tinha antes de 2026-08-12.
+
+     Até o merge do novo design da landing, `Index.tsx` e `NotFound.tsx` faziam
+     `className="dark"` e este bloco era o tema delas. As duas passaram para o
+     `:root` claro, então **nada opta por `.dark` no momento**.
+
+     Mantido de propósito, e não é código morto por descuido: é a saída de
+     emergência da inversão da Direção A. Voltar qualquer superfície para o
+     escuro é acrescentar a classe de novo, não reescrever paleta. Se um dia
+     ficar decidido que não há volta, aí sim vale apagar — com decisão, não por
+     faxina automática.
 
      Os tokens de landing (`--glass-*`, `--gradient-*`, `--glow-*`) continuam
-     só em `:root` e são herdados por cascata aqui dentro — é por isso que
-     `glass`, `text-gradient` e os glows não precisaram ser duplicados. */
+     só em `:root` e seriam herdados por cascata aqui dentro. ⚠️ Eles foram
+     retunados para o vinho em 2026-08-12: se `.dark` voltar a ser usado, esses
+     quatro precisam ser redefinidos aqui com os valores roxos, senão o glow e
+     o gradiente de texto saem com pouco contraste no fundo escuro. */
   .dark {
     --background: 240 20% 4%;
     --foreground: 270 20% 98%;
@@ -217,13 +235,19 @@
     @apply bg-card/60 backdrop-blur-xl border border-border/30;
   }
   
+  /* 0.25 e não 0.4: no fundo claro o halo antigo virava uma mancha suja em
+     volta do elemento, em vez de brilho. */
   .glow-purple {
-    box-shadow: 0 0 40px hsl(var(--glow-purple) / 0.4);
+    box-shadow: 0 0 40px hsl(var(--glow-purple) / 0.25);
   }
-  
+
+  /* Agora lê `var(--gradient-text)` em vez de repetir o gradiente literal. Os
+     dois eram idênticos e a duplicata já tinha ficado para trás uma vez: ao
+     retunar os tokens para o vinho, só a variável mudava e esta classe
+     continuaria roxa — invisível no branco. */
   .text-gradient {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(90deg, hsl(270 80% 85%), hsl(280 70% 80%), hsl(270 90% 90%));
+    background-image: var(--gradient-text);
   }
 }
 
@@ -246,22 +270,38 @@
   }
 }
 
-/* Database animation for "Para quem" wires */
-.database {
-  offset-anchor: 0px 0px;
-  animation: database-animation-path;
-  animation-iteration-count: infinite;
-  animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-  animation-duration: 4s;
-  animation-delay: 1s;
+/* ── Animações da landing ───────────────────────────────────────────────────
+   Substituíram a animação `.database` / `.db-light-*` das "wires" do antigo
+   "Para quem", removida em 2026-08-12 junto com `database-with-rest-api.tsx`.
+
+   Estão aqui, e não no `tailwind.config.ts` como `fade-in` e companhia, porque
+   dependem de `transform: translateX(-50%)` casado com a estrutura do elemento
+   (a faixa de parceiros duplica a lista e desliza exatamente meia largura). Um
+   utilitário genérico não carregaria esse contrato. */
+
+/* Faixa de parceiros: a lista é renderizada duas vezes e desliza metade da
+   largura total, o que faz a emenda cair no ponto em que a segunda cópia está
+   exatamente onde a primeira começou — daí o laço não ter costura visível. */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
+.animate-marquee { animation: marquee 32s linear infinite; }
 
-.db-light-1 { offset-path: path("M 50 0 L 50 40 Q 50 50 60 50 L 190 50 Q 200 50 200 60 L 200 105"); }
-.db-light-2 { offset-path: path("M 150 0 L 150 30 Q 150 40 160 40 L 190 40 Q 200 40 200 50 L 200 105"); }
-.db-light-3 { offset-path: path("M 250 0 L 250 30 Q 250 40 240 40 L 210 40 Q 200 40 200 50 L 200 105"); }
-.db-light-4 { offset-path: path("M 350 0 L 350 40 Q 350 50 340 50 L 210 50 Q 200 50 200 60 L 200 105"); }
+/* Mascote do FAQ. */
+@keyframes cloud-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+.animate-cloud-float { animation: cloud-float 4.5s ease-in-out infinite; }
 
-@keyframes database-animation-path {
-  0% { offset-distance: 0%; }
-  100% { offset-distance: 100%; }
+/* Movimento decorativo é a primeira coisa que incomoda quem tem sensibilidade
+   vestibular, e as duas animações acima são puramente decorativas: nenhuma
+   informação se perde ao pará-las. O vídeo de fundo do hero também respeita
+   isto — ver `HeroSection.tsx`. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-cloud-float {
+    animation: none;
+  }
 }

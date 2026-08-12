@@ -109,7 +109,7 @@ Header
 ⚠️ Corrigir de passagem: o `navItems` do `Header.tsx` lista `localizacao` **antes** de `faq`,
 mas o DOM e o scroll spy têm FAQ primeiro. Alinhar o menu ao DOM.
 
-### Hero — substituição completa
+### Hero — substituição completa, com vídeo de fundo
 
 Portar `HeroSection.tsx` do projeto novo: mascote, wordmark "Plum", H1 *"Do dado à decisão,
 em segundos."*, subtítulo, dois CTAs (`hero` size `xl` → `#sobre`, e `outline` → `#contato`),
@@ -117,8 +117,30 @@ a linha de números (**+4.800h** economizadas por ano · **R$585 mil** gerados p
 **3.200+** pessoas atendidas) e a nota *"Resultados de soluções de IA construídas pelo time
 por trás do Plum."*
 
+**Fundo: vídeo** (`public/hero-fundo.mp4`, 2,7 MB) no lugar dos traços roxos animados. O
+`<video>` entra com `autoPlay muted loop playsInline` — `muted` é o que permite o autoplay
+nos navegadores, e `playsInline` evita o iOS abrir em tela cheia. Precisa de:
+
+- `aria-hidden` e sem controles: é decoração, não conteúdo;
+- uma camada de véu por cima (`bg-background/…`) para o texto continuar legível sobre
+  qualquer quadro do vídeo — sem isso o contraste do H1 depende do que estiver passando;
+- `@media (prefers-reduced-motion: reduce)`: quem pediu menos movimento não deve receber um
+  laço de vídeo. Cair para o primeiro quadro (`poster`) ou esconder o vídeo.
+
 Sai: `src/components/ui/background-paths.tsx` (fundo animado, 130 linhas) — fica órfão,
 deletar. O `heroRef`/`scroll-snap-start` do `Index.tsx` precisa apontar para o novo hero.
+
+### Logo — mascote no lugar do logo atual
+
+`src/assets/plum-mascot-transparent.png` substitui `plum-logo.png` **nos arquivos da
+landing**: `Header.tsx` e `ContactSection.tsx` (os outros dois usos na landing,
+`background-paths.tsx` e `DataPlaygroundSection.tsx`, estão sendo deletados de qualquer
+forma). O mascote também é usado pelo Hero e pelo cabeçalho do FAQ novo.
+
+⚠️ **Não trocar nos arquivos de produto** (`DashboardLayout.tsx`, `Auth.tsx`,
+`AccessPending.tsx`), que seguem a restrição de não tocar na plataforma logada. Isso deixa
+landing e app com marcas diferentes até haver decisão explícita — registrar como pendência,
+não resolver por conta própria.
 
 ### Parceiros — nova
 
@@ -223,9 +245,21 @@ Menções em documentação para atualizar por higiene: `organizar_tudo.md`, `.l
 `framer-motion` já existe no destino — as seções novas dependem dele. `lucide-react` também.
 Nenhuma dependência nova é necessária.
 
-Copiar de `New Plum - Landing Page/plataforma_plum/src/assets/`:
-`plum-mascot-transparent.png` e a pasta `partners/`. O `plum-logo.png` do destino continua
-sendo usado pelo `DashboardLayout` e pelo produto — não substituir.
+Copiar de `New Plum - Landing Page/plataforma_plum/src/assets/`: a pasta `partners/`. O
+`plum-logo.png` do destino continua sendo usado pelo `DashboardLayout` e pelo produto — não
+substituir.
+
+Do `z_mascot_and_background/` (fornecido pelo usuário):
+`plum-mascot-transparent.png` → `src/assets/` (importado, com hash pelo Vite) e
+`video_provisorio.mp4` → `public/hero-fundo.mp4` (servido direto, sem passar pelo bundle,
+para o navegador poder transmitir em vez de baixar inteiro antes de tocar).
+
+⚠️ **Peso.** O mascote tem **2,01 MB em 1402×1122** — 24× o logo atual (87 kB) — e o vídeo,
+2,7 MB. Juntos são ~4,7 MB só de mídia numa página cujo bundle JS já está em 1,46 MB. O
+mascote aparece em tamanhos entre 32 px (header) e 150 px (hero), ou seja, ~10× menor do que
+o arquivo entregue. Não vou recomprimir por conta própria (é asset de marca, e reduzir
+qualidade é decisão de quem desenhou), mas fica registrado: converter o mascote para WebP e
+gerar 2–3 tamanhos cortaria a maior parte disso sem diferença visível.
 
 Fontes: o `index.html` do destino já carrega Inter, Bricolage Grotesque, Geist e JetBrains
 Mono. O design novo só usa Inter — nada a adicionar.

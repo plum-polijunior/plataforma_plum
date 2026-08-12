@@ -4,52 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Database, Globe, LineChart, Lock } from "lucide-react";
+import { ArrowLeft, Globe } from "lucide-react";
 import plumLogo from "@/assets/plum-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/**
- * O painel direito da tela de entrada, criado em 2026-08-12 (Direção A).
- *
- * O protótipo desenha um gráfico de barras decorativo aqui, com os números da
- * base de demonstração. Aqui ele é TEXTO: número na tela de login não tem
- * origem, e a única leitura possível é "estes são dados de alguém". O mesmo
- * princípio que faz o Agente C não inventar valor.
- *
- * Só de apresentação — não recebe nem decide nada.
- */
-function PainelLateral() {
-  const pontos = [
-    { Icone: Database, texto: "Conecte uma planilha do Google Sheets, sem exportar nada." },
-    { Icone: LineChart, texto: "Pergunte em português. O Python calcula, a IA só comunica." },
-    { Icone: Lock, texto: "Cada cargo vê apenas as colunas que foram liberadas para ele." },
-  ];
-
-  return (
-    <div className="relative hidden items-center justify-center overflow-hidden border-l border-border bg-secondary p-10 md:flex">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(600px_400px_at_70%_20%,hsl(var(--accent)),transparent_70%)]" />
-      <div className="relative max-w-[340px]">
-        <h2 className="mb-3 font-display text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] text-foreground">
-          Os dados da sua operação, em uma conversa
-        </h2>
-        <p className="mb-8 text-sm leading-[1.6] text-text-soft">
-          O Plum lê as suas planilhas e responde perguntas de negócio com o número exato.
-        </p>
-        <ul className="space-y-4">
-          {pontos.map(({ Icone, texto }) => (
-            <li key={texto} className="flex gap-3">
-              <Icone size={17} strokeWidth={1.8} className="mt-0.5 flex-none text-primary" />
-              <span className="text-[13.5px] leading-[1.55] text-secondary-foreground">{texto}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
 
 /** Separador "ou …" entre SSO e formulário. Repetia-se em três lugares. */
 function Separador({ children }: { children: React.ReactNode }) {
@@ -317,48 +277,51 @@ const Auth = () => {
 
   return (
     /*
-      Repaginado para a Direção A em 2026-08-12: painel duplo, tema claro, sem
-      nenhuma alteração de lógica — os handlers, a validação e o destino do login
+      Repaginado para a Direção A em 2026-08-12: tema claro, sem nenhuma
+      alteração de lógica — os handlers, a validação e o destino do login
       estão todos acima e não foram tocados.
 
-      O que saiu, e por quê: os dois glows `blur-3xl`, o `glass` dos cartões, o
-      `text-gradient` do título e o botão `variant="hero"`. Todos são vocabulário
-      da landing (vidro e brilho sobre fundo escuro), e esta tela é a porta do
-      produto, não a página de venda. O `DESIGN.md` §1 separa as duas superfícies
-      exatamente aqui.
+      O painel direito ("Os dados da sua operação, em uma conversa" + a lista
+      de 3 pontos, componente `PainelLateral`) saiu em 2026-08-12, a pedido do
+      usuário — o login passou a ser a única coisa na tela, centralizada.
+
+      O que mais saiu, e por quê: os dois glows `blur-3xl`, o `glass` dos
+      cartões, o `text-gradient` do título e o botão `variant="hero"`. Todos
+      são vocabulário da landing (vidro e brilho sobre fundo escuro), e esta
+      tela é a porta do produto, não a página de venda. O `DESIGN.md` §1
+      separa as duas superfícies exatamente aqui.
 
       O que ficou, porque é decisão de produto e não de estilo (§7 do CLAUDE.md):
       "Entrar" continua sendo o caminho central e "criar organização" continua
       rebaixado a link secundário — entrar acontece milhares de vezes, criar
       acontece uma vez na vida da empresa.
     */
-    <div className="grid min-h-screen grid-cols-1 bg-background md:grid-cols-2">
-      <div className="relative flex flex-col justify-center px-6 py-12 md:px-10">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(600px_400px_at_30%_15%,hsl(var(--tint-soft)),transparent_70%)]" />
+    <div className="relative flex min-h-screen flex-col justify-center bg-background px-6 py-12 md:px-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(600px_400px_at_50%_15%,hsl(var(--tint-soft)),transparent_70%)]" />
 
-        <button
-          type="button"
-          onClick={() => {
-            if (activeTab !== "") {
-              setActiveTab("");
-              setFoundOrg(null);
-              setLoginMode("returning");
-            } else {
-              window.location.href = '/';
-            }
-          }}
-          className="absolute left-6 top-6 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground md:left-10"
-        >
-          <ArrowLeft size={14} strokeWidth={2} />
-          {activeTab !== "" ? "Voltar" : "Voltar para o site"}
-        </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (activeTab !== "") {
+            setActiveTab("");
+            setFoundOrg(null);
+            setLoginMode("returning");
+          } else {
+            window.location.href = '/';
+          }
+        }}
+        className="absolute left-6 top-6 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors duration-150 hover:text-foreground md:left-10"
+      >
+        <ArrowLeft size={14} strokeWidth={2} />
+        {activeTab !== "" ? "Voltar" : "Voltar para o site"}
+      </button>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="relative mx-auto w-full max-w-[360px]"
-        >
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative mx-auto w-full max-w-[360px]"
+      >
           <img src={plumLogo} alt="Plum" className="mb-8 h-10 w-10 object-contain" />
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -664,10 +627,7 @@ const Auth = () => {
               </form>
             </TabsContent>
           </Tabs>
-        </motion.div>
-      </div>
-
-      <PainelLateral />
+      </motion.div>
     </div>
   );
 };

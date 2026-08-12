@@ -1,56 +1,61 @@
 import { motion } from "framer-motion";
 import { ContactForm } from "@/components/ContactForm";
-import plumLogo from "@/assets/plum-logo.png";
+import plumMascote from "@/assets/plum-mascot-transparent.png";
 
+/**
+ * Só reestilizada em 2026-08-12. O `ContactForm` (e o `MultiStepForm` por trás
+ * dele) não foi tocado: ele grava em `Leads` e dispara o e-mail de aviso, e
+ * essa é a única parte da landing que escreve em algum lugar.
+ */
 export function ContactSection() {
   return (
-    <section
-      id="contato"
-      className="min-h-screen flex items-center justify-center py-20 px-4 relative overflow-hidden scroll-snap-start"
-    >
-      {/* Background glow */}
-      <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-primary/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+    <section id="contato" className="relative overflow-hidden bg-background px-6 py-[110px]">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-1/4 top-1/4 h-[420px] w-[420px] rounded-full bg-accent/25 blur-3xl"
+      />
 
-      <div className="container mx-auto max-w-lg relative z-10">
+      <div className="relative mx-auto max-w-[520px]">
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="text-center mb-12"
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.6 }}
+          className="text-center"
         >
-          <div className="flex justify-center mb-6">
-            <img src={plumLogo} alt="Plum" className="h-16 w-auto opacity-60" />
-          </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            Quer conversar sobre?
+          <img
+            src={plumMascote}
+            alt=""
+            aria-hidden="true"
+            className="mx-auto h-[72px] object-contain"
+            style={{ filter: "drop-shadow(0 10px 18px hsl(329 44% 33% / 0.22))" }}
+          />
+          <h2
+            className="text-gradient mt-6 font-bold leading-[1.15] tracking-[-0.02em]"
+            style={{ fontSize: "clamp(30px, 4vw, 44px)" }}
+          >
+            Vamos conversar?
           </h2>
-          <p className="text-muted-foreground">
+          <p className="mt-4 text-[16px] leading-[1.6] text-muted-foreground">
             Deixe seus dados e entraremos em contato para entender suas necessidades.
           </p>
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          viewport={{ once: true }}
-          className="glass rounded-2xl p-8 border border-border/20"
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="mt-10 rounded-[20px] border border-border bg-card p-8 shadow-sm"
         >
           <ContactForm />
         </motion.div>
 
-        {/* Footer */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          viewport={{ once: true }}
-          className="text-center mt-12 text-muted-foreground/60 text-sm"
-        >
-          © PLUM Direitos Reservados 2026
-        </motion.div>
+        <p className="mt-14 text-center text-[13px] leading-[1.7] text-muted-foreground/70">
+          © Plum — Direitos Reservados 2026
+          <br />
+          Um projeto do Núcleo de Inovação — Poli Júnior
+        </p>
       </div>
     </section>
   );

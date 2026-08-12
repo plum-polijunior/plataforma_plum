@@ -113,7 +113,6 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `query_engine/prd.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
 | `query_engine/implementation.md` | histórico do plano de EC2 **abandonado** — aponta pra `infra/aws/` |
 | `supabase/migrations/` | aplicar **em ordem** (§6), e à mão pelo SQL Editor |
-| `supabase/functions/plum-chat/` | demo da landing — **NÃO confundir** com `ai-plum-chat` |
 | `supabase/functions/ai-plum-chat/` | chat: Agente Z/A/C + `execute_plan` (executor real) |
 | `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. **Dois** agentes dentro de `gerar_card`: Z-dash (escopo) e Tarsila do Amaral (planejador) — §5. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
 | `supabase/functions/ai-agents/` | pipeline de importação (agentes 0/1/2/3/3.1) |
@@ -462,14 +461,22 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   componente**. O Python espelha a mesma função; ver §3 e a dívida em §8.
 - Alias `@/` → `src/`. Componentes shadcn em `src/components/ui/` — preferir compor a editar.
 - Cores só via CSS variables do tema (`hsl(var(--primary))`), nunca hex solto.
-- ⭐ **Duas superfícies, dois temas, e o `:root` é o do produto.** Desde 2026-08-12 (Direção A)
-  `:root` é o tema **claro** do ambiente interno, com a marca `#7A2F56`; `.dark` guarda os
-  valores escuros de antes e é **opt-in da landing** — `Index.tsx` e `NotFound.tsx` pedem
-  `className="dark"` na raiz do JSX. O `<html class="dark">` fixo saiu do `index.html`.
-  Não inverta isso: o Radix renderiza `Dialog`/`Select`/`Popover` em portal no `body`, fora da
-  árvore do layout, então um wrapper claro no app daria a todo diálogo do produto o tema errado.
-  Todo token novo precisa existir **nos dois blocos** — a landing usa os mesmos primitivos
-  (`ui/button.tsx`). Ver `docs/2026-08-12-direcao-a-no-app.md`.
+- ⭐ **Duas superfícies, UM tema — e `.dark` hoje não tem consumidor.** Desde 2026-08-12
+  (Direção A) `:root` é o tema **claro**, com a marca `#7A2F56`. Naquele momento a landing
+  ficou no escuro via `className="dark"` em `Index.tsx`/`NotFound.tsx`; no merge do novo
+  design da landing (mesma data, `docs/2026-08-12-PLANO-merge-landing-page.md`) as duas
+  saíram do `.dark`, porque o design novo **já usava o mesmo `#7A2F56`** — o que separava as
+  superfícies era só aquela classe. Hoje **nada** opta por `.dark`; o bloco fica como saída
+  de emergência, não como código morto por descuido.
+  Não inverta o mecanismo: o Radix renderiza `Dialog`/`Select`/`Popover` em portal no `body`,
+  fora da árvore do layout, então um wrapper claro no app daria a todo diálogo do produto o
+  tema errado. ⚠️ Se `.dark` voltar a ser usado, os tokens `--glow-*`, `--glass-*` e
+  `--gradient-*` precisam ser redefinidos lá dentro: eles foram retunados de roxo para vinho
+  e só existem em `:root`. Ver `docs/2026-08-12-direcao-a-no-app.md`.
+- **Landing e produto ainda não compartilham a marca visual.** A landing usa
+  `plum-mascot-transparent.png`; `DashboardLayout`, `Auth` e `AccessPending` seguem com
+  `plum-logo.png`. Não é descuido — trocar a marca das telas de produto não estava no escopo
+  do merge da landing. Decisão pendente.
 - ⚠️ **Hairline é `border-border`, sem opacidade.** `border-border/20` era o padrão no tema
   escuro e **desaparece no claro** (`--border` já é `#EBE3E7`, L 91%). Para o hover mais forte
   existe `border-line-hover`. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.

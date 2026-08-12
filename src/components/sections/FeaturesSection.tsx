@@ -1,24 +1,82 @@
 import { motion } from "framer-motion";
-import { Database, Calendar, Brain, MessageCircle } from "lucide-react";
-import { DataPlaygroundSection } from "@/components/sections/DataPlaygroundSection";
-const features = [
+import {
+  BellRing,
+  Brain,
+  LayoutDashboard,
+  MessageCircle,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
+interface Card {
+  Icone: LucideIcon;
+  titulo: string;
+  texto: string;
+  exemplo?: string;
+}
+
+/**
+ * Os seis cartões, na ordem definida com o usuário em 2026-08-12.
+ *
+ * Três vieram do "O que somos" do protótipo (Multi canal, Níveis de acesso,
+ * Automação e alertas), um já existia aqui (Agentes de IA), e dois foram
+ * escritos agora: "Dashboards automáticos em tempo real" e "Proteção de dados".
+ *
+ * ⚠️ A copy dos dois novos descreve o que o código faz hoje, e não o que seria
+ * bom prometer. "Recalcula sozinho" é o `refresh_interval_minutes` dos
+ * `dashboard_cards`; "cada cargo enxerga só as colunas liberadas" é o
+ * `allowed_columns` por par (cargo, base); "nenhuma linha bruta sai" é a trava
+ * `RawRowsBlocked` do executor, que recusa qualquer plano sem agregação. Se
+ * alguma dessas três deixar de ser verdade, a frase correspondente sai daqui.
+ *
+ * Saiu da lista: "Consulta de dados históricos" — decisão do usuário.
+ *
+ * O cabeçalho da seção ("Funcionalidades" / "Consulta e entrega de dados, no
+ * seu ritmo." / subtítulo) e o bloco "Como funciona" (os três passos: Você
+ * pergunta / Plum consulta / Você recebe a resposta) saíram em 2026-08-12, a
+ * pedido do usuário — a seção passou a ser só os seis cartões.
+ */
+const CARDS: Card[] = [
   {
-    icon: Brain,
-    title: "Agente de IA",
-    description: "Perguntas subjetivas com métricas estatísticas e nota de confiabilidade.",
-    example: '"Qual foi a maior venda já registrada na empresa?"',
+    Icone: LayoutDashboard,
+    titulo: "Dashboards automáticos em tempo real",
+    texto:
+      "Transforme uma pergunta em card fixo na sua página inicial. Ele recalcula sozinho, no intervalo que você definir, sem ninguém reabrir planilha.",
+    exemplo: "Faturamento por loja, atualizado a cada hora.",
   },
   {
-    icon: Database,
-    title: "Consulta de dados históricos",
-    description: "Acesse métricas e relatórios de qualquer período com perguntas simples.",
-    example: '"Informe a média de faturamento da semana passada"',
+    Icone: ShieldCheck,
+    titulo: "Proteção de dados",
+    texto:
+      "Os dados continuam na sua planilha — o Plum só lê, nunca escreve. Também, todas as requisições passam por conexões seguras e autenticadas.",
   },
   {
-    icon: Calendar,
-    title: "Delivery recorrente de dados",
-    description: "Configure alertas e relatórios automáticos no horário que preferir.",
-    example: '"Informe toda segunda-feira a média de faturamento da semana anterior"',
+    Icone: Users,
+    titulo: "Níveis de acesso",
+    texto:
+      "Solução interna da empresa: cada pessoa enxerga só o que faz sentido pra sua função, com níveis de acesso configuráveis por cargo e por base.",
+      exemplo: "O gerente pode ver os dados de todas as lojas, o vendedor só os da dele.",
+  },
+  {
+    Icone: MessageCircle,
+    titulo: "Multi canal",
+    texto:
+      "No WhatsApp do dia a dia, no telegram, na plataforma web... sem trocar de ferramenta.",
+  },
+  {
+    Icone: BellRing,
+    titulo: "Automação e alertas",
+    texto: "Relatórios periódicos, lembretes e avisos automáticos.",
+    exemplo: "Toda segunda, envie a média de faturamento da semana anterior",
+  },
+  {
+    Icone: Brain,
+    titulo: "O Plum é um restaurante",
+    texto:
+      "Você é o cliente. A IA é o garçom. O código é o cozinheiro. No chat do Plum, a IA não lê suas planilhas, ela usa o contexto delas pra orientar o código a retornar o dado certo.",
+    exemplo:
+      "Você: 'Qual foi o faturamento mês passado?'\nIA: 'Código, pegue os dado da coluna Faturamento que tenham data entre 01/08 e 31/08 e some-os'\nCódigo: 'R$ 1.234.567,89'.",
   },
 ];
 
@@ -26,85 +84,60 @@ export function FeaturesSection() {
   return (
     <section
       id="funcionalidades"
-      className="min-h-screen flex items-center justify-center py-20 px-4 relative overflow-hidden scroll-snap-start"
+      className="relative overflow-hidden bg-background px-6 py-[110px]"
     >
-      {/* Background elements */}
-      <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-0 left-0 h-[380px] w-[380px] rounded-full bg-accent/20 blur-3xl"
+      />
 
-      <div className="container mx-auto max-w-6xl relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="text-center mb-16"
-        >
-          <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            Funcionalidades
-          </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto flex items-center justify-center gap-2">
-            <MessageCircle className="w-5 h-5 text-primary" />
-            Consulta e delivery de dados — direto no WhatsApp.
-          </p>
-        </motion.div>
+      <div className="relative mx-auto max-w-[1100px]">
+        {/* Só o rótulo — sem título nem subtítulo, a pedido do usuário. Sem
+            ele a seção ficava sem nenhuma pista visual de onde se está,
+            inconsistente com "O que somos" / "FAQ" / "Localização", que
+            sempre abrem com esse mesmo rótulo em letras miúdas. */}
+        <p className="text-[12.5px] font-semibold uppercase tracking-[1.5px] text-primary">
+          Funcionalidades
+        </p>
 
-        {/* Data Playground - BEFORE feature cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="mb-16"
-        >
-          <div className="text-center mb-8">
-            <h3 className="text-2xl font-bold text-foreground mb-2">
-              Simule o Plum
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              Edite a tabela de produtos fictícia e pergunte ao Plum sobre seus dados.
-            </p>
-          </div>
-          <DataPlaygroundSection />
-        </motion.div>
-
-        {/* Feature cards - AFTER simulation */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
+        <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {CARDS.map((card, i) => (
             <motion.div
-              key={feature.title}
-              initial={{ opacity: 0, y: 50 }}
+              key={card.titulo}
+              initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.15 }}
-              viewport={{ once: true }}
-              className="group"
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.5, delay: (i % 3) * 0.08 }}
+              className="flex flex-col rounded-[20px] border border-border bg-card p-7 shadow-sm transition-shadow duration-300 hover:shadow-md"
             >
-              <div className="glass rounded-2xl p-8 h-full hover:border-primary/30 transition-all duration-300 relative overflow-hidden">
-                {/* Glow effect on hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                
-                <div className="relative z-10">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center mb-6 group-hover:bg-primary/30 group-hover:scale-110 transition-all duration-300">
-                    <feature.icon className="w-7 h-7 text-primary" />
-                  </div>
-
-                  <h3 className="text-xl font-semibold mb-3 text-foreground">
-                    {feature.title}
-                  </h3>
-
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                    {feature.description}
-                  </p>
-
-                  {/* Example */}
-                  <div className="glass rounded-xl p-4 border-primary/20">
-                    <p className="text-xs text-muted-foreground/60 mb-1">Exemplo:</p>
-                    <p className="text-sm text-primary/90 italic">
-                      {feature.example}
-                    </p>
-                  </div>
-                </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary/[0.16] to-accent/40">
+                <card.Icone className="h-5 w-5 text-primary" strokeWidth={1.8} />
               </div>
+
+              <h3 className="mt-5 text-[17px] font-semibold leading-snug text-foreground">
+                {card.titulo}
+              </h3>
+              <p className="mt-2.5 flex-1 text-[14.5px] leading-[1.6] text-muted-foreground">
+                {card.texto}
+              </p>
+
+              {card.exemplo && (
+                <div className="mt-5 rounded-xl bg-muted/60 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Exemplo
+                  </p>
+                  {/* `whitespace-pre-line` é o que faz o `\n` da string virar
+                      quebra de linha de verdade — sem ele, `white-space:
+                      normal` (o default) colapsa `\n` num espaço, igual
+                      aconteceria com `</br>` (que nem é uma tag válida) dentro
+                      de uma string interpolada: o React escapa o conteúdo,
+                      então a tag apareceria como texto na tela em vez de
+                      quebrar a linha. */}
+                  <p className="mt-1.5 whitespace-pre-line text-[13.5px] italic leading-snug text-primary">
+                    “{card.exemplo}”
+                  </p>
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
