@@ -226,6 +226,78 @@ def _avaliar_expressao(
     return acc.replace([np.inf, -np.inf], np.nan)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Agrupamento: validação de tipo do `group_by`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _colunas_de_group_by(group_by_raw: object) -> list:
+    """
+    Os nomes de coluna de `group_by`, validando o TIPO de cada item.
+
+    Existe porque item de tipo inesperado não estourava aqui — ele ATRAVESSAVA.
+    `_strip_table({...})` devolve o dict intacto, porque `"." in dict` testa as
+    *chaves* do dict e dá False. O erro só aparecia lá embaixo, em
+    `_grouped_agg`, no `c not in df.columns` → `pandas.Index.__contains__` →
+    `hash(dict)` → `TypeError: unhashable type: 'dict'`.
+
+    E `TypeError` não é `ExecutorError`. Ele escapava do `except` do `main.py` —
+    e não só do `except`: escapava do LAÇO `for pedido in aprovados`. Ou seja,
+    não derrubava um card, derrubava a resposta do lote inteiro, e o
+    `dashboard-execute` (`if (!resp.ok) throw`) degradava TODOS os cards do
+    dataset para `stale`. Isso contradiz a promessa do docstring do `main.py`:
+    "Um card ruim não pode derrubar o dashboard inteiro."
+
+    É a quarta ocorrência do mesmo padrão que `select`, `order_by` e `where` já
+    tratam neste arquivo, e a de maior alcance das quatro.
+
+    A forma objeto tem mensagem PRÓPRIA, separada de "tipo inválido", porque ela
+    é o que a Fase 5b vai introduzir (`{"col": ..., "trunc": "month"}`): quem
+    emitiu o plano pediu algo que este executor ainda não faz, e "ainda não sei
+    agrupar por período" é um diagnóstico diferente de "isto não é nome de
+    coluna". Quando o `trunc` entrar (PR 2), é este ramo que passa a aceitar.
+    """
+    if group_by_raw is None:
+        return []
+
+    # O container também precisa de trava: `group_by: "regiao"` iterava os
+    # CARACTERES ('r', 'e', 'g', ...) e virava MissingColumnError sobre um nome
+    # sem sentido; `group_by: 123` não é iterável e virava outro TypeError → 500.
+    if not isinstance(group_by_raw, (list, tuple)):
+        raise ExecutorError(
+            f"'group_by' precisa ser uma lista de nomes de coluna, veio "
+            f"{type(group_by_raw).__name__}. Iterar isso agruparia por pedaços "
+            f"do valor em vez de por coluna."
+        )
+
+    cols: list = []
+    for item in group_by_raw:
+        # Item vazio/nulo continua sendo ignorado, como sempre foi: sobra de
+        # lista do LLM não é motivo para perder a pergunta inteira.
+        if not item:
+            continue
+
+        if isinstance(item, dict):
+            raise ExecutorError(
+                "Agrupar por periodo ainda nao e suportado: 'group_by' recebeu "
+                f"um objeto (chaves: {', '.join(sorted(map(str, item)))}) em vez "
+                f"de um nome de coluna. Agrupe por uma coluna, ou filtre por "
+                f"intervalo de datas no 'where'."
+            )
+
+        if not isinstance(item, str):
+            raise ExecutorError(
+                f"Item de 'group_by' invalido: esperava nome de coluna em texto, "
+                f"veio {type(item).__name__}."
+            )
+
+        col = _strip_table(item.strip())
+        if col:
+            cols.append(col)
+
+    return cols
+
+
 def execute_plan(
     plan: Dict[str, Any],
     tables: Dict[str, pd.DataFrame],
@@ -378,7 +450,10 @@ def execute_plan(
             "de pelo menos uma funcao de agregacao (sum, avg, min, max, count)."
         )
 
-    gb_cols = [_strip_table(c) for c in group_by_raw if c]
+    # Trava de tipo antes de qualquer uso: ver `_colunas_de_group_by`. Item que
+    # não é nome de coluna vira ExecutorError aqui, e não TypeError trinta linhas
+    # adiante — que escapava do laço por card e derrubava o lote inteiro.
+    gb_cols = _colunas_de_group_by(group_by_raw)
 
     # ── COM AGRUPAMENTO ──────────────────────────────────────────────────────
     # Nada de descartar coluna de group_by ausente em silêncio: agrupar por

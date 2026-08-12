@@ -1,5 +1,13 @@
 # Logs
 logs
+# ...menos os logs de auditoria de sessão, que são DOCUMENTAÇÃO e precisam entrar
+# no PR. A regra `logs` acima nasceu para log de runtime na raiz (ela está
+# agrupada com `*.log` e `npm-debug.log*`), mas casa com qualquer pasta chamada
+# `logs` em qualquer nível — inclusive `docs/logs/`, o que tornava o registro de
+# cada sessão invisível para o git sem ninguém perceber. Descoberto em
+# 2026-08-11: nenhum log jamais chegou a ser commitado por causa disto.
+!docs/logs/
+!docs/logs/**
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -38,6 +46,12 @@ __pycache__/*
 **/__pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Ambiente virtual do executor. Precisa ser Python 3.12 + as versoes fixadas em
+# query_engine/requirements.txt, senao a suite roda contra um pandas diferente
+# do que o Lambda executa. Ver query_engine/README-TESTES-LOCAIS.md.
+.venv/
+venv/
 
 #dados privados
 test_data
