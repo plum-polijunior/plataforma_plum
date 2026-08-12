@@ -10,7 +10,6 @@ arquivo solto por função, colado manualmente no painel) foi aposentada — ver
 | `ai-agents/` | `ai-agents` | Agentes 0/1/2/3/3.1 do pipeline de importação (`DatabasePipeline.tsx`) |
 | `ai-plum-chat/` | `ai-plum-chat` | Agente Z/A/C do chat + `execute_plan` (chama o executor real) |
 | `dashboard-execute/` | `dashboard-execute` | RBAC de coluna + chama o executor real para os cards do dashboard |
-| `plum-chat/` | `plum-chat` | Demo interativa da landing page (`DataPlaygroundSection.tsx`) — não confundir com `ai-plum-chat` |
 | `send-auth-email/` | `send-auth-email` | E-mails transacionais (aprovação de conta, convite, lead) via Resend |
 | `_shared/query_plan.ts` | — | Único interpretador de Query Plan do sistema. `ai-plum-chat` e `dashboard-execute` importam daqui — nunca duplicar esta lógica |
 
@@ -28,7 +27,6 @@ Comando manual (só para debug local, ou publicar antes de dar push):
 npx supabase functions deploy ai-agents --project-ref rjwidarrsykufuifzunu
 npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
 npx supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
-npx supabase functions deploy plum-chat --project-ref rjwidarrsykufuifzunu
 npx supabase functions deploy send-auth-email --project-ref rjwidarrsykufuifzunu
 ```
 

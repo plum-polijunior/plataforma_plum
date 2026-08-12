@@ -1,46 +1,37 @@
 import { motion } from "framer-motion";
-import { MapPin } from "lucide-react";
 import { LocationMap } from "@/components/ui/expand-map";
 
+// O design novo troca o mapa por um placeholder listrado estático — aqui
+// mantemos o `LocationMap` (SVG com tilt 3D, já funciona) e só reestilizamos
+// o entorno. Ver docs/2026-08-12-PLANO-merge-landing-page.md §3.
 export function LocationSection() {
   return (
-    <section
-      id="localizacao"
-      className="min-h-screen flex items-center justify-center py-20 px-4 relative overflow-hidden scroll-snap-start"
-    >
-      {/* Background glow */}
-      <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+    <section id="localizacao" className="bg-secondary py-[110px] px-6 relative overflow-hidden">
+      <div className="absolute top-[-10%] right-[6%] w-[360px] h-[360px] rounded-full bg-primary/[0.06] blur-[90px] pointer-events-none" />
+      <div className="absolute bottom-[-15%] left-[4%] w-[320px] h-[320px] rounded-full bg-accent/[0.07] blur-[90px] pointer-events-none" />
 
-      <div className="container mx-auto max-w-4xl relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="text-center mb-12"
-        >
-          <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            Localização
-          </h2>
-          <p className="text-muted-foreground max-w-xl mx-auto flex items-center justify-center gap-2">
-            <MapPin className="w-5 h-5 text-primary" />
-            Onde estamos
-          </p>
-        </motion.div>
+      <motion.div
+        initial={{ opacity: 0, y: 28 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7 }}
+        viewport={{ once: true }}
+        className="max-w-[900px] mx-auto text-center relative z-10"
+      >
+        <div className="text-[13px] font-bold tracking-[1.5px] uppercase text-primary mb-3.5">
+          Localização
+        </div>
+        <h2 className="text-gradient font-extrabold m-0 mb-3.5 text-[clamp(28px,3.6vw,40px)]">
+          Onde estamos
+        </h2>
+        <p className="text-[15px] text-muted-foreground mb-8">
+          Av. Professor Mello Moraes, 2231 - Butantã, São Paulo - SP
+        </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          viewport={{ once: true }}
-        >
-          <LocationMap
-            location="Av. Professor Mello Moraes, 2231 - Butantã, São Paulo - SP"
-            coordinates="05508-030"
-          />
-        </motion.div>
-      </div>
+        <LocationMap
+          location="Av. Professor Mello Moraes, 2231 - Butantã, São Paulo - SP"
+          coordinates="05508-030"
+        />
+      </motion.div>
     </section>
   );
 }

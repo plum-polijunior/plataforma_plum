@@ -113,7 +113,6 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `query_engine/prd.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
 | `query_engine/implementation.md` | histórico do plano de EC2 **abandonado** — aponta pra `infra/aws/` |
 | `supabase/migrations/` | aplicar **em ordem** (§6), e à mão pelo SQL Editor |
-| `supabase/functions/plum-chat/` | demo da landing — **NÃO confundir** com `ai-plum-chat` |
 | `supabase/functions/ai-plum-chat/` | chat: Agente Z/A/C + `execute_plan` (executor real) |
 | `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. **Dois** agentes dentro de `gerar_card`: Z-dash (escopo) e Tarsila do Amaral (planejador) — §5. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
 | `supabase/functions/ai-agents/` | pipeline de importação (agentes 0/1/2/3/3.1) |
@@ -471,8 +470,10 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   Todo token novo precisa existir **nos dois blocos** — a landing usa os mesmos primitivos
   (`ui/button.tsx`). Ver `docs/2026-08-12-direcao-a-no-app.md`.
 - ⚠️ **Hairline é `border-border`, sem opacidade.** `border-border/20` era o padrão no tema
-  escuro e **desaparece no claro** (`--border` já é `#EBE3E7`, L 91%). Para o hover mais forte
-  existe `border-line-hover`. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.
+  escuro e **desaparece no claro**. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.
+  `--border` (e `--input`, `--muted-foreground`) foram escurecidos depois disso, a pedido do
+  usuário, por baixo contraste — não são mais `#EBE3E7`/L 91%. Para o hover mais forte existe
+  `border-line-hover`.
 - **Paleta de série do dashboard: medida, não escolhida.** `cores.ts` tem uma faixa de
   luminosidade **por matiz** (não global) porque no claro os tetos vão de 32% a 65% — o verde
   carrega o coeficiente 0,7152 da luminância WCAG. O sinal do desvio de matiz aponta para o
