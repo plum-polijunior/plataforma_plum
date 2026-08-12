@@ -27,9 +27,12 @@ derivar mês de uma coluna de data.
 | Portão | Baseline | Agora |
 |---|---|---|
 | `pytest` | 242 (pós-PR 1) | **268** (+26) |
-| `vitest` | 96 | **115** (+19) |
+| `vitest` | 96 | **155** (+59) |
 | `npm run build` | exit 0 | **exit 0** |
-| `eslint` nos arquivos novos | — | limpo |
+| `eslint` nos arquivos tocados | — | limpo |
+
+Os números de `vitest` incluem a Etapa 7 (paleta por tema e refinamento visual), que
+não estava no plano e entrou depois de sete rodadas de revisão visual — ver §2.
 
 ### Decisões tomadas
 
@@ -108,11 +111,10 @@ derivar mês de uma coluna de data.
 - ⚠️ **`quarter` e `year` só têm teste sintético.** Nenhuma base de teste atual tem
   coluna de papel `date` cruzando anos — a de estudos parece ter, mas é papel `ano`.
   Fecha com uma planilha de 12–20 linhas, se alguém quiser.
-- ⚠️ **A paleta de SÉRIE não foi medida no escuro.** Vale para `VizBar`, `VizPie`,
-  `VizStackedBar` e a `VizLinha` nova — todas herdam a rampa do claro.
-  `src/lib/contraste-serie.test.ts` trava só o claro. É trabalho da Parte C do
-  `docs/2026-08-12-PLANO-merge-landing-page.md`, deixado lá de propósito para não
-  conflitar com quem for terminá-lo.
+- ✅ **A paleta de série FOI medida no escuro** — resolvido na Etapa 7, que era uma
+  lacuna aberta quando este sumário foi escrito. `MATIZES_ESCURO` derivada por busca
+  numérica com os três critérios do teste, e `contraste-serie.test.ts` passou a validar
+  **as duas** superfícies. Vale para as quatro viz.
 - ⚠️ **A divergência intencional de `_shared/` (D7)** entra em vigor no deploy. Ver
   Pendências.
 
@@ -131,7 +133,12 @@ derivar mês de uma coluna de data.
       e barulhenta, não vazamento, mas confusa de diagnosticar. **Não fiz esta edição
       ainda** — o `CLAUDE.md` foi tocado pelo merge do colega e prefiro não misturar.
 - [ ] **Validar na tela** com a base real: criar "faturamento por semana", conferir os
-      4 pontos contra o gabarito, e alternar claro/escuro para ver a gridline.
+      4 pontos contra o gabarito, e alternar claro/escuro para ver a gridline e a
+      paleta de série nos dois temas.
+- [ ] **O prompt do Tarsila continua sem verificação.** Nada prova ainda que ele gera
+      `{col, trunc}` e `viz: "line"` para "faturamento por mês" — não há
+      `GEMINI_API_KEY` local, e o caminho completo (pergunta → agente → executor) não
+      roda fora de produção. Fecha depois do deploy, ou antes com uma chave num `.env`.
 
 ---
 
