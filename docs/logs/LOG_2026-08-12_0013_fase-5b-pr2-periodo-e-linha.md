@@ -481,3 +481,59 @@ a falha aconteceu no único momento em que `git checkout`/`cherry-pick` estavam 
 `.py` e `.pyc` juntos. Não consegui fechar o mecanismo, então fica como **aberto**, não como
 resolvido. Recomendação: destrackear os `.pyc` (dívida pré-existente, já registrada na Etapa 0
 do log do PR 1 por forçar `git restore` antes de cada commit).
+
+
+---
+
+### Etapa 9 — Deploy em producao — [SUCESSO]
+
+Feito em 2026-08-12 ~03:00, depois do merge do PR #12, com autorizacao explicita do dono
+do produto.
+
+**Ordem seguida:** o Lambda primeiro (publicado pelo CI, workflow `query-engine` verde no
+push do merge), as Edge Functions depois. A ordem inversa deixaria o agente gerando um plano
+que o executor ainda nao entende.
+
+**Publicadas duas, a mao:**
+
+```sh
+$ npx supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
+Uploading asset (dashboard-execute): supabase/functions/dashboard-execute/index.ts
+Uploading asset (dashboard-execute): supabase/functions/_shared/query_plan.ts
+{"message":"Deployed Functions."}
+
+$ npx supabase functions deploy dashboard-agent --project-ref rjwidarrsykufuifzunu
+Uploading asset (dashboard-agent): supabase/functions/dashboard-agent/index.ts
+Uploading asset (dashboard-agent): supabase/functions/_shared/gemini_parsing.ts
+Uploading asset (dashboard-agent): supabase/functions/_shared/query_plan.ts
+{"message":"Deployed Functions."}
+```
+
+Antes de publicar, conferido que o codigo local das duas funcoes e de `_shared/` era
+**identico** ao mergeado em `origin/plataforma` (`git diff --stat` vazio).
+
+**Verificacao pelo criterio do `CLAUDE.md` §1** — `ezbr_sha256` tem de mudar; `version` sobe
+sozinho em troca de secret e nao serve de prova:
+
+| Funcao | version | ezbr_sha256 | Esperado |
+|---|---|---|---|
+| `dashboard-execute` | 41 → **42** | `76a833af…` → `3b0859c2…` | ✅ mudou |
+| `dashboard-agent` | 11 → **12** | `cf3da9c3…` → `5e5d4c04…` | ✅ mudou |
+| `ai-plum-chat` | 52 → **52** | `790efde7…` → `790efde7…` | ✅ **intacta** (decisao D7) |
+
+⚠️ **`ai-plum-chat` NAO foi publicada, de proposito.** A partir de agora existe divergencia
+conhecida de `_shared/query_plan.ts` em producao: as duas funcoes do dashboard tem a versao
+que le `group_by: [{col, trunc}]`, o chat tem a anterior. E seguro enquanto o prompt do
+Agente A nao emitir a forma nova. Registrado no `CLAUDE.md` §9 com a ordem obrigatoria para
+quem for ligar periodo no chat.
+
+**O que NAO foi possivel verificar nesta sessao:** o conteudo do bundle publicado, via
+`GET /v1/projects/{ref}/functions/{nome}/body`. O token do CLI nao esta em
+`~/.supabase/access-token` nesta maquina e o endpoint devolveu 401 — a tentativa produziu
+zeros que **nao** significam codigo ausente. `functions download` tambem nao serve: exige
+Docker.
+
+**Pendente:** validar na tela. Criar um card "faturamento por semana" na base de vendas e
+conferir os quatro pontos contra R$ 2.227,91 / 2.387,92 / 2.274,55 / 2.338,89. E o unico
+teste que ainda falta do prompt do Tarsila — nada prova, ate aqui, que ele emite
+`{col, trunc}` e `viz: "line"`.
