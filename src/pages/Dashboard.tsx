@@ -22,18 +22,56 @@ import {
   Sparkles,
   Copy,
   Globe,
-  Edit2
+  Edit2,
+  Plus,
+  ShieldCheck,
+  Trash2
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import {
+  MODO_CONVITE,
+  MODO_DOMINIO,
+  dominioTemFormatoValido,
+  normalizarDominio,
+  type JoinMode,
+} from "@/lib/organizacao";
 
 interface RolePermissions {
   allowed_datasets: string[];
   columns_access: {
     [datasetId: string]: string[];
   };
+}
+
+/**
+ * Uma linha de `organization_domains`.
+ *
+ * Declarado aqui em vez de `any` (o resto deste arquivo usa `any` por
+ * histórico) porque estes campos governam ROTEAMENTO DE CADASTRO: trocar
+ * `verified` por engano num render é a diferença entre um domínio inerte e um
+ * que captura toda conta nova daquele e-mail.
+ */
+interface Dominio {
+  id: string;
+  domain: string;
+  verified: boolean;
+  verification_method: string | null;
+  verified_at: string | null;
+  ms_tenant_id: string | null;
+  created_at: string;
 }
 
 export default function Dashboard() {
@@ -63,6 +101,22 @@ export default function Dashboard() {
   // Join code edit state
   const [isEditingJoinCode, setIsEditingJoinCode] = useState(false);
   const [newJoinCode, setNewJoinCode] = useState("");
+
+  // ── Entrada & Domínios ───────────────────────────────────────────────────
+  // A aba é controlada (e não `defaultValue`) porque o card do cabeçalho
+  // precisa poder mandar a pessoa para cá.
+  const [abaAtiva, setAbaAtiva] = useState("pendentes");
+  const [dominios, setDominios] = useState<Dominio[]>([]);
+  // A denylist inteira são 15 linhas: buscar uma vez no load é mais barato e
+  // mais previsível do que consultar a cada tecla digitada.
+  const [denylist, setDenylist] = useState<Set<string>>(new Set());
+  const [novoDominio, setNovoDominio] = useState("");
+  const [salvandoDominio, setSalvandoDominio] = useState(false);
+  // Os três abaixo guardam o alvo do AlertDialog — mesmo padrão do `apagando`
+  // em `Inicio.tsx`.
+  const [dominioParaVerificar, setDominioParaVerificar] = useState<Dominio | null>(null);
+  const [dominioParaRemover, setDominioParaRemover] = useState<Dominio | null>(null);
+  const [modoAlvo, setModoAlvo] = useState<JoinMode | null>(null);
 
   const handleUpdateJoinCode = async () => {
     if (!newJoinCode || newJoinCode.length <= 4) {
@@ -174,6 +228,24 @@ export default function Dashboard() {
           .select('*')
           .eq('organization_id', profileData.organization_id);
         setAllRolePermissions(rolePermsData || []);
+
+        // Domínios de SSO da organização. A policy de SELECT
+        // ("membros veem dominios da org") libera para qualquer membro, não só
+        // admin — quem é gateado por cargo são as AÇÕES, mais abaixo.
+        const { data: dominiosData } = await supabase
+          .from('organization_domains')
+          .select('*')
+          .eq('organization_id', profileData.organization_id)
+          .order('created_at', { ascending: true });
+        setDominios(dominiosData || []);
+
+        // Denylist de provedores públicos (leitura liberada para todos).
+        // Serve para barrar o caso honesto antes da rede; o caso deliberado é
+        // barrado pelo trigger `guardar_dominio_da_org` no servidor.
+        const { data: denylistData } = await supabase
+          .from('public_email_domains')
+          .select('domain');
+        setDenylist(new Set((denylistData || []).map((d: { domain: string }) => d.domain)));
 
         // Fetch all members of this organization
         const { data: membersData } = await supabase
@@ -302,6 +374,241 @@ export default function Dashboard() {
       toast({
         title: "Não foi possível copiar",
         description: `Copie manualmente: ${codigo}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ── Entrada & Domínios ───────────────────────────────────────────────────
+
+  /**
+   * Traduz o erro do Postgres para uma frase que diz a CONSEQUÊNCIA, não o
+   * nome do constraint.
+   *
+   * ⚠️ O caso do 23505 tem uma regra de segurança embutida: nunca dizer QUAL
+   * organização já reivindicou o domínio. `organization_domains.domain` é
+   * UNIQUE global, então um admin poderia varrer domínios para descobrir a
+   * carteira de clientes do Plum — é o mesmo S-02 que a migration
+   * 20260722130000 fechou ao tirar `organizations` do SELECT público.
+   */
+  const explicarErroDeDominio = (erro: unknown, dominio: string): string => {
+    const error = erro as { code?: string; message?: string } | null;
+    const msg = String(error?.message ?? "");
+
+    if (error?.code === "23505") {
+      return "Este domínio já está reivindicado por outra organização no Plum. Só uma pode usá-lo — fale com o suporte.";
+    }
+    if (msg.includes("DOMINIO_PUBLICO")) {
+      return `${dominio} é um provedor de e-mail público. Verificá-lo traria para cá qualquer pessoa com esse e-mail.`;
+    }
+    if (msg.includes("DOMINIO_INVALIDO") || msg.includes("DOMINIO_VAZIO")) {
+      return `${dominio} não parece um domínio válido.`;
+    }
+    if (error?.code === "42501") {
+      return "Só um Admin pode gerenciar domínios.";
+    }
+    if (error?.code === "23514") {
+      return `O banco recusou o valor enviado (${msg}).`;
+    }
+    return msg || "Erro desconhecido.";
+  };
+
+  /**
+   * Sob RLS, um UPDATE/DELETE cujo `USING` não casa NÃO devolve erro — devolve
+   * sucesso com zero linhas. Sem checar isso, um admin cuja claim
+   * `organization_id` está velha (o JWT só é reemitido no login) veria
+   * "Domínio verificado!" sem nada ter acontecido.
+   */
+  const avisarSeNadaMudou = (data: unknown[] | null): boolean => {
+    if (data && data.length > 0) return false;
+    toast({
+      title: "Nada foi alterado",
+      description: "Saia e entre de novo para atualizar sua sessão, e tente outra vez.",
+      variant: "destructive",
+    });
+    return true;
+  };
+
+  const handleAdicionarDominio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const dominio = normalizarDominio(novoDominio);
+
+    if (!dominioTemFormatoValido(dominio)) {
+      toast({
+        title: "Domínio inválido",
+        description: "Digite só o domínio, sem @ e sem https://. Ex.: empresa.com.br",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (denylist.has(dominio)) {
+      toast({
+        title: "Provedor público",
+        description: `${dominio} é um provedor de e-mail público. Verificá-lo traria para cá qualquer pessoa com esse e-mail.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSalvandoDominio(true);
+    try {
+      // Sempre `verified: false`. Verificar é um segundo ato deliberado (D-02),
+      // igual ao que o próprio `handle_new_user` faz com o domínio do fundador.
+      const { error } = await supabase
+        .from("organization_domains")
+        .insert({
+          organization_id: organization.id,
+          domain: dominio,
+          verified: false,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Domínio adicionado",
+        description: `${dominio} ainda NÃO roteia ninguém. Verifique-o para ativar.`,
+      });
+      setNovoDominio("");
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Não foi possível adicionar",
+        description: explicarErroDeDominio(error, dominio),
+        variant: "destructive",
+      });
+    } finally {
+      setSalvandoDominio(false);
+    }
+  };
+
+  const handleVerificarDominio = async (d: Dominio | null) => {
+    if (!d) return;
+    setDominioParaVerificar(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // Os quatro campos numa sentença só: o CHECK
+      // `organization_domains_verified_coerente` rejeita `verified = true` sem
+      // `verification_method`. O trigger do servidor reescreve `verified_by` e
+      // `verified_at` — mandá-los aqui é conveniência, não é o que vale.
+      const { data, error } = await supabase
+        .from("organization_domains")
+        .update({
+          verified: true,
+          verification_method: "admin",
+          verified_at: new Date().toISOString(),
+          verified_by: session?.user.id ?? null,
+        })
+        .eq("id", d.id)
+        .select();
+
+      if (error) throw error;
+      if (avisarSeNadaMudou(data)) return;
+
+      toast({
+        title: "Domínio verificado",
+        description:
+          organization?.join_mode === MODO_DOMINIO
+            ? `Novas contas com @${d.domain} passam a entrar aqui como pendentes.`
+            : `Verificado. Mude o modo de entrada para "domínio" para que passe a valer.`,
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Não foi possível verificar",
+        description: explicarErroDeDominio(error, d.domain),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRevogarVerificacao = async (d: Dominio) => {
+    try {
+      // Mantém `verification_method` e `verified_at`: o CHECK só exige o
+      // método quando `verified` é true, e preservar o histórico não custa
+      // nada nem viola constraint.
+      const { data, error } = await supabase
+        .from("organization_domains")
+        .update({ verified: false })
+        .eq("id", d.id)
+        .select();
+
+      if (error) throw error;
+      if (avisarSeNadaMudou(data)) return;
+
+      toast({
+        title: "Verificação revogada",
+        description: `${d.domain} não roteia mais novos cadastros.`,
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Não foi possível revogar",
+        description: explicarErroDeDominio(error, d.domain),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoverDominio = async (d: Dominio | null) => {
+    if (!d) return;
+    setDominioParaRemover(null);
+    try {
+      const { data, error } = await supabase
+        .from("organization_domains")
+        .delete()
+        .eq("id", d.id)
+        .select();
+
+      if (error) throw error;
+      if (avisarSeNadaMudou(data)) return;
+
+      toast({
+        title: "Domínio removido",
+        description: `Novos cadastros com @${d.domain} deixam de entrar automaticamente.`,
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: "Não foi possível remover",
+        description: explicarErroDeDominio(error, d.domain),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTrocarModo = async (alvo: JoinMode) => {
+    setModoAlvo(null);
+    try {
+      const { data, error } = await supabase
+        .from("organizations")
+        .update({ join_mode: alvo })
+        .eq("id", organization.id)
+        .select();
+
+      if (error) throw error;
+      if (avisarSeNadaMudou(data)) return;
+
+      toast({
+        title: "Modo de entrada atualizado",
+        description:
+          alvo === MODO_DOMINIO
+            ? "O código de convite deixou de funcionar. A entrada agora é pelos domínios verificados."
+            : "A entrada voltou a ser pelo código de convite.",
+      });
+      fetchData();
+    } catch (erro) {
+      const error = erro as { code?: string; message?: string } | null;
+      // O 23514 aqui é o sintoma da divergência de literal documentada em
+      // `src/lib/organizacao.ts` — a mensagem crua é o que faz o problema
+      // aparecer em segundos em vez de virar bug silencioso.
+      toast({
+        title: "Não foi possível trocar o modo",
+        description:
+          error?.code === "23514"
+            ? `O banco não aceita "${alvo}" para join_mode. Ver src/lib/organizacao.ts.`
+            : String(error?.message ?? "Erro desconhecido."),
         variant: "destructive",
       });
     }
@@ -485,7 +792,7 @@ export default function Dashboard() {
 
             {/* Modo de entrada define o que faz sentido mostrar: em 'dominio'
                 o código de convite não é usado, então exibi-lo seria enganoso. */}
-            {organization.join_mode === 'dominio' ? (
+            {organization.join_mode === MODO_DOMINIO ? (
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
                   Entrada
@@ -494,6 +801,16 @@ export default function Dashboard() {
                   <Globe className="h-4 w-4" />
                   Por domínio verificado
                 </p>
+                {/* O card do cabeçalho continua só de leitura; quem age é a
+                    aba. Este link existe para o buraco não ser um beco: antes
+                    daqui, este card era o fim da linha. */}
+                <button
+                  type="button"
+                  onClick={() => setAbaAtiva("entrada")}
+                  className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Gerenciar domínios →
+                </button>
               </div>
             ) : (
               <div>
@@ -583,8 +900,8 @@ export default function Dashboard() {
 
       {profile?.status === 'ativo' && (
         <div className="glass p-6 rounded-2xl border border-border shadow-sm">
-          <Tabs defaultValue="pendentes" className="w-full">
-            <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-3 mb-8 bg-muted/50">
+          <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full">
+            <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-2 md:grid-cols-4 mb-8 bg-muted/50">
               <TabsTrigger value="ativos" className="data-[state=active]:bg-background">Membros Ativos ({activeMembers.length})</TabsTrigger>
               <TabsTrigger value="pendentes" className="data-[state=active]:bg-background relative">
                 Aprovações Pendentes
@@ -595,6 +912,7 @@ export default function Dashboard() {
                 )}
               </TabsTrigger>
               <TabsTrigger value="cargos" className="data-[state=active]:bg-background">Cargos & Permissões</TabsTrigger>
+              <TabsTrigger value="entrada" className="data-[state=active]:bg-background">Entrada & Domínios</TabsTrigger>
             </TabsList>
 
             <TabsContent value="ativos" className="space-y-4">
@@ -812,6 +1130,261 @@ export default function Dashboard() {
                 })}
               </div>
             </TabsContent>
+
+            {/* ── ENTRADA & DOMÍNIOS ─────────────────────────────────────────
+                Antes de 2026-08-12 isto não existia: verificar um domínio era
+                rodar um INSERT à mão no SQL Editor (docs/SSO-DOMINIO.md).
+
+                A aba inteira é visível para qualquer membro — a policy
+                "membros veem dominios da org" permite a leitura, e saber por
+                onde a empresa entra não é privilégio de admin. O que fica
+                atrás de `isAdmin` são as AÇÕES. */}
+            <TabsContent value="entrada" className="space-y-8">
+              {/* 1. Modo de entrada. Fica no topo porque emoldura tudo abaixo:
+                     verificar domínio numa org em modo código não faz efeito
+                     nenhum — o trigger grava `modo_incompativel` e segue. */}
+              <div>
+                <h3 className="font-semibold text-lg mb-1">Como novos membros entram</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Só um dos dois caminhos fica ativo por vez.
+                </p>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {[
+                    {
+                      modo: MODO_CONVITE,
+                      titulo: "Por código de convite",
+                      texto: organization?.join_code
+                        ? `Quem tem o código ${organization.join_code} pede acesso, e você aprova um a um.`
+                        : "Quem tem o código pede acesso, e você aprova um a um.",
+                    },
+                    {
+                      modo: MODO_DOMINIO,
+                      titulo: "Por domínio verificado",
+                      texto:
+                        "Qualquer pessoa com e-mail de um domínio verificado abaixo entra automaticamente, como pendente. O código de convite deixa de funcionar.",
+                    },
+                  ].map((op) => {
+                    const ativo = organization?.join_mode === op.modo;
+                    // Sem domínio verificado, entrar em modo domínio deixa a
+                    // organização inalcançável PELAS DUAS PORTAS: a Porta 1
+                    // exige modo código, e a Porta 2 não tem para onde rotear.
+                    const travado =
+                      op.modo === MODO_DOMINIO && !dominios.some((d) => d.verified);
+
+                    return (
+                      <button
+                        key={op.modo}
+                        type="button"
+                        disabled={!isAdmin || ativo || travado}
+                        onClick={() => setModoAlvo(op.modo)}
+                        className={`text-left p-4 rounded-xl border transition-colors ${
+                          ativo
+                            ? "border-primary bg-primary/5"
+                            : "border-border bg-card/50 hover:bg-card disabled:opacity-60 disabled:hover:bg-card/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-medium">{op.titulo}</span>
+                          {ativo && (
+                            <Badge
+                              variant="outline"
+                              className="bg-primary/10 text-primary border-primary/30 text-xs"
+                            >
+                              Ativo
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{op.texto}</p>
+                        {travado && (
+                          <p className="text-xs text-amber-500 mt-2">
+                            Verifique ao menos um domínio antes de mudar o modo — senão
+                            ninguém consegue entrar.
+                          </p>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Estado sem saída: modo domínio e nenhum domínio verificado.
+                  Nenhuma das duas portas funciona. */}
+              {organization?.join_mode === MODO_DOMINIO &&
+                !dominios.some((d) => d.verified) && (
+                  <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 flex items-start gap-3">
+                    <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-semibold">Ninguém consegue entrar agora</h4>
+                      <p className="text-sm">
+                        O modo é por domínio, mas nenhum domínio está verificado. Verifique um
+                        abaixo, ou volte para o código de convite.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              {/* 2. Lista de domínios */}
+              <div>
+                <h3 className="font-semibold text-lg mb-1">Domínios</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Um domínio só roteia gente depois de verificado.
+                </p>
+
+                {isAdmin && (
+                  <form
+                    onSubmit={handleAdicionarDominio}
+                    className="p-4 rounded-xl border border-primary/20 bg-primary/5 mb-4"
+                  >
+                    <Label htmlFor="novo-dominio" className="flex items-center gap-2 mb-2 text-sm">
+                      <Globe className="h-4 w-4 text-primary" />
+                      Adicionar domínio
+                    </Label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        id="novo-dominio"
+                        value={novoDominio}
+                        onChange={(e) => setNovoDominio(e.target.value)}
+                        placeholder="empresa.com.br"
+                        className="font-mono"
+                      />
+                      <Button type="submit" disabled={salvandoDominio || !novoDominio.trim()}>
+                        {salvandoDominio ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Adicionar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Só o domínio, sem @ e sem https://. Provedores públicos (Gmail, Outlook…)
+                      não podem ser reivindicados.
+                    </p>
+                  </form>
+                )}
+
+                {dominios.length === 0 ? (
+                  <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed border-border">
+                    <Globe className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
+                    <p className="text-foreground font-medium">Nenhum domínio cadastrado</p>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      Enquanto isso, novos membros só entram por código de convite.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {dominios.map((d) => (
+                      <div
+                        key={d.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card/50 hover:bg-card transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <Globe className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium font-mono truncate">{d.domain}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {/* Um domínio pode ter entrado na denylist DEPOIS
+                                  de cadastrado (aconteceu com polijunior.com.br
+                                  em 2026-08-12). Nesse estado ele não roteia
+                                  ninguém, mesmo marcado como verificado — a
+                                  denylist é consultada ANTES do lookup em
+                                  `resolve_org_from_identity`. Sem dizer isso
+                                  aqui, a linha mentiria. */}
+                              {denylist.has(d.domain)
+                                ? "Provedor público — a denylist bloqueia o roteamento, mesmo verificado"
+                                : d.verified
+                                  ? `Verificado em ${new Date(d.verified_at ?? d.created_at).toLocaleDateString()}`
+                                  : "Não verificado — não roteia ninguém"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {d.ms_tenant_id && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Entra ID
+                            </Badge>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className={
+                              denylist.has(d.domain)
+                                ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                                : d.verified
+                                  ? "bg-primary/10 text-primary border-primary/30"
+                                  : "text-muted-foreground"
+                            }
+                          >
+                            {denylist.has(d.domain)
+                              ? "Bloqueado"
+                              : d.verified
+                                ? "Verificado"
+                                : "Não verificado"}
+                          </Badge>
+
+                          {isAdmin && (
+                            <>
+                              {d.verified ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-muted-foreground"
+                                  onClick={() => handleRevogarVerificacao(d)}
+                                >
+                                  Revogar
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  // Verificar um domínio da denylist sempre
+                                  // falha no servidor. Melhor não oferecer o
+                                  // botão do que oferecer e errar.
+                                  disabled={denylist.has(d.domain)}
+                                  title={
+                                    denylist.has(d.domain)
+                                      ? "Provedor público não pode ser verificado"
+                                      : undefined
+                                  }
+                                  onClick={() => setDominioParaVerificar(d)}
+                                >
+                                  <ShieldCheck className="h-4 w-4 mr-1" />
+                                  Verificar
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                title="Remover domínio"
+                                onClick={() => setDominioParaRemover(d)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* A única saída que o produto oferece hoje para quem ficou
+                    órfão. O admin não consegue nem CONTAR essas pessoas: um
+                    perfil com `organization_id NULL` não casa em nenhuma
+                    policy de SELECT de `profiles`. Por isso a frase não promete
+                    número nem botão. */}
+                <p className="text-xs text-muted-foreground mt-4">
+                  Quem tentou entrar antes da verificação não é trazido automaticamente. Peça a
+                  essas pessoas para entrar de novo.
+                </p>
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
       )}
@@ -1001,6 +1574,122 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Confirmações de Entrada & Domínios ────────────────────────────────
+          Os avisos vivem AQUI, colados na ação, e não num bloco de "leia isto"
+          no topo da aba — que ninguém lê. Cada frase diz uma consequência
+          concreta e verificável, não um "tem certeza?". */}
+
+      <AlertDialog
+        open={!!dominioParaVerificar}
+        onOpenChange={(open) => !open && setDominioParaVerificar(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Verificar {dominioParaVerificar?.domain}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Verifique <span className="font-mono">{dominioParaVerificar?.domain}</span> só
+                  se a empresa realmente controla esse domínio.
+                </p>
+                <p>
+                  A partir de agora, <strong>toda</strong> pessoa que criar conta com e-mail{" "}
+                  <span className="font-mono">@{dominioParaVerificar?.domain}</span> entra nesta
+                  organização como pendente.
+                </p>
+                <p>
+                  <strong>Isto não é retroativo.</strong> Quem já tem conta continua onde está —
+                  o roteamento acontece só na criação da conta.
+                </p>
+                {organization?.join_mode !== MODO_DOMINIO && (
+                  <p className="text-amber-500">
+                    A organização está em "código de convite": enquanto isso, verificar não terá
+                    efeito nenhum. Mude o modo acima para valer.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleVerificarDominio(dominioParaVerificar)}>
+              Verificar domínio
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!dominioParaRemover}
+        onOpenChange={(open) => !open && setDominioParaRemover(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover {dominioParaRemover?.domain}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Novos cadastros com <span className="font-mono">@{dominioParaRemover?.domain}</span>{" "}
+              deixam de entrar automaticamente. Quem já entrou continua na organização.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleRemoverDominio(dominioParaRemover)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!modoAlvo} onOpenChange={(open) => !open && setModoAlvo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {modoAlvo === MODO_DOMINIO
+                ? "Mudar para entrada por domínio?"
+                : "Voltar para o código de convite?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              {modoAlvo === MODO_DOMINIO ? (
+                <div className="space-y-2 text-sm">
+                  {/* Literal: `resolver_codigo_organizacao` filtra por modo, e
+                      quem digitar o código verá "organização não encontrada" —
+                      não uma explicação de que o modo mudou. */}
+                  <p>
+                    O código{" "}
+                    <span className="font-mono">{organization?.join_code}</span> para de
+                    funcionar na tela de acesso.
+                  </p>
+                  <p>
+                    Todo mundo com e-mail dos domínios verificados que criar conta a partir de
+                    agora entra aqui, como pendente.
+                  </p>
+                  <p>Contas que já existem não são afetadas.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 text-sm">
+                  <p>O roteamento por domínio para.</p>
+                  <p>
+                    Os domínios continuam cadastrados e verificados — só não roteiam mais
+                    ninguém.
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => modoAlvo && handleTrocarModo(modoAlvo)}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

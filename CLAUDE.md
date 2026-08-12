@@ -492,8 +492,17 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   cache a compartilhar; `useEffect` + `supabase` direto no resto do código atual.
 - `is_org_admin()` é case-insensitive desde a migration 140000 — no front, comparar cargo
   sempre com `.toLowerCase()`.
-- Cartão "Minha Organização" se adapta ao `join_mode`: `share_id` mostra o código;
-  `dominio` mostra "Entrada: por domínio verificado" **sem código** (seria enganoso).
+- Cartão "Minha Organização" se adapta ao `join_mode`: código de convite mostra o código;
+  `dominio` mostra "Entrada: por domínio verificado" **sem código** (seria enganoso). O card é
+  só leitura — quem gerencia é a aba **"Entrada & Domínios"** na mesma tela (desde 2026-08-12).
+- ⚠️ **O literal de `join_mode` vive em `src/lib/organizacao.ts`, e só lá.** O SQL versionado
+  diz `'share_id'`, o dump de produção diz `'codigo'` (§8) — ler é inofensivo porque todo o
+  código compara contra `MODO_DOMINIO`, mas **escrever** com o valor errado dá `23514`. Nunca
+  colocar o literal inline; importar as constantes.
+- **Domínio de SSO tem trava no servidor** desde a migration `20260812120000`: o trigger
+  `guardar_dominio_da_org` recusa provedor público, normaliza para minúsculas e força
+  `verified_by = auth.uid()`. Antes disso a policy `FOR ALL` deixava um admin reivindicar
+  `gmail.com` por `curl` e capturar todo cadastro novo com aquele e-mail.
 - **Todo login pousa em `/inicio`** (Página Inicial, o mural de cards) — os três caminhos de
   entrada em `Auth.tsx` (senha, SSO e criação de organização) apontam para lá desde
   2026-08-11. Antes caíam em `/dashboard`, que é "Minha Organização", uma tela de

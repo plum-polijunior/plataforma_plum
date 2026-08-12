@@ -31,7 +31,34 @@ até você verificar (passo 2).
 ### 2. Cadastrar e verificar o domínio
 
 No MVP a verificação é administrativa (decisão D-02): não há checagem de DNS.
-Rode no SQL Editor do Supabase:
+
+**Desde 2026-08-12 isto se faz pela tela**, e não mais por SQL: o Admin abre
+"Minha Organização" → aba **"Entrada & Domínios"**, adiciona o domínio e clica
+em **Verificar**. A tela também é onde se alterna o modo de entrada da
+organização entre código de convite e domínio — verificar sem trocar o modo não
+roteia ninguém, e a aba avisa isso em âmbar.
+
+O que a tela faz que o SQL abaixo não fazia:
+
+- **recusa provedor público** (`gmail.com` e companhia) — antes nada impedia,
+  porque a denylist só era consultada no login. Hoje a recusa é do servidor,
+  no trigger `guardar_dominio_da_org` (migration `20260812120000`);
+- **normaliza** o que foi digitado (tira `@`, `https://`, `www.`, maiúsculas),
+  de forma a bater exatamente com o que `resolve_org_from_identity` procura;
+- **preenche `verified_by` com o usuário autenticado**, em vez de aceitar o
+  valor que o cliente mandar.
+
+> ⚠️ **Verifique um domínio apenas se a empresa realmente o controla.** Um
+> domínio verificado roteia automaticamente todo mundo que tiver e-mail nele.
+>
+> ⚠️ **Não é retroativo.** Quem já criou conta antes da verificação continua
+> sem organização — o roteamento acontece só na criação da conta.
+
+<details>
+<summary>Caminho de emergência: fazer por SQL</summary>
+
+Continua funcionando (o trigger valida do mesmo jeito), para quando não houver
+Admin com acesso à tela:
 
 ```sql
 insert into public.organization_domains
@@ -44,8 +71,7 @@ on conflict (domain) do update
       verified_at = now();
 ```
 
-> ⚠️ **Verifique um domínio apenas se a empresa realmente o controla.** Um
-> domínio verificado roteia automaticamente todo mundo que tiver e-mail nele.
+</details>
 
 O campo `verification_method` já aceita `dns_txt`, reservado para a verificação
 por DNS no futuro — adicioná-la não exigirá migration nem mudança no trigger.
@@ -157,6 +183,31 @@ nessa lista nunca viram domínio de organização. Para adicionar:
 insert into public.public_email_domains (domain) values ('novoprovedor.com')
 on conflict do nothing;
 ```
+
+Desde 2026-08-12 a lista também é aplicada **na escrita**, pelo trigger
+`guardar_dominio_da_org` (migration `20260812120000`) — antes disso um admin
+podia reivindicar `gmail.com` por `curl` e capturar todo cadastro novo com
+aquele e-mail.
+
+> ⚠️ **`polijunior.com.br` está na denylist**, e não é engano. Ele era o
+> domínio verificado da organização "Machado Lmtd" (migration
+> `20260808120000`), o que impedia qualquer outra pessoa de **criar uma
+> organização nova** com e-mail corporativo — todo cadastro `@polijunior.com.br`
+> era roteado para a Machado. Em 2026-08-12 o domínio foi para a denylist para
+> resolver isso na raiz, e a Machado voltou para o modo código.
+>
+> Consequência a ter em mente: ninguém com e-mail `@polijunior.com.br` pode ser
+> roteado por domínio para organização nenhuma. A entrada dessas contas é
+> sempre por código de convite. Se um dia a decisão mudar, é tirar da denylist
+> — mas aí o conflito original volta.
+
+**Um domínio pode entrar na denylist depois de já estar cadastrado**, que é
+exatamente o caso acima. Nesse estado a linha continua em
+`organization_domains`, aparece na tela marcada como **"Bloqueado"**, e não
+roteia ninguém mesmo se `verified = true` — porque a denylist é consultada
+antes do lookup. Revogar e remover continuam funcionando: o trigger só barra a
+denylist quando a escrita **habilitaria** roteamento (INSERT, ou UPDATE que
+deixe `verified` true), nunca quando desliga.
 
 ---
 
