@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { PlumThinkingBar } from "@/components/PlumThinkingBar";
 import { RespostaMarkdown } from "@/components/RespostaMarkdown";
-import { MascoteAnimado } from "@/components/sections/MascoteAnimado";
+import { MASCOTE_PINGPONG, MascoteAnimado } from "@/components/sections/MascoteAnimado";
 import {
   REPETICOES_PARA_REUSAR,
   escolherPlanoDominante,
@@ -362,7 +362,7 @@ export default function PlumChat() {
                     clipe/rounded ao redor, porque a silhueta tem pontas que um
                     recorte cortaria (mesmo motivo documentado no componente). */}
                 <div className="h-[27px] w-[27px] flex-none">
-                  <MascoteAnimado className="h-full w-full" />
+                  <MascoteAnimado src={MASCOTE_PINGPONG} className="h-full w-full" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <RespostaMarkdown content={msg.content} />
@@ -377,7 +377,7 @@ export default function PlumChat() {
           {isProcessing && (
             <div className="flex animate-pl-in gap-[13px]">
               <div className="h-[27px] w-[27px] flex-none">
-                <MascoteAnimado className="h-full w-full" />
+                <MascoteAnimado src={MASCOTE_PINGPONG} className="h-full w-full" />
               </div>
               <div className="min-w-0 flex-1">
                 <PlumThinkingBar isProcessing={isProcessing} />

@@ -523,8 +523,19 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   `plum-logo.png`. Não é descuido — trocar a marca das telas de produto não estava no escopo
   do merge da landing. Decisão pendente. Uma exceção pontual desde 2026-08-12: o avatar do
   assistente em `PlumChat.tsx` (era um quadrado sólido com a letra "P") passou a ser o
-  `MascoteAnimado` (o mesmo vídeo com alfa da landing/FAQ) — não é a mesma decisão de "unificar
-  a marca do produto", é só o chat ganhando um rosto em vez de uma inicial.
+  `MascoteAnimado` — não é a mesma decisão de "unificar a marca do produto", é só o chat
+  ganhando um rosto em vez de uma inicial.
+- ⭐ **O mascote animado tem DUAS fontes, e o vai-e-volta está no arquivo.**
+  `MascoteAnimado` (`src/components/sections/MascoteAnimado.tsx`) recebe a prop `src`:
+  `MASCOTE_PINGPONG` (hero da landing + avatar do chat) e `MASCOTE_LOOP` (só o FAQ, que
+  ficou com o vídeo antigo de propósito, a pedido). Os dois são WebM VP9 **com canal alfa**,
+  gerados por chroma key na origem — o navegador não faz chroma key sozinho, e MP4 não carrega
+  alfa. ⚠️ O efeito "toca de trás pra frente ao chegar no fim" é a ida e a volta **concatenadas
+  no próprio arquivo**, não JS: `playbackRate` negativo não existe em navegador nenhum, e
+  simular por `requestAnimationFrame` forçaria uma busca por quadro. A volta é gravada **sem as
+  duas pontas** (quadros 43…1 de 0…44) — com elas, os quadros extremos apareceriam duplicados e
+  dariam dois engasgos por ciclo. Refez com outro vídeo? Recalcule o `trim`. Comando completo e
+  medições no cabeçalho do componente.
 - ⚠️ **Hairline é `border-border`, sem opacidade.** `border-border/20` era o padrão no tema
   escuro e **desaparece no claro** (`--border` já é `#EBE3E7`, L 91%). Para o hover mais forte
   existe `border-line-hover`. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.

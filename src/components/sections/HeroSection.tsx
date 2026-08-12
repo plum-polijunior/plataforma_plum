@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { MascoteAnimado } from "./MascoteAnimado";
+import { MASCOTE_PINGPONG, MascoteAnimado } from "./MascoteAnimado";
 
 interface HeroSectionProps {
   onNavigate: (sectionId: string) => void;
@@ -99,7 +99,7 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
           className="mx-auto w-[150px]"
           style={{ filter: "drop-shadow(0 14px 24px hsl(329 44% 33% / 0.3))" }}
         >
-          <MascoteAnimado className="aspect-square" />
+          <MascoteAnimado src={MASCOTE_PINGPONG} className="aspect-square" />
         </motion.div>
 
         {/* As três linhas vivem num elemento só, e não em dois como no
