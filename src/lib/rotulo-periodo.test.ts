@@ -15,7 +15,11 @@
 // coleta `supabase/functions/**` e `src/lib/**`. Mesmo arranjo de
 // `contraste-serie.test.ts`, que testa `components/dashboard/cores.ts` daqui.
 import { describe, expect, it } from "vitest";
-import { rotuloDePeriodo } from "../components/dashboard/formato";
+import {
+  anoDoPeriodo,
+  rotuloCurtoDePeriodo,
+  rotuloDePeriodo,
+} from "../components/dashboard/formato";
 
 describe("rotuloDePeriodo", () => {
   it("mês: 2026-01 vira jan/2026", () => {
@@ -87,5 +91,53 @@ describe("rotuloDePeriodo", () => {
     // "abr/2026" vem antes de "fev/2026" no alfabeto: a linha sairia embaralhada.
     expect([...ptbr].sort()).not.toEqual(ptbr);
     expect([...ptbr].sort()[0]).toBe("abr/2026");
+  });
+});
+
+describe("rotuloCurtoDePeriodo — o rótulo do eixo horizontal", () => {
+  it("mês perde o ano: jan, fev, dez", () => {
+    // ⚠️ A razão é largura medida na tela: "jan/2026" mede ~46px e com 12 meses
+    // o recharts descartava a maioria — o eixo mostrava "jan · abr · jul · dez"
+    // e a série parecia ter 4 pontos. "jan" mede ~18px e os doze cabem.
+    expect(rotuloCurtoDePeriodo("2026-01", "month")).toBe("jan");
+    expect(rotuloCurtoDePeriodo("2026-12", "month")).toBe("dez");
+  });
+
+  it("trimestre e semana também encurtam", () => {
+    expect(rotuloCurtoDePeriodo("2026Q1", "quarter")).toBe("1º tri");
+    expect(rotuloCurtoDePeriodo("2026-01-05", "week")).toBe("05/01");
+  });
+
+  it("ano não tem o que encurtar: o rótulo JÁ é o ano", () => {
+    expect(rotuloCurtoDePeriodo("2026", "year")).toBe("2026");
+  });
+
+  it("⚠️ com mostrarAno, carrega o ano abreviado na virada", () => {
+    // Sem isto, uma série de 18 meses mostraria dois "jan" indistinguíveis e o
+    // eixo passaria a mentir sobre metade dos pontos.
+    expect(rotuloCurtoDePeriodo("2027-01", "month", true)).toBe("jan/27");
+    expect(rotuloCurtoDePeriodo("2027Q1", "quarter", true)).toBe("1º tri/27");
+    expect(rotuloCurtoDePeriodo("2027-01-04", "week", true)).toBe("04/01/27");
+  });
+
+  it("'Sem data' e formato inesperado atravessam intactos", () => {
+    expect(rotuloCurtoDePeriodo("Sem data", "month")).toBe("Sem data");
+    expect(rotuloCurtoDePeriodo("2026-13", "month")).toBe("2026-13");
+    expect(rotuloCurtoDePeriodo("2026-01")).toBe("2026-01"); // sem trunc
+  });
+});
+
+describe("anoDoPeriodo", () => {
+  it("extrai o ano de cada forma", () => {
+    expect(anoDoPeriodo("2026-01", "month")).toBe("2026");
+    expect(anoDoPeriodo("2026Q3", "quarter")).toBe("2026");
+    expect(anoDoPeriodo("2026-01-05", "week")).toBe("2026");
+    expect(anoDoPeriodo("2026", "year")).toBe("2026");
+  });
+
+  it("devolve null onde não há ano — é o que faz o eixo omitir a legenda", () => {
+    expect(anoDoPeriodo("Sem data", "month")).toBeNull();
+    expect(anoDoPeriodo("", "month")).toBeNull();
+    expect(anoDoPeriodo("2026-01")).toBeNull(); // sem trunc
   });
 });

@@ -35,6 +35,7 @@ import { ChevronDown } from "lucide-react";
 import type { LinhaResultado } from "./tipos";
 import { formatarValor, unidadeDaColuna } from "./formato";
 import { corDaSerie } from "./cores";
+import { useTemaAtivo } from "@/hooks/use-tema-ativo";
 
 interface Props {
   colunas: string[];
@@ -52,6 +53,7 @@ const AGREGACOES_SOMAVEIS = new Set(["sum", "count"]);
 
 export function VizStackedBar({ colunas, linhas, colunaOrigem, agregacao, slotCor = 0 }: Props) {
   const [abrirOutros, setAbrirOutros] = useState(false);
+  const tema = useTemaAtivo();
   // Segmento sob o cursor. Numa barra empilhada, casar a fatia com a linha da
   // legenda é o mesmo trabalho que numa pizza — as fatias pequenas não cabem
   // rótulo próprio. Destacar os dois lados ao mesmo tempo resolve, e funciona
@@ -112,7 +114,7 @@ export function VizStackedBar({ colunas, linhas, colunaOrigem, agregacao, slotCo
               // recessivo de propósito: ele não é uma categoria, é o resíduo.
               backgroundColor:
                 i < MAX_SEGMENTOS
-                  ? corDaSerie(slotCor, i, Math.min(principais.length, MAX_SEGMENTOS))
+                  ? corDaSerie(slotCor, i, Math.min(principais.length, MAX_SEGMENTOS), tema)
                   : "hsl(var(--muted-foreground) / 0.35)",
             }}
             title={`${s.rotulo}: ${formatarValor(s.valor, unidade)} (${((s.valor / total) * 100).toFixed(0)}%)`}
@@ -139,7 +141,7 @@ export function VizStackedBar({ colunas, linhas, colunaOrigem, agregacao, slotCo
                   style={{
                     backgroundColor:
                       i < MAX_SEGMENTOS
-                        ? corDaSerie(slotCor, i, Math.min(principais.length, MAX_SEGMENTOS))
+                        ? corDaSerie(slotCor, i, Math.min(principais.length, MAX_SEGMENTOS), tema)
                         : "hsl(var(--muted-foreground) / 0.35)",
                   }}
                 />

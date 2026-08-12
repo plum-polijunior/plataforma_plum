@@ -70,6 +70,17 @@ cinza). Em nenhum outro lugar.
 
 Ordem fixa. Atribua por posição, **nunca cicle** e nunca gere uma cor nova.
 
+> ⭐ **Desde 2026-08-12 são DUAS tabelas, uma por tema** (`MATIZES` e
+> `MATIZES_ESCURO` em `src/components/dashboard/cores.ts`), e **a rampa inverte de
+> sentido entre elas**: no claro o maior valor recebe o tom mais escuro; no escuro,
+> o mais claro. É a mesma ideia — "maior valor, mais contraste contra o fundo" — em
+> fundos opostos. Nenhum par de luminosidades serve aos dois, porque no claro o
+> teto de cada matiz aperta e no escuro o piso.
+>
+> Os números e a derivação estão em `cores.ts`; a trava executável, em
+> `src/lib/contraste-serie.test.ts`, que valida **as duas** superfícies com os
+> mesmos três critérios (contraste ≥3:1, ΔE76 ≥8, amplitude de L ≥8).
+
 | Slot | Hue | Hex |
 |---|---|---|
 | 1 | azul | `#3987E5` |
@@ -148,6 +159,26 @@ tinta. A identidade vem do ponto colorido ao lado do texto, não do texto colori
 **Legenda a partir de 2 séries, sempre.** Uma série não leva legenda: o título já diz
 o que é. Rótulo direto é seletivo (só o último ponto, o extremo, ou a série que é o
 assunto), nunca um número em cada ponto.
+
+### 4.1 Onde o gráfico de linha se afasta desta tabela (2026-08-12)
+
+⚠️ **Leia antes de reprovar o `VizLinha.tsx` pela tabela acima ou pela §10.** Os
+quatro desvios abaixo foram medidos e decididos com o dono do produto, em revisão
+visual. Sem este registro, aplicar a tabela ao pé da letra desfaz as decisões — e é
+o que a §10 instrui a fazer, por ser lista de reprovação automática.
+
+| Regra acima | O que a linha faz | Por quê |
+|---|---|---|
+| Linha 2px | **3px** | 2px desapareceu na revisão visual; a linha é a única marca do card |
+| Área a ~10% | **42% → 2%** em degradê | ~10% é invisível nos dois temas. O número vinha da época dark-only, quando 10% sobre fundo quase preto rendia contraste; o `:root` hoje é claro |
+| Marcador ≥8px | **8px nos rotulados, 5px nos demais** | 8px em doze pontos pesa e apaga a hierarquia; nenhum marcador foi reprovado. Os dois pesos não existiam na tabela |
+| §10 item 8 — nunca número em cada ponto | **valor** segue esparso (extremos + poucos no meio); **variação %** aparece em todo ponto na visão ampliada | A proibição vale para o número do dado, que continua restrito. A variação é leitura derivada, mede metade da largura, e densificá-la foi pedido explícito |
+
+**A suavização é o quinto ponto, e tem regra própria:** a linha usa `monotone`, não
+`linear`. `natural`, `basis` e `cardinal` continuam **proibidas** — elas fazem
+*overshoot*, passando acima do maior e abaixo do menor dos dois pontos que ligam, o
+que desenha picos que não existem no dado. `monotone` não faz overshoot: arredonda o
+canto sem sair do intervalo entre os pontos.
 
 ---
 

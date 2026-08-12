@@ -31,6 +31,7 @@ import { ChevronDown } from "lucide-react";
 import type { LinhaResultado } from "./tipos";
 import { formatarValor, unidadeDaColuna } from "./formato";
 import { corDaSerie } from "./cores";
+import { useTemaAtivo } from "@/hooks/use-tema-ativo";
 
 interface Props {
   colunas: string[];
@@ -55,6 +56,7 @@ function ponto(anguloFracao: number): [number, number] {
 
 export function VizPie({ colunas, linhas, colunaOrigem, agregacao, slotCor = 0 }: Props) {
   const [abrirOutros, setAbrirOutros] = useState(false);
+  const tema = useTemaAtivo();
   // Fatia sob o cursor. Destaca a fatia E a linha da legenda ao mesmo tempo:
   // o trabalho de casar uma com a outra é justamente o custo da pizza.
   const [destacada, setDestacada] = useState<number | null>(null);
@@ -96,7 +98,7 @@ export function VizPie({ colunas, linhas, colunaOrigem, agregacao, slotCor = 0 }
   const unidade = unidadeDaColuna(colunaOrigem ?? medida);
   const cor = (i: number) =>
     i < MAX_FATIAS
-      ? corDaSerie(slotCor, i, Math.min(principais.length, MAX_FATIAS))
+      ? corDaSerie(slotCor, i, Math.min(principais.length, MAX_FATIAS), tema)
       : "hsl(var(--muted-foreground) / 0.35)";
 
   // Ângulos acumulados, em fração de volta (0 a 1).
