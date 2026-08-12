@@ -40,6 +40,7 @@ import { ChevronDown } from "lucide-react";
 import type { LinhaResultado } from "./tipos";
 import { formatarValor, unidadeDaColuna } from "./formato";
 import { corDaSerie } from "./cores";
+import { useTemaAtivo } from "@/hooks/use-tema-ativo";
 
 interface Props {
   colunas: string[];
@@ -71,6 +72,7 @@ const AGREGACOES_SOMAVEIS = new Set(["sum", "count"]);
 
 export function VizBar({ colunas, linhas, colunaOrigem, agregacao, slotCor = 0 }: Props) {
   const [expandido, setExpandido] = useState(false);
+  const tema = useTemaAtivo();
 
   // Convenção do Query Plan: a dimensão do `group_by` vem primeiro, a medida
   // agregada depois (`pandas_executor.py`, bloco COM AGRUPAMENTO).
@@ -141,7 +143,7 @@ export function VizBar({ colunas, linhas, colunaOrigem, agregacao, slotCor = 0 }
                 className="h-full rounded-r-[3px] transition-[width] duration-150 motion-reduce:transition-none"
                 style={{
                   width: `${Math.max(fracao * 100, 1.5)}%`,
-                  backgroundColor: corDaSerie(slotCor, i, Math.min(visiveis.length, 6)),
+                  backgroundColor: corDaSerie(slotCor, i, Math.min(visiveis.length, 6), tema),
                 }}
               />
             </div>

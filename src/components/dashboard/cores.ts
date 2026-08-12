@@ -104,8 +104,98 @@ const MATIZES: [
   [0, 71, -30, 65, 31], //   vermelho → magenta
 ];
 
+/**
+ * A mesma tabela, derivada para o cartão ESCURO (`.tema-escuro --card`, L 10%).
+ *
+ * ── Por que uma segunda tabela, e não a mesma com ajuste ─────────────────────
+ * A restrição inverte de lado. Sobre superfície clara o contraste vem de
+ * ESCURECER, e o teto de cada matiz é o que aperta — o verde não pode passar de
+ * L 32 por causa do coeficiente 0,7152 da luminância WCAG. Sobre superfície
+ * escura o contraste vem de CLAREAR, e o piso é que manda. Nenhum par de
+ * luminosidades serve aos dois: a paleta clara medida no escuro dava 5,5:1 (folga
+ * desperdiçada, cor mais escura do que precisava ser), e a escura no claro
+ * reprovaria.
+ *
+ * ⭐ **A rampa também inverte de sentido.** No claro `t = 1` (o MAIOR valor) recebe
+ * o tom mais escuro; aqui recebe o mais CLARO. É a mesma ideia — "maior valor,
+ * mais contraste contra o fundo" — e ela exige direções opostas em fundos opostos.
+ * O `corDaSerie` não precisou mudar: a fórmula interpola do 4º para o 5º elemento
+ * da tupla, sem supor qual é maior.
+ *
+ * ── Como estes sete números foram obtidos ────────────────────────────────────
+ * Busca numérica sobre matiz, sinal do desvio e o par de luminosidades, com os
+ * MESMOS três critérios que `src/lib/contraste-serie.test.ts` aplica ao claro:
+ * contraste ≥ 3:1 em todo degrau de toda rampa de 1 a 6, ΔE76 ≥ 8 entre degraus
+ * vizinhos, e amplitude de L ≥ 26 (o claro tem 34 no azul). Entre os candidatos
+ * válidos, escolhido o de maior croma — é o que preserva a identidade do matiz e
+ * responde à revisão visual que reprovou "cor sem diferença em relação ao fundo".
+ *
+ * ⚠️ A saturação é CLAMPADA em 100% pelo navegador, e `DERIVA_SATURACAO` soma 14.
+ * Verde e amarelo têm base 100, então no topo da rampa a saturação já está no
+ * teto. A derivação clampa igual — sem isso os números sairiam de gamut e a
+ * medição não descreveria o que a tela mostra.
+ *
+ * Medido: contraste mínimo por slot entre 3,01:1 (magenta) e 5,94:1 (verde);
+ * ΔE mínimo entre 8,1 e 12,5.
+ */
+const MATIZES_ESCURO: typeof MATIZES = [
+  [212, 78, -24, 42, 68], // azul     → ciano
+  [16, 70, -24, 40, 66], //  laranja  → rosa
+  [162, 72, -24, 26, 52], // aqua     → verde
+  [40, 100, +18, 39, 65], // amarelo  → amarelo-limão
+  [340, 58, -34, 45, 72], // magenta  → violeta
+  [120, 100, -20, 34, 64], // verde   → verde-limão
+  [0, 71, -30, 45, 71], //   vermelho → rosa
+];
+
+/** Em que superfície a cor vai aparecer. Decide qual tabela vale. */
+export type TemaDaSerie = "claro" | "escuro";
+
+function tabelaDo(tema: TemaDaSerie) {
+  return tema === "escuro" ? MATIZES_ESCURO : MATIZES;
+}
+
+/** Superfície do cartão no tema escuro (`.tema-escuro --card`). */
+export const SUPERFICIE_DO_CARD_ESCURO = "#1E151B";
+
 /** Quantidade de slots — exportada para o teste percorrer todos. */
 export const QUANTOS_SLOTS = MATIZES.length;
+
+/**
+ * A cor de uma série ÚNICA — a linha do `VizLinha`.
+ *
+ * ⚠️ Existe porque reusar a rampa aqui dava a cor errada, e o erro tinha causa
+ * clara. `corDaSerie(slot, 0, 1)` cai em `t = 1`, que é o extremo **mais
+ * escuro** de cada matiz: azul L=25, aqua e amarelo e verde L=14. Numa rampa
+ * multi-categoria esse extremo é correto — é o degrau do MAIOR valor, e a
+ * escuridão é o que o distingue dos vizinhos. Numa série única não há vizinho
+ * para distinguir: sobra só uma linha quase preta, e a revisão visual reprovou
+ * exatamente isso ("o azul tá muito escuro", "o vermelho não tá tão legal").
+ *
+ * Uma linha sozinha precisa do oposto: o tom mais VIVO que ainda passe no piso
+ * de contraste. Esse tom é `lClaro` (o `t = 0` da rampa), e ele já é validado —
+ * `src/lib/contraste-serie.test.ts` percorre os 6 degraus de cada slot e falha
+ * abaixo de 3:1, então o degrau claro não é uma escolha nova sem medição.
+ *
+ * Para azul, laranja, magenta e vermelho isso dá L 57–65, que lê como cor viva.
+ * Para verde, aqua e amarelo dá L 32–38 — mais escuro do que se gostaria, e não
+ * é falta de cuidado: é o coeficiente 0,7152 da luminância WCAG, que obriga o
+ * verde a ser escuro para ter contraste sobre superfície clara. O comentário no
+ * topo deste arquivo explica a física.
+ */
+export function corDeSerieUnica(
+  slot: number,
+  tema: TemaDaSerie = "claro",
+): string {
+  const tabela = tabelaDo(tema);
+  const indice = ((slot % tabela.length) + tabela.length) % tabela.length;
+  const [matiz, saturacao, , lClaro, lEscuro] = tabela[indice];
+  // O degrau mais VIVO de cada tema, que é o extremo oposto em cada um: no claro
+  // é `lClaro` (o t=0 da rampa, o mais leve que passa no piso de contraste); no
+  // escuro é `lEscuro` (o t=1, o mais claro). Ver o comentário longo abaixo.
+  const luminosidade = tema === "escuro" ? lEscuro : lClaro;
+  return `hsl(${matiz} ${saturacao}% ${luminosidade}%)`;
+}
 
 /**
  * Quanto a saturação sobe do degrau mais claro ao mais escuro.
@@ -144,9 +234,15 @@ const DERIVA_SATURACAO = 14;
  * sozinha não precisa de rampa, precisa de presença. Também evita divisão por
  * zero produzindo `NaN` no meio de um `style`.
  */
-export function corDaSerie(slot: number, i: number, quantos: number): string {
-  const indice = ((slot % MATIZES.length) + MATIZES.length) % MATIZES.length;
-  const [matiz, saturacao, desvio, lClaro, lEscuro] = MATIZES[indice];
+export function corDaSerie(
+  slot: number,
+  i: number,
+  quantos: number,
+  tema: TemaDaSerie = "claro",
+): string {
+  const tabela = tabelaDo(tema);
+  const indice = ((slot % tabela.length) + tabela.length) % tabela.length;
+  const [matiz, saturacao, desvio, lClaro, lEscuro] = tabela[indice];
 
   // Fração do caminho, de 0 (degrau mais claro) a 1 (mais escuro). O `1 -`
   // é a inversão descrita acima: i = 0 é o maior valor e vai para t = 1.
