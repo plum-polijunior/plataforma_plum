@@ -227,6 +227,61 @@ def test_um_card_barrado_nao_derruba_os_outros(client):
     assert por_id == {"bom": "ok", "barrado": "forbidden"}
 
 
+def test_card_com_group_by_malformado_nao_derruba_o_lote(client):
+    """
+    ⚠️ É a afirmação central do PR 1 da Fase 5b, e é o único teste que a prova
+    de ponta a ponta.
+
+    Antes da trava de tipo, um `group_by` em forma de objeto levantava
+    `TypeError: unhashable type: 'dict'` dentro do pandas. `TypeError` não é
+    `ExecutorError`, então ele não escapava só do `except` — escapava do LAÇO
+    `for pedido in aprovados`, subia por `execute()` e o FastAPI devolvia
+    **HTTP 500 para o lote inteiro**. O `dashboard-execute` faz
+    `if (!resp.ok) throw`, e o resultado era TODOS os cards do dataset caindo
+    para `stale` (ou `error`, nos sem snapshot) por causa de um card só.
+
+    O teste irmão `test_um_card_barrado_nao_derruba_os_outros` já garante isso
+    para o caso `forbidden`. Este garante para o caso malformado, que era o furo.
+    """
+    corpo = _corpo(
+        plans=[
+            {
+                "card_id": "bom",
+                "plan": {
+                    "select": [
+                        {"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"}
+                    ],
+                    "group_by": ["regiao"],
+                },
+                "resolved_columns": ["faturamento", "regiao"],
+            },
+            {
+                "card_id": "malformado",
+                "plan": {
+                    "select": [
+                        {"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"}
+                    ],
+                    # A forma que a Fase 5b vai introduzir, chegando ANTES de o
+                    # executor saber interpretá-la.
+                    "group_by": [{"col": "regiao", "trunc": "month"}],
+                },
+                "resolved_columns": ["faturamento", "regiao"],
+            },
+        ]
+    )
+    r = _post(client, corpo)
+
+    # O lote inteiro tem que responder 200. Era 500 antes da trava.
+    assert r.status_code == 200, "o lote caiu por causa de um card malformado"
+
+    por_id = {c["card_id"]: c["status"] for c in r.json()["results"]}
+    assert por_id == {"bom": "ok", "malformado": "error"}
+
+    # E o card bom tem que ter o número de verdade, não um resultado degradado.
+    bom = next(c for c in r.json()["results"] if c["card_id"] == "bom")
+    assert {l["regiao"] for l in bom["rows"]} == {"Sul", "Norte", "Ilha"}
+
+
 def test_seis_cards_do_mesmo_dataset_fazem_uma_leitura(client, ambiente):
     """Decisao 11A: seis cards, uma viagem ao Google, nao seis."""
     planos = [

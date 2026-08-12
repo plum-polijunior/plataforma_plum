@@ -404,3 +404,173 @@ def test_filtrar_por_ano_continua_numerico(acervo):
     }
     saida = execute_plan(plano, acervo, column_roles=ROLES_ANO)
     assert saida["rows"] == [{"n": 2}]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GROUP BY — o quarto membro da mesma família, e o pior deles
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# `select`, `order_by` e `where` já estão cobertos acima: item de tipo
+# inesperado levantava AttributeError/TypeError, que NÃO é ExecutorError,
+# escapava do `except` do `main.py` e virava 500 mudo.
+#
+# `group_by` tem o mesmo furo, e com alcance maior. A cadeia:
+#
+#   1. `_strip_table(dict)` DEVOLVE O DICT INTACTO — `"." in dict` testa as
+#      *chaves* do dict, dá False, e a função retorna o argumento sem tocar.
+#      Não estoura aqui, e é por isso que o furo passa desapercebido.
+#   2. `_grouped_agg` faz `c not in df.columns`, que chama
+#      `pandas.Index.__contains__`, que executa `hash(key)` FORA do try/except.
+#   3. `hash({})` -> TypeError: unhashable type: 'dict'.
+#
+# Por que o alcance é maior que nos outros três: o TypeError escapa do laço
+# `for pedido in aprovados` do `main.py`, então ele não derruba UM card — ele
+# derruba a resposta do lote inteiro. `dashboard-execute` recebe 500, faz
+# `if (!resp.ok) throw`, e TODOS os cards do dataset caem para `stale` (ou para
+# `error`, nos que ainda não têm snapshot). Isso contradiz a promessa explícita
+# do docstring do `main.py`: "Um card ruim não pode derrubar o dashboard
+# inteiro."
+
+
+@pytest.mark.parametrize(
+    "item_de_group_by",
+    [
+        {"col": "regiao", "trunc": "month"},  # a forma que a Fase 5b vai introduzir
+        {"trunc": "month"},                   # objeto sem `col`
+        {"col": 123},                         # `col` que não é string
+        ["regiao"],                           # lista aninhada
+    ],
+    ids=["objeto_col_trunc", "objeto_sem_col", "col_nao_string", "lista"],
+)
+def test_group_by_nao_string_falha_como_erro_do_executor(vendas, item_de_group_by):
+    """
+    Item de `group_by` que não é string precisa morrer como ExecutorError — que
+    o `main.py` converte em mensagem por card — e não como TypeError, que vira
+    500 do lote inteiro.
+
+    ⚠️ Este teste é a razão de existir do PR 1 da Fase 5b. Antes da trava, os
+    quatro casos abaixo levantavam `TypeError: unhashable type: 'dict'` (ou
+    `'list'`), medido em `pandas==2.2.3`.
+
+    O primeiro caso é o que mais importa: é exatamente a forma que a Fase 5b vai
+    passar a aceitar (`{"col": ..., "trunc": "month"}`). Fechar o tipo ANTES de
+    introduzir a forma é o que impede a fase de abrir uma porta nova para um 500.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "group_by": [item_de_group_by],
+    }
+    with pytest.raises(ExecutorError) as erro:
+        execute_plan(plano, vendas)
+    # A mensagem tem que dizer o que veio, senão o diagnóstico volta a ser ler o
+    # código — mesma exigência dos testes de `order_by` e de `and`/`or` acima.
+    assert "group_by" in str(erro.value)
+
+
+@pytest.mark.invariante
+def test_group_by_nao_string_nao_pode_escapar_como_typeerror(vendas):
+    """
+    A trava acima não vale de nada se ela deixar passar um TypeError por baixo:
+    `pytest.raises(ExecutorError)` não distingue "levantou ExecutorError" de
+    "levantou algo que herda de ExecutorError por acidente".
+
+    Este teste fixa o que o `main.py` precisa: a exceção tem que ser capturável
+    pelo `except ExecutorError`, e NÃO pode ser TypeError/AttributeError — as
+    duas que escapam do laço por card e derrubam o lote.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "group_by": [{"col": "regiao", "trunc": "month"}],
+    }
+    try:
+        execute_plan(plano, vendas)
+    except ExecutorError:
+        pass  # o caminho certo: o main.py transforma isto em erro do card
+    except (TypeError, AttributeError) as exc:  # pragma: no cover
+        pytest.fail(
+            f"escapou como {type(exc).__name__}, que o main.py nao captura: "
+            f"viraria HTTP 500 do lote inteiro. {exc}"
+        )
+    else:  # pragma: no cover
+        pytest.fail("group_by malformado passou sem erro nenhum")
+
+
+@pytest.mark.parametrize(
+    "group_by_bruto",
+    ["regiao", 123, {"col": "regiao"}],
+    ids=["string_solta", "numero", "objeto_solto"],
+)
+def test_group_by_que_nao_e_lista_falha_como_erro_do_executor(vendas, group_by_bruto):
+    """
+    O CONTAINER também precisa de trava, não só cada item.
+
+    `group_by: "regiao"` (string solta em vez de lista) iterava os CARACTERES e
+    virava `MissingColumnError: coluna 'r' nao encontrada` — diagnóstico que
+    manda quem investiga para o lugar errado. `group_by: 123` não é iterável e
+    virava `TypeError`, de novo escapando como 500 do lote.
+
+    Esquecer o par de colchetes é uma das saídas mais plausíveis de um LLM, e é
+    o tipo de erro que tem que dizer o próprio nome.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "group_by": group_by_bruto,
+    }
+    with pytest.raises(ExecutorError) as erro:
+        execute_plan(plano, vendas)
+    assert "group_by" in str(erro.value)
+
+
+@pytest.mark.parametrize(
+    "group_by_bruto",
+    [[], [None], [""], None],
+    ids=["lista_vazia", "so_none", "so_vazio", "chave_null"],
+)
+def test_group_by_vazio_continua_sendo_agregado_unico(vendas, group_by_bruto):
+    """
+    Sobra de lista do LLM não pode virar pergunta perdida: `group_by` vazio (ou
+    só com item nulo) sempre significou "sem agrupamento", e continua. É o único
+    caso em que ignorar é a resposta certa — mesma lógica do `order_by` inócuo
+    no agregado único, algumas dezenas de linhas acima.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "group_by": group_by_bruto,
+    }
+    assert execute_plan(plano, vendas)["rows"] == [{"total": 12}]
+
+
+def test_group_by_com_strings_continua_intocado(vendas):
+    """
+    O caminho antigo é o do chat, e ele não pode ter sido afetado pela trava.
+    Duas colunas de agrupamento, a forma que produção usa hoje.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "sum", "col": "faturamento"}, "as": "total"}],
+        "group_by": ["regiao"],
+        "order_by": [{"col": "total", "dir": "desc"}],
+    }
+    saida = execute_plan(plano, vendas)
+    assert [l["regiao"] for l in saida["rows"]] == ["Sul", "Norte", "Centro"]
+    assert [l["total"] for l in saida["rows"]] == [600.0, 400.0, 200.0]
+
+
+def test_group_by_por_coluna_ausente_continua_missing_column(vendas):
+    """
+    A trava de TIPO não pode ter engolido a checagem de EXISTÊNCIA: string que
+    não é coluna da base continua sendo MissingColumnError, não o erro de tipo.
+    São dois diagnósticos diferentes e a mensagem precisa distinguir.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "regiao"}, "as": "total"}],
+        "group_by": ["mes"],
+    }
+    with pytest.raises(MissingColumnError) as erro:
+        execute_plan(plano, vendas)
+    assert "mes" in str(erro.value)
