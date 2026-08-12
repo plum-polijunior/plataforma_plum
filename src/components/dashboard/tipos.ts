@@ -7,6 +7,8 @@
  * Elas se casam por `card_id`. A Edge Function NÃO devolve título nem viz.
  */
 
+import type { TruncPeriodo } from "./formato";
+
 /** Estados que `dashboard-execute` pode devolver por card, mais o local. */
 export type EstadoCard =
   | "carregando" // só no cliente, enquanto a chamada não voltou
@@ -62,6 +64,22 @@ export interface CardNaTela {
    * não dá nada, então percentual sobre esse total seria um número inventado.
    */
   agregacao?: string;
+
+  /**
+   * O truncamento de período do `group_by`, quando houver
+   * (`{"col": "data_da_venda", "trunc": "month"}`). `undefined` = o card agrupa
+   * por categoria, ou não agrupa.
+   *
+   * Existe por dois motivos, os dois de exibição:
+   *
+   *   1. **O alternador só oferece "Linha" quando isto está preenchido.** Linha
+   *      sobre categoria não ordenada não significa nada — ligar Sul, Norte e
+   *      Centro com um traço sugere uma progressão que não existe.
+   *   2. **Traduzir o rótulo exige saber qual truncamento é.** O executor manda
+   *      ISO para poder ordenar como texto (ver `rotuloDePeriodo` em
+   *      `formato.ts`), e "2026" sozinho não diz se é ano ou outra coisa.
+   */
+  periodo?: TruncPeriodo;
 
   estado: EstadoCard;
   colunas: string[];

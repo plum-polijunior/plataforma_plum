@@ -273,29 +273,31 @@
     --danger: 349 55% 60%;
     --danger-line: 349 40% 32%;
 
-    /* ── Grade e eixo do grafico — MEDIDOS, nao escolhidos (Fase 5b, D8) ──
-       Estes dois FALTAVAM no bloco original, e no grafico de linha a falta e
-       visivel: sem eles a gridline herdava o valor do claro
-       (`--grid: 330 17% 91%`, L 91%) e virava uma linha quase branca sobre o
-       cartao escuro (L 10%). O `DESIGN.md` §4 exige gridline "solida,
-       recessiva" — era o oposto: a coisa mais chamativa do card.
+    /* ── Grade e eixo do gráfico — MEDIDOS, não escolhidos (Fase 5b, D8) ──
+       Estes dois FALTAVAM, e no gráfico de linha a falta é visível: sem eles a
+       gridline herdava o valor do claro (`--grid: 330 17% 91%`, L 91%) e virava
+       uma linha quase branca sobre o cartão escuro (L 10%). O `DESIGN.md` §4
+       exige gridline "sólida, recessiva" — era o oposto: a coisa mais chamativa
+       do card.
 
-       O alvo nao foi estetica, foi igualar o contraste que o claro ja tem e que
-       ja passou por revisao. Medido com a formula de luminancia da WCAG contra
+       O alvo não foi estética, foi igualar o contraste que o claro já tem e que
+       já passou por revisão. Medido com a fórmula de luminância da WCAG contra
        `--card` de cada tema:
 
-                        claro (referencia)   escuro com valor do claro   escolhido
+                        claro (referência)   escuro com valor do claro   escolhido
          --grid              1.248                   14.283               1.262
          --axis              1.418                   12.570               1.405
 
-       Matiz 320, a mesma do resto do tema escuro. */
+       Matiz 320, a mesma do resto do tema escuro, para a grade não puxar para
+       outro lugar do círculo. */
     --grid: 320 12% 18%;
     --axis: 320 12% 21%;
 
-    /* A paleta de serie do dashboard (`src/components/dashboard/cores.ts`) tem
-       tabela PROPRIA para este tema desde a Fase 5b (`MATIZES_ESCURO`), e a
-       rampa inverte de sentido aqui: o maior valor recebe o tom mais CLARO.
-       Ver o comentario longo em `cores.ts`. */
+    /* A paleta de SÉRIE (`src/components/dashboard/cores.ts`) tem tabela PRÓPRIA
+       para este tema (`MATIZES_ESCURO`), e a rampa **inverte de sentido** aqui: o
+       maior valor recebe o tom mais CLARO. Vale para as quatro viz. Os números e
+       a derivação estão em `cores.ts`; a trava, em
+       `src/lib/contraste-serie.test.ts`, que valida as duas superfícies. */
   }
 }
 

@@ -71,6 +71,105 @@ describe("extractColumns — cobertura de posição", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// group_by por período — a forma objeto (Fase 5b)
+//
+// `{"col": "data_da_venda", "trunc": "month"}` no lugar de `"data_da_venda"`.
+// `addCol` só aceita string, então sem o ramo novo o objeto era descartado
+// calado e a coluna de data NÃO entrava em `required`: o executor não a
+// carregaria e o card morreria em MissingColumnError. Falha fechada (o executor
+// só lê o conjunto assinado), mas card quebrado sem motivo aparente.
+//
+// É o mesmo buraco da expressão aritmética, no campo vizinho.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("extractColumns — group_by por período", () => {
+  it("extrai a coluna da forma objeto", () => {
+    expect(
+      extractColumns({ group_by: [{ col: "data_da_venda", trunc: "month" }] }),
+    ).toEqual(new Set(["data_da_venda"]));
+  });
+
+  it("a forma objeto e a forma string exigem a MESMA coluna", () => {
+    // Truncar não muda o que precisa ser lido da planilha, nem o que o RBAC
+    // precisa autorizar. Se estes dois divergissem, o mesmo card passaria ou
+    // não pela permissão dependendo da grafia que o agente escolheu.
+    const comTrunc = extractColumns({
+      group_by: [{ col: "data_da_venda", trunc: "quarter" }],
+    });
+    const semTrunc = extractColumns({ group_by: ["data_da_venda"] });
+    expect(comTrunc).toEqual(semTrunc);
+  });
+
+  it("`trunc` não é coluna e não entra no conjunto", () => {
+    const cols = extractColumns({
+      group_by: [{ col: "data_da_venda", trunc: "month" }],
+    });
+    expect(cols.has("month")).toBe(false);
+    expect(cols.has("trunc")).toBe(false);
+    expect(cols.size).toBe(1);
+  });
+
+  it("objeto sem `col` não contribui com coluna nenhuma", () => {
+    // Quem recusa o plano malformado é o executor, com erro nomeado. Aqui o
+    // certo é apenas não inventar coluna.
+    expect(extractColumns({ group_by: [{ trunc: "month" }] })).toEqual(new Set());
+  });
+
+  it("objeto com `col` não-string não contribui com coluna nenhuma", () => {
+    expect(extractColumns({ group_by: [{ col: 123, trunc: "month" }] })).toEqual(
+      new Set(),
+    );
+    expect(
+      extractColumns({ group_by: [{ col: { op: "mul" }, trunc: "month" }] }),
+    ).toEqual(new Set());
+  });
+
+  it("aceita `tabela.coluna` na forma objeto, como na forma string", () => {
+    expect(
+      extractColumns({ group_by: [{ col: "producao.data_da_venda" }] }),
+    ).toEqual(new Set(["data_da_venda"]));
+  });
+
+  it("mistura de formas na mesma lista recolhe as duas colunas", () => {
+    expect(
+      extractColumns({
+        group_by: ["loja", { col: "data_da_venda", trunc: "week" }],
+      }),
+    ).toEqual(new Set(["loja", "data_da_venda"]));
+  });
+
+  it("array em group_by não é tratado como objeto de período", () => {
+    // `Array.isArray` no ramo novo importa: sem ele, `["x"]` cairia no caminho
+    // do objeto, `.col` seria undefined e o item seria descartado calado. Como
+    // array é item inválido (o executor recusa com erro nomeado), o certo aqui
+    // é não extrair nada — mas pelo caminho do `addCol`, não por acidente.
+    expect(extractColumns({ group_by: [["data_da_venda"]] })).toEqual(new Set());
+  });
+
+  it("authorizePlan barra a coluna de data que o cargo não vê", () => {
+    // O teste que importa para a segurança: o RBAC tem que enxergar a coluna
+    // dentro do objeto. Antes do ramo novo, este plano era AUTORIZADO.
+    const plan = {
+      select: [{ expr: { agg: "sum", col: "valor" }, as: "total" }],
+      group_by: [{ col: "data_da_venda", trunc: "month" }],
+    };
+    const veredito = authorizePlan(plan, ["valor"]);
+    expect(veredito.allowed).toBe(false);
+    expect(veredito.forbidden).toEqual(["data_da_venda"]);
+  });
+
+  it("authorizePlan libera quando a coluna de data está permitida", () => {
+    const plan = {
+      select: [{ expr: { agg: "sum", col: "valor" }, as: "total" }],
+      group_by: [{ col: "data_da_venda", trunc: "month" }],
+    };
+    const veredito = authorizePlan(plan, ["valor", "data_da_venda"]);
+    expect(veredito.allowed).toBe(true);
+    expect(veredito.required).toEqual(["data_da_venda", "valor"]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Expressão aritmética derivada
 //
 // `addCol` descarta calado tudo que não é string. Quando `col` deixou de ser

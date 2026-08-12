@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { CardNaTela, EstadoCard, LinhaResultado, TipoViz } from "@/components/dashboard/tipos";
+import type { TruncPeriodo } from "@/components/dashboard/formato";
 
 /** Respostas de corpo inteiro, que não são "card com erro" e precisam de
  *  tratamento próprio na página — senão viram tela quebrada. */
@@ -73,6 +74,32 @@ function primeiraAgregacao(
   return {};
 }
 
+/** Os quatro truncamentos que o executor aceita (`_TRUNC_PARA_PERIODO`). */
+const TRUNCS_VALIDOS = new Set(["week", "month", "quarter", "year"]);
+
+/**
+ * O truncamento de período do `group_by`, se houver.
+ *
+ * Só a forma objeto tem truncamento: `{"col": "data", "trunc": "month"}`. A
+ * forma string (`"data"`) agrupa por dia e NÃO é período para efeito de tela —
+ * um ponto por dia num ano são 250 pontos, que é ruído, não evolução.
+ *
+ * Mesma leitura defensiva de `primeiraAgregacao`: `query_plan` é `jsonb` e pode
+ * ter qualquer forma. Desvio devolve `undefined`, e o card simplesmente não
+ * oferece linha — o erro seguro.
+ */
+function truncDoPlano(plano: unknown): TruncPeriodo | undefined {
+  const gb = (plano as { group_by?: unknown })?.group_by;
+  if (!Array.isArray(gb)) return undefined;
+  for (const item of gb) {
+    const t = (item as { trunc?: unknown })?.trunc;
+    if (typeof t === "string" && TRUNCS_VALIDOS.has(t.toLowerCase())) {
+      return t.toLowerCase() as TruncPeriodo;
+    }
+  }
+  return undefined;
+}
+
 export function useDashboardCards(datasetId: string | null) {
   const [cards, setCards] = useState<CardNaTela[]>([]);
   const [estado, setEstado] = useState<EstadoGrade>("carregando");
@@ -109,6 +136,7 @@ export function useDashboardCards(datasetId: string | null) {
         maiorEhMelhor: c.higher_is_better,
         colunaOrigem: coluna,
         agregacao: agg,
+        periodo: truncDoPlano(c.query_plan),
         estado: "carregando",
         colunas: [],
         linhas: [],

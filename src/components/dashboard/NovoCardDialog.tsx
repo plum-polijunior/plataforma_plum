@@ -51,11 +51,38 @@ import type { CardNaTela, TipoViz } from "./tipos";
 import { extractColumns, type QueryPlan } from "../../../supabase/functions/_shared/query_plan";
 
 /**
- * O que o front sabe desenhar hoje. `line` e `meter` estão no CHECK da tabela
- * mas não aqui: sem agrupamento por período e sem onde guardar uma meta, os
- * dois renderizariam vazio. O agente também não os oferece.
+ * O que o front sabe desenhar hoje. `meter` está no CHECK da tabela mas não
+ * aqui: sem onde guardar uma meta, ele renderizaria vazio. O agente também não
+ * o oferece.
+ *
+ * ⭐ `line` entrou na Fase 5b. Antes dela, esta lista é o que transformava um
+ * `viz: "line"` do agente num card **gravado como `kpi`** — e um card "Faturamento
+ * por mês" caía no `VizKpi`, que lê `colunas[0]`/`linhas[0]` e renderizaria um
+ * **`2026-01` gigante**. Não é número errado, é pior de explicar. Foi por isso
+ * que o prompt do agente (Etapa 6) só podia mudar DEPOIS desta linha.
  */
-const VIZ_PERMITIDOS: TipoViz[] = ["kpi", "bar", "stacked_bar", "table"];
+const VIZ_PERMITIDOS: TipoViz[] = ["kpi", "line", "bar", "stacked_bar", "table"];
+
+/** Os quatro truncamentos que o executor aceita (`_TRUNC_PARA_PERIODO`). */
+const TRUNCS_VALIDOS = new Set(["week", "month", "quarter", "year"]);
+
+/**
+ * O plano agrupa por período?
+ *
+ * Duplica `truncDoPlano` de `use-dashboard-cards.ts` em intenção, mas não em
+ * papel: lá é para DESENHAR (traduzir rótulo, oferecer o alternador), aqui é
+ * para VALIDAR antes de gravar. O que se checa é diferente — aqui basta
+ * "tem ou não tem", e o plano ainda é `Record<string, unknown>` cru do agente,
+ * não um `CardNaTela` montado.
+ */
+function planoTemPeriodo(plano: unknown): boolean {
+  const gb = (plano as { group_by?: unknown })?.group_by;
+  if (!Array.isArray(gb)) return false;
+  return gb.some((item) => {
+    const t = (item as { trunc?: unknown })?.trunc;
+    return typeof t === "string" && TRUNCS_VALIDOS.has(t.toLowerCase());
+  });
+}
 
 interface CardGerado {
   title?: string;
@@ -162,9 +189,26 @@ export function NovoCardDialog({
       }
 
       // TRAVA 2 — `viz` fora do enum quebra o INSERT no Postgres.
-      const viz: TipoViz = VIZ_PERMITIDOS.includes(card.viz as TipoViz)
+      let viz: TipoViz = VIZ_PERMITIDOS.includes(card.viz as TipoViz)
         ? (card.viz as TipoViz)
         : "kpi";
+
+      // TRAVA 2b — `line` exige agrupamento por período.
+      //
+      // O prompt do Tarsila manda usar `line` só quando o `group_by` tem
+      // `trunc`, mas prompt é instrução e não garantia: um `viz: "line"` sobre
+      // `group_by: ["loja"]` desenharia um traço ligando Loja A, Loja B e Loja
+      // C, sugerindo uma progressão entre elas que não existe. E ficaria
+      // GRAVADO como o padrão da organização.
+      //
+      // Cai para `bar`, não para `kpi`: o card tem categorias e uma medida, que
+      // é exatamente o que barras leem bem. `kpi` mostraria só a primeira linha.
+      if (viz === "line" && !planoTemPeriodo(card.query_plan)) {
+        console.warn(
+          "[novo-card] viz 'line' pedida sem trunc de periodo no group_by; usando 'bar'.",
+        );
+        viz = "bar";
+      }
 
       const cardValidado = { ...card, viz };
       setGerado(cardValidado);

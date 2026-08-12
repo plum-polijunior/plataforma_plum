@@ -30,6 +30,7 @@ import { VizBar } from "./VizBar";
 import { VizTabela } from "./VizTabela";
 import { VizStackedBar } from "./VizStackedBar";
 import { VizPie } from "./VizPie";
+import { VizLinha } from "./VizLinha";
 
 interface Props {
   card: CardNaTela;
@@ -225,6 +226,17 @@ function Corpo({
         linhas={card.linhas}
         colunaOrigem={card.colunaOrigem}
         agregacao={card.agregacao}
+        slotCor={slotCor}
+      />
+    );
+  }
+  if (forma === "line") {
+    return (
+      <VizLinha
+        colunas={card.colunas}
+        linhas={card.linhas}
+        colunaOrigem={card.colunaOrigem}
+        periodo={card.periodo}
         slotCor={slotCor}
       />
     );

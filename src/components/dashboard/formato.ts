@@ -92,6 +92,65 @@ export function formatarValor(valor: number, unidade: Unidade): string {
   })}`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rótulo de período — a metade do front da decisão D3 da Fase 5b
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Os quatro truncamentos que o executor sabe fazer (`_TRUNC_PARA_PERIODO`). */
+export type TruncPeriodo = "week" | "month" | "quarter" | "year";
+
+const MESES_ABREV = [
+  "jan", "fev", "mar", "abr", "mai", "jun",
+  "jul", "ago", "set", "out", "nov", "dez",
+];
+
+/**
+ * O rótulo ISO que o executor emite, traduzido para português.
+ *
+ * ⚠️ **A divisão de trabalho aqui é uma decisão, não conveniência.** O executor
+ * emite ISO — `2026-01`, `2026Q1`, `2026`, `2026-01-05` — porque o rótulo
+ * precisa **ordenar como texto**: o `order_by` ordena a coluna de saída e a
+ * linha é desenhada na ordem das linhas. Se o executor já mandasse "jan/2026",
+ * a ordenação seria alfabética (abr, ago, dez, fev...) e a linha sairia
+ * embaralhada sem nenhum erro no caminho.
+ *
+ * Por isso a tradução mora aqui, DEPOIS da ordenação, junto das outras
+ * traduções de exibição. Ver `query_engine/pandas_executor.py`,
+ * `_rotulo_de_periodo`, e o teste que trava a ordenação nos dois lados.
+ *
+ * `trunc` vem por parâmetro em vez de ser adivinhado da string: `2026` poderia
+ * ser um ano ou o começo de qualquer outra coisa, e adivinhar é o tipo de
+ * heurística que este projeto já paga caro em outro lugar (`unidadeDaColuna`).
+ *
+ * Nunca lança. Rótulo que não casa com o formato esperado volta como veio — na
+ * pior hipótese o usuário lê o ISO, que é feio mas verdadeiro. Inclui o
+ * "Sem data" que o executor usa para linha sem data (decisão D6).
+ */
+export function rotuloDePeriodo(valor: string, trunc?: TruncPeriodo): string {
+  if (!valor || !trunc) return valor;
+
+  // year: "2026" já é o rótulo final em português.
+  if (trunc === "year") return valor;
+
+  if (trunc === "month") {
+    // "2026-01" -> "jan/2026"
+    const m = /^(\d{4})-(\d{2})$/.exec(valor);
+    if (!m) return valor;
+    const mes = MESES_ABREV[Number(m[2]) - 1];
+    return mes ? `${mes}/${m[1]}` : valor;
+  }
+
+  if (trunc === "quarter") {
+    // "2026Q1" -> "1º tri/2026"
+    const m = /^(\d{4})Q([1-4])$/.exec(valor);
+    return m ? `${m[2]}º tri/${m[1]}` : valor;
+  }
+
+  // week: "2026-01-05" (a segunda que abre a semana) -> "05/01/2026"
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : valor;
+}
+
 /**
  * "há 4 min", "há 3 h", "há 2 d".
  *
