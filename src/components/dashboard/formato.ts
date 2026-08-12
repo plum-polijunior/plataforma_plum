@@ -92,6 +92,216 @@ export function formatarValor(valor: number, unidade: Unidade): string {
   })}`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rótulo de período — a metade do front da decisão D3 da Fase 5b
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Os quatro truncamentos que o executor sabe fazer (`_TRUNC_PARA_PERIODO`). */
+export type TruncPeriodo = "week" | "month" | "quarter" | "year";
+
+const MESES_ABREV = [
+  "jan", "fev", "mar", "abr", "mai", "jun",
+  "jul", "ago", "set", "out", "nov", "dez",
+];
+
+/**
+ * O rótulo ISO que o executor emite, traduzido para português.
+ *
+ * ⚠️ **A divisão de trabalho aqui é uma decisão, não conveniência.** O executor
+ * emite ISO — `2026-01`, `2026Q1`, `2026`, `2026-01-05` — porque o rótulo
+ * precisa **ordenar como texto**: o `order_by` ordena a coluna de saída e a
+ * linha é desenhada na ordem das linhas. Se o executor já mandasse "jan/2026",
+ * a ordenação seria alfabética (abr, ago, dez, fev...) e a linha sairia
+ * embaralhada sem nenhum erro no caminho.
+ *
+ * Por isso a tradução mora aqui, DEPOIS da ordenação, junto das outras
+ * traduções de exibição. Ver `query_engine/pandas_executor.py`,
+ * `_rotulo_de_periodo`, e o teste que trava a ordenação nos dois lados.
+ *
+ * `trunc` vem por parâmetro em vez de ser adivinhado da string: `2026` poderia
+ * ser um ano ou o começo de qualquer outra coisa, e adivinhar é o tipo de
+ * heurística que este projeto já paga caro em outro lugar (`unidadeDaColuna`).
+ *
+ * Nunca lança. Rótulo que não casa com o formato esperado volta como veio — na
+ * pior hipótese o usuário lê o ISO, que é feio mas verdadeiro. Inclui o
+ * "Sem data" que o executor usa para linha sem data (decisão D6).
+ */
+export function rotuloDePeriodo(valor: string, trunc?: TruncPeriodo): string {
+  if (!valor || !trunc) return valor;
+
+  // year: "2026" já é o rótulo final em português.
+  if (trunc === "year") return valor;
+
+  if (trunc === "month") {
+    // "2026-01" -> "jan/2026"
+    const m = /^(\d{4})-(\d{2})$/.exec(valor);
+    if (!m) return valor;
+    const mes = MESES_ABREV[Number(m[2]) - 1];
+    return mes ? `${mes}/${m[1]}` : valor;
+  }
+
+  if (trunc === "quarter") {
+    // "2026Q1" -> "1º tri/2026"
+    const m = /^(\d{4})Q([1-4])$/.exec(valor);
+    return m ? `${m[2]}º tri/${m[1]}` : valor;
+  }
+
+  // week: "2026-01-05" (a segunda que abre a semana) -> "05/01/2026"
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : valor;
+}
+
+/**
+ * O ano de um rótulo ISO de período, ou `null` quando não há como saber.
+ *
+ * Usado para decidir se o eixo pode omitir o ano (série de um ano só) e para
+ * marcar a virada quando ela existe.
+ */
+export function anoDoPeriodo(valor: string, trunc?: TruncPeriodo): string | null {
+  if (!valor || !trunc) return null;
+  const m = /^(\d{4})/.exec(valor);
+  return m ? m[1] : null;
+}
+
+/**
+ * A versão CURTA do rótulo, para o eixo horizontal.
+ *
+ * ⚠️ Existe por um problema de largura medido na tela: `jan/2026` mede ~46px, e
+ * com 12 meses num card o `minTickGap` do recharts descartava a maioria — o eixo
+ * mostrava "jan · abr · jul · dez" e a série parecia ter 4 pontos. `jan` mede
+ * ~18px e os doze cabem.
+ *
+ * O ano sai do rótulo e vira uma legenda única no fim do eixo (ver `VizLinha`),
+ * porque repetir "2026" doze vezes gasta a largura que os meses precisam.
+ *
+ * `mostrarAno` existe para o caso que quebra a simplificação: **série que cruza
+ * anos.** Aí um ano só no fim do eixo mentiria sobre os primeiros pontos, então
+ * o ponto em que o ano vira carrega o ano abreviado (`jan/26`). Sem isso, uma
+ * série de 18 meses mostraria dois "jan" indistinguíveis.
+ *
+ * A forma longa continua existindo (`rotuloDePeriodo`) e é o que aparece no
+ * tooltip e nos rótulos sobre a linha, onde há espaço e a precisão importa.
+ */
+export function rotuloCurtoDePeriodo(
+  valor: string,
+  trunc?: TruncPeriodo,
+  mostrarAno = false,
+): string {
+  if (!valor || !trunc) return valor;
+  // `year` não tem o que encurtar: o rótulo JÁ é o ano.
+  if (trunc === "year") return valor;
+
+  const ano = anoDoPeriodo(valor, trunc);
+  const sufixo = mostrarAno && ano ? `/${ano.slice(2)}` : "";
+
+  if (trunc === "month") {
+    const m = /^\d{4}-(\d{2})$/.exec(valor);
+    if (!m) return valor;
+    const mes = MESES_ABREV[Number(m[1]) - 1];
+    return mes ? `${mes}${sufixo}` : valor;
+  }
+
+  if (trunc === "quarter") {
+    const m = /^\d{4}Q([1-4])$/.exec(valor);
+    return m ? `${m[1]}º tri${sufixo}` : valor;
+  }
+
+  // week: "2026-01-05" -> "05/01" (o dia e o mês bastam; o ano vem na legenda)
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(valor);
+  return m ? `${m[2]}/${m[1]}${sufixo}` : valor;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variação entre períodos
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * O rótulo que o executor usa para linha sem data (`_SEM_DATA`, decisão D6).
+ *
+ * Duplicado aqui como string porque o executor é Python e não há como
+ * compartilhar constante entre as duas linguagens — mesma situação da
+ * normalização de nome de coluna (`CLAUDE.md` §8). Divergir aqui não quebra
+ * cálculo: só faz a variação aparecer onde não devia.
+ */
+export const SEM_DATA = "Sem data";
+
+/** Para onde o número andou. `null` quando não há como saber. */
+export type Sentido = "subiu" | "desceu" | "igual";
+
+/** Como pintar: segue `higher_is_better`, nunca a direção crua (DESIGN.md §7). */
+export type LeituraDelta = "bom" | "ruim" | "neutro";
+
+/**
+ * A variação de `anterior` para `atual`, como fração (0,35 = +35%).
+ *
+ * `null` significa "não dá para dizer", e cada caso tem motivo:
+ *
+ *   - **`anterior === 0`** — divisão por zero. "Saiu de 0 e foi para 100" não é
+ *     +∞% nem +100%: é um começo, não um crescimento. Mostrar qualquer número
+ *     aqui seria inventar.
+ *   - **valor não finito** — `null`, `NaN`, texto que não virou número.
+ *
+ * ⚠️ **O denominador é `Math.abs(anterior)`**, e isso importa quando o valor
+ * anterior é negativo (prejuízo, saldo devedor). Sem o `abs`, ir de −100 para
+ * −50 daria −50%: o número melhorou e o sinal diria que piorou, porque o
+ * denominador negativo inverte a fração. Com `abs`, dá +50%, que é o sentido
+ * real do movimento.
+ */
+export function variacaoPercentual(
+  anterior: number | null | undefined,
+  atual: number | null | undefined,
+): number | null {
+  if (anterior == null || atual == null) return null;
+  if (!Number.isFinite(anterior) || !Number.isFinite(atual)) return null;
+  if (anterior === 0) return null;
+  return (atual - anterior) / Math.abs(anterior);
+}
+
+/** "+35%" · "−11%" · "0%". Usa o menos tipográfico, não o hífen. */
+export function formatarVariacao(fracao: number | null): string {
+  if (fracao === null) return "";
+  const pct = fracao * 100;
+  // Abaixo de 0,5% arredondaria para "0%" com sinal, que lê como erro.
+  if (Math.abs(pct) < 0.5) return "0%";
+  const sinal = pct > 0 ? "+" : "−";
+  return `${sinal}${Math.abs(pct).toLocaleString("pt-BR", {
+    maximumFractionDigits: Math.abs(pct) < 10 ? 1 : 0,
+  })}%`;
+}
+
+export function sentidoDaVariacao(fracao: number | null): Sentido | null {
+  if (fracao === null) return null;
+  if (Math.abs(fracao * 100) < 0.5) return "igual";
+  return fracao > 0 ? "subiu" : "desceu";
+}
+
+/**
+ * Como pintar a variação — `DESIGN.md` §7, e a regra NÃO é "subiu = verde".
+ *
+ * | `maiorEhMelhor` | subiu | desceu |
+ * |---|---|---|
+ * | `true`  | bom    | ruim   |
+ * | `false` | ruim   | bom    |
+ * | `null`  | neutro | neutro |
+ *
+ * O `null` é o padrão de card novo, e devolver "neutro" nele é deliberado:
+ * *"Cor errada é pior que ausência de cor: um card de custo subindo 30% em
+ * verde é lido antes do número e faz a pessoa seguir o dia tranquila."*
+ *
+ * O triângulo e o texto carregam a direção mesmo sem cor, então nada se perde
+ * em preto e branco nem sob daltonismo severo — é o mesmo raciocínio que
+ * mantém a tabela sempre disponível (§9).
+ */
+export function leituraDoDelta(
+  sentido: Sentido | null,
+  maiorEhMelhor: boolean | null | undefined,
+): LeituraDelta {
+  if (sentido === null || sentido === "igual") return "neutro";
+  if (maiorEhMelhor == null) return "neutro";
+  const subiu = sentido === "subiu";
+  return subiu === maiorEhMelhor ? "bom" : "ruim";
+}
+
 /**
  * "há 4 min", "há 3 h", "há 2 d".
  *

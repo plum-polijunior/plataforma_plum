@@ -43,7 +43,7 @@
     --secondary-foreground: 327 6% 35%; /* #5F545A  text     */
 
     --muted: 340 23% 97%; /* #FAF7F8  surface  */
-    --muted-foreground: 325 6% 41%; /* #6F636A  muted    */
+    --muted-foreground: 325 8% 33%; /* era #6F636A (L 41%) — escurecido */
 
     --accent: 332 46% 93%; /* #F5E4EC  tint     */
     --accent-foreground: 329 44% 33%;
@@ -51,8 +51,8 @@
     --destructive: 349 52% 46%; /* #B3384F  danger   */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 330 17% 91%; /* #EBE3E7  line     */
-    --input: 330 14% 86%; /* #E0D6DB  line-strong */
+    --border: 330 15% 82%; /* era #EBE3E7 (L 91%) — hairline mais visivel */
+    --input: 330 14% 76%; /* era #E0D6DB (L 86%) — campo de formulario mais visivel */
     --ring: 329 44% 33%;
 
     /* Tokens da Direção A sem equivalente no vocabulário do shadcn.
@@ -212,6 +212,92 @@
     --sidebar-accent-foreground: 270 20% 90%;
     --sidebar-border: 260 30% 18%;
     --sidebar-ring: 270 70% 60%;
+  }
+
+  /* ── Tema escuro do app interno — Parte C do merge de 2026-08-12 ────────
+     Diferente do `.dark` acima (que é só da landing, roxo/violeta): esta
+     classe é o modo escuro do produto logado, on-brand (matiz 329, a mesma
+     de `:root`). Alternada via `src/hooks/use-tema.ts`, que aplica/remove a
+     classe em `document.documentElement` — não em `.dark`, de propósito,
+     para não reabrir o tema da landing.
+
+     Mesma especificidade de `:root`; por vir depois no arquivo, vence quando
+     a classe estiver presente. Valores são ponto de partida, não medição
+     final — contraste WCAG AA ainda precisa ser conferido (ver
+     docs/2026-08-12-PLANO-merge-landing-page.md, Parte C). */
+  .tema-escuro {
+    --background: 320 18% 7%;
+    /* --foreground/--muted-foreground clareados (pedido do usuário: dark já
+       estava melhor que o claro, mas o texto podia clarear mais). */
+    --foreground: 320 8% 97%;
+
+    --card: 320 16% 10%;
+    --card-foreground: 320 8% 97%;
+
+    --popover: 320 16% 10%;
+    --popover-foreground: 320 8% 97%;
+
+    --primary: 329 55% 62%;
+    --primary-foreground: 320 18% 7%;
+
+    --secondary: 320 14% 13%;
+    --secondary-foreground: 320 8% 80%;
+
+    --muted: 320 14% 13%;
+    --muted-foreground: 320 8% 72%;
+
+    --accent: 329 30% 20%;
+    --accent-foreground: 329 60% 80%;
+
+    --destructive: 349 55% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 320 14% 18%;
+    --input: 320 14% 22%;
+    --ring: 329 55% 62%;
+
+    --brand-hover: 329 55% 68%;
+    --brand-soft: 329 45% 58%;
+    --ink-soft: 320 10% 85%;
+    --text-soft: 320 8% 60%;
+    --surface-hover: 320 14% 16%;
+    --line-hover: 320 12% 30%;
+    --tint-soft: 329 25% 16%;
+    --tint-line: 329 22% 28%;
+
+    --ok: 154 45% 55%;
+    --ok-bg: 154 30% 14%;
+    --ok-line: 154 35% 30%;
+    --warn: 36 80% 60%;
+    --warn-bg: 36 40% 14%;
+    --danger: 349 55% 60%;
+    --danger-line: 349 40% 32%;
+
+    /* ── Grade e eixo do gráfico — MEDIDOS, não escolhidos (Fase 5b, D8) ──
+       Estes dois FALTAVAM, e no gráfico de linha a falta é visível: sem eles a
+       gridline herdava o valor do claro (`--grid: 330 17% 91%`, L 91%) e virava
+       uma linha quase branca sobre o cartão escuro (L 10%). O `DESIGN.md` §4
+       exige gridline "sólida, recessiva" — era o oposto: a coisa mais chamativa
+       do card.
+
+       O alvo não foi estética, foi igualar o contraste que o claro já tem e que
+       já passou por revisão. Medido com a fórmula de luminância da WCAG contra
+       `--card` de cada tema:
+
+                        claro (referência)   escuro com valor do claro   escolhido
+         --grid              1.248                   14.283               1.262
+         --axis              1.418                   12.570               1.405
+
+       Matiz 320, a mesma do resto do tema escuro, para a grade não puxar para
+       outro lugar do círculo. */
+    --grid: 320 12% 18%;
+    --axis: 320 12% 21%;
+
+    /* A paleta de SÉRIE (`src/components/dashboard/cores.ts`) tem tabela PRÓPRIA
+       para este tema (`MATIZES_ESCURO`), e a rampa **inverte de sentido** aqui: o
+       maior valor recebe o tom mais CLARO. Vale para as quatro viz. Os números e
+       a derivação estão em `cores.ts`; a trava, em
+       `src/lib/contraste-serie.test.ts`, que valida as duas superfícies. */
   }
 }
 

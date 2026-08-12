@@ -21,7 +21,14 @@
  * A pílula de idade é SEMPRE visível (decisão D5), não só no degradado.
  */
 
-import { Lock } from "lucide-react";
+import { useState } from "react";
+import { Lock, Maximize2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AcoesDoCard, type AcoesCard } from "./AcoesDoCard";
 import type { CardNaTela, FormaVisual } from "./tipos";
 import { idadeLegivel } from "./formato";
@@ -30,6 +37,7 @@ import { VizBar } from "./VizBar";
 import { VizTabela } from "./VizTabela";
 import { VizStackedBar } from "./VizStackedBar";
 import { VizPie } from "./VizPie";
+import { VizLinha } from "./VizLinha";
 
 interface Props {
   card: CardNaTela;
@@ -64,6 +72,11 @@ export function CardDashboard({
   vizEfetiva,
   slotCor = 0,
 }: Props) {
+  // A visão ampliada é estado LOCAL do card, e de propósito: não vai para o
+  // banco (não é do dashboard da organização) nem para o localStorage (diferente
+  // da forma escolhida em "Ver como", abrir grande é um gesto do momento, não
+  // uma preferência de leitura — ver `salvarFormas` em `formas.ts`).
+  const [ampliado, setAmpliado] = useState(false);
   const idade = idadeLegivel(card.calculadoEm);
 
   // A idade só aparece no card quando ele DIVERGE do resto da página: um
@@ -101,6 +114,13 @@ export function CardDashboard({
     );
   }
 
+  // Ampliar só faz sentido onde há uma FORMA para ver maior. Num `kpi` o card
+  // já é um número em corpo grande: abrir um diálogo mostraria o mesmo número.
+  const podeAmpliar =
+    (card.estado === "ok" || card.estado === "stale") &&
+    vizEfetiva !== "kpi" &&
+    card.linhas.length > 0;
+
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card transition-colors duration-150 hover:border-line-hover motion-reduce:transition-none">
       {/* Hairline separando cabeçalho de dado: é o mecanismo de separação do
@@ -112,6 +132,20 @@ export function CardDashboard({
         <div className="flex shrink-0 items-start gap-1">
           {mostrarIdade && (
             <span className="pt-0.5 text-[11px] text-muted-foreground">calculado {idade}</span>
+          )}
+          {podeAmpliar && (
+            <button
+              type="button"
+              onClick={() => setAmpliado(true)}
+              // A largura do card na grade de 3 colunas aperta o eixo e os
+              // rótulos de um gráfico temporal — 12 meses em ~460px é o caso
+              // real. Ampliar não muda o dado, só devolve largura.
+              title="Ver maior"
+              aria-label={`Ver "${card.titulo}" maior`}
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground motion-reduce:transition-none"
+            >
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
           )}
           {acoes && <AcoesDoCard acoes={acoes} titulo={card.titulo} />}
         </div>
@@ -125,9 +159,40 @@ export function CardDashboard({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <Corpo card={card} heroi={heroi} viz={vizEfetiva} slotCor={slotCor} />
       </div>
+
+      {/* Visão ampliada. Reusa o MESMO `Corpo`, então o gráfico grande é o
+          gráfico do card — não uma segunda implementação que divergiria. A única
+          diferença é a altura, que a `VizLinha` usa também para decidir se um
+          rótulo cabe acima ou abaixo do ponto. */}
+      <Dialog open={ampliado} onOpenChange={setAmpliado}>
+        <DialogContent className="max-w-[min(1100px,94vw)]">
+          <DialogHeader>
+            <DialogTitle className="text-base">{card.titulo}</DialogTitle>
+          </DialogHeader>
+          <div className="pt-1">
+            <Corpo
+              card={card}
+              heroi={false}
+              viz={vizEfetiva}
+              slotCor={slotCor}
+              alturaGrafico={ALTURA_AMPLIADA}
+              densidadeCheia
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }
+
+/**
+ * Altura do gráfico na visão ampliada.
+ *
+ * Escolhida para caber em tela de notebook (~768px de altura útil) com o
+ * cabeçalho do diálogo e a legenda, sem precisar rolar — rolagem dentro de um
+ * diálogo que existe para "ver melhor" é contraditória.
+ */
+const ALTURA_AMPLIADA = 420;
 
 function Corpo({
   card,
@@ -135,12 +200,21 @@ function Corpo({
   compacto = false,
   viz,
   slotCor = 0,
+  alturaGrafico,
+  densidadeCheia = false,
+  curva,
 }: {
   card: CardNaTela;
   heroi: boolean;
   compacto?: boolean;
   viz?: FormaVisual;
   slotCor?: number;
+  /** Só a `line` usa: a visão ampliada passa uma altura maior. */
+  alturaGrafico?: number;
+  /** Só a `line` usa: no ampliado, variação em todo ponto. */
+  densidadeCheia?: boolean;
+  /** Só a `line` usa: experimento de suavização. Padrão `linear`. */
+  curva?: "linear" | "monotone";
 }) {
   if (card.estado === "carregando") return <Esqueleto compacto={compacto} />;
 
@@ -225,6 +299,24 @@ function Corpo({
         linhas={card.linhas}
         colunaOrigem={card.colunaOrigem}
         agregacao={card.agregacao}
+        slotCor={slotCor}
+      />
+    );
+  }
+  if (forma === "line") {
+    return (
+      <VizLinha
+        colunas={card.colunas}
+        linhas={card.linhas}
+        colunaOrigem={card.colunaOrigem}
+        periodo={card.periodo}
+        altura={alturaGrafico}
+        densidadeCheia={densidadeCheia}
+        curva={curva}
+        // `higher_is_better` do banco. É o que decide a COR da variação entre
+        // períodos (`DESIGN.md` §7): sem ele, um card de custo subindo 30%
+        // apareceria em verde. `null` (padrão de card novo) = sem cor.
+        maiorEhMelhor={card.maiorEhMelhor}
         slotCor={slotCor}
       />
     );

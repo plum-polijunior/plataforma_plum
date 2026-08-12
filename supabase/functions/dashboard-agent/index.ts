@@ -235,8 +235,12 @@ RETORNE ESTRITAMENTE um JSON com estas quatro chaves:
 
 "title"  — título curto em português, sem ponto final, no máximo 45 caracteres.
            Nomeia o indicador, não repete a pergunta. Ex.: "Faturamento por loja".
-"viz"    — "kpi" ou "bar", APENAS. "kpi" quando o plano não tem group_by (um
-           número só). "bar" quando tem group_by (uma linha por categoria).
+"viz"    — "kpi", "bar" ou "line", APENAS.
+           "kpi"  quando o plano não tem group_by (um número só).
+           "bar"  quando agrupa por CATEGORIA (loja, produto, status).
+           "line" quando agrupa por PERÍODO, isto é, quando o group_by usa
+                  "trunc" (ver abaixo). Só nesse caso — linha ligando categorias
+                  sugere uma progressão entre elas que não existe.
 "higher_is_better" — true se subir é bom, false se subir é ruim (custo, refugo,
            cancelamento, desconto), null se for neutro ou ambíguo.
 "query_plan" — o plano, no formato abaixo.
@@ -244,7 +248,9 @@ RETORNE ESTRITAMENTE um JSON com estas quatro chaves:
 FORMATO DO QUERY PLAN:
 - "from": "producao"
 - "target_columns": array com os nomes EXATOS das colunas que o executor precisa
-  carregar (as do select, do where e do group_by).
+  carregar (as do select, do where e do group_by). SEMPRE nomes de coluna em
+  texto simples — nunca objetos. Se o group_by usa {"col": "data_da_venda",
+  "trunc": "month"}, o que entra aqui é "data_da_venda".
 - "select": array. Cada item é {"expr": {"agg": "sum"|"avg"|"min"|"max"|"count",
   "col": "nome_da_coluna"}, "as": "alias"}.
 - CONTA ENTRE COLUNAS: no lugar do nome da coluna, "col" aceita uma expressão
@@ -255,7 +261,16 @@ FORMATO DO QUERY PLAN:
   expressão aninhada.
 - "where": (opcional) {"left": "coluna", "op": "="|">"|"<"|"between"|"contains"|"in",
   "right": valor} ou {"op": "and"|"or", "args": [...]}.
-- "group_by": (opcional) array com UMA coluna categórica.
+- "group_by": (opcional) array com UM item, em uma de duas formas:
+  - o nome de uma coluna CATEGÓRICA: ["loja"]
+  - um período derivado de uma coluna de DATA:
+    [{"col": "data_da_venda", "trunc": "month"}]
+    Truncamentos aceitos, e APENAS estes: "week", "month", "quarter", "year".
+    Escolha pela pergunta: "por mês" → month, "por semana" → week,
+    "por trimestre" → quarter, "por ano" → year. "Evolução", "ao longo do
+    tempo" e "histórico" sem unidade dita → month.
+    Não existe "day": para ver dia a dia, agrupe pela coluna de data direto,
+    sem "trunc".
 - "order_by": (opcional) array de {"col": "alias_ou_coluna", "dir": "asc"|"desc"}.
 - "limit": (opcional) inteiro.
 
@@ -269,15 +284,27 @@ REGRAS QUE NÃO PODEM SER QUEBRADAS:
 2. Todo plano PRECISA ter pelo menos uma agregação no "select". O executor
    recusa devolver linhas brutas, sem exceção. "Liste os pedidos" é impossível.
 
-3. NUNCA agrupe por data ou por período. O executor não sabe derivar mês,
-   semana ou trimestre de uma coluna de data — agrupar por uma coluna de data
-   produziria uma linha POR DIA. Se a pergunta pedir "por mês", devolva
-   {"erro": "Ainda não sei agrupar por período. Posso calcular o total de um
-   intervalo de datas, se você disser qual."}. FILTRAR por intervalo de datas
-   no "where" funciona normalmente.
+3. AGRUPAR POR PERÍODO USA "trunc", NUNCA A COLUNA DE DATA CRUA. Se a pergunta
+   pedir "por mês", "por semana", "por trimestre", "por ano" ou "evolução",
+   use a forma {"col": "<coluna_de_data>", "trunc": "<unidade>"} e viz "line".
+   Agrupar pela coluna de data SEM "trunc" produz uma linha POR DIA — ~250
+   pontos num ano, que é ruído e não evolução.
 
-4. group_by aceita UMA coluna, e ela precisa ser categórica (texto com poucos
-   valores distintos: loja, categoria, status, forma de pagamento).
+   A coluna precisa ser de DATA no schema_metadata. Se a base não tiver nenhuma
+   coluna de data, "por mês" é impossível: devolva {"erro": "..."} dizendo que
+   falta uma coluna de data. Não tente derivar período de texto.
+
+   ⚠️ Coluna que guarda SÓ O ANO (valores como 2005, 2018) não é coluna de data
+   e não aceita "trunc": agrupe por ela direto, como categórica, que o resultado
+   já sai por ano.
+
+   FILTRAR por intervalo de datas no "where" continua funcionando, e combina com
+   o agrupamento por período: "faturamento por mês em 2026" é um "where" de
+   intervalo MAIS um group_by com trunc "month".
+
+4. group_by aceita UM item. Se for coluna categórica, ela precisa ter poucos
+   valores distintos (loja, categoria, status, forma de pagamento). Se for
+   período, vale a regra 3.
 
 5. Não some colunas de percentual — para elas use "avg".
 

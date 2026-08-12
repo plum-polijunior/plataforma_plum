@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
-import { Bot, Building2, ChevronRight, Database, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { Bot, Building2, ChevronRight, Database, LayoutDashboard, LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import plumLogo from "@/assets/plum-mascot-transparent.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgAccess } from "@/hooks/use-org-access";
+import { useTema } from "@/hooks/use-tema";
 import AccessPending from "@/pages/AccessPending";
 
 /**
@@ -57,6 +58,7 @@ export function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { state, session, organizationName, roleName } = useOrgAccess();
+  const { tema, alternarTema } = useTema();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -254,6 +256,17 @@ export function DashboardLayout() {
           <span className="truncate font-display text-[15px] font-semibold tracking-[-0.01em] text-foreground">
             {TITULOS[location.pathname] ?? "Plum"}
           </span>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="ml-auto"
+            onClick={alternarTema}
+            aria-label={tema === "claro" ? "Ativar modo escuro" : "Ativar modo claro"}
+            title={tema === "claro" ? "Modo escuro" : "Modo claro"}
+          >
+            {tema === "claro" ? <Moon className="h-[18px] w-[18px]" /> : <Sun className="h-[18px] w-[18px]" />}
+          </Button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto p-4 md:p-8">

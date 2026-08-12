@@ -532,7 +532,67 @@ como verde.
 **Nada disto vale para o PR 1** — ele não altera `_shared/` e não publica Edge
 Function nenhuma. Esta seção é toda do PR 2.
 
-⚠️ **Decisão em aberto, e é do PR 2: republicar `ai-plum-chat`?**
+### ✅ D8 — DECIDIDO em 2026-08-11: `--grid` e `--axis` ganham valor no tema escuro
+
+Apareceu depois do plano, no merge `16d4747` (redesign da landing + tema claro no front
+interno) do colega. Ele introduziu um **alternador claro/escuro do app logado**
+(`src/hooks/use-tema.ts`, classe `tema-escuro` no `<html>`, botão no `DashboardLayout`) —
+separado do `.dark`, que segue exclusivo da landing.
+
+O bloco `.tema-escuro` **não redefine os tokens de gráfico**, e para a linha isso é fatal:
+
+| Token | Valor (só no claro) | Sobre `--background` do escuro (L 7%) |
+|---|---|---|
+| `--grid` | `330 17% 91%` — L **91%** | linha quase branca sobre quase preto |
+| `--axis` | `330 14% 86%` — L **86%** | idem |
+
+O `DESIGN.md` §4 exige gridline "sólida, **recessiva**". Com esses valores ela vira a coisa
+mais chamativa do card — contraste invertido. E a linha é justamente a viz que mais depende
+de grid e eixo.
+
+**Decisão: o PR 2 acrescenta APENAS `--grid` e `--axis` ao `.tema-escuro`**, medidos para
+serem recessivos. Descartadas as outras duas opções:
+
+- *não tocar em CSS* — entregaria um gráfico visivelmente errado em metade dos temas;
+- *medir a paleta escura inteira* (as 7 cores de série também) — é trabalho de medição maior,
+  já previsto no `docs/2026-08-12-PLANO-merge-landing-page.md` (Parte C), e mexer nele aqui
+  criaria conflito com quem for terminá-lo.
+
+⚠️ **Fica pendente, e não é desta fase:** o contraste das 7 cores de série no tema escuro
+nunca foi medido. `src/lib/contraste-serie.test.ts` trava o **claro** apenas. Vale para
+`VizBar`, `VizPie`, `VizStackedBar` e a `VizLinha` nova — todas herdam a paleta do claro. O
+próprio `index.css` admite: *"Valores são ponto de partida, não medição final — contraste
+WCAG AA ainda precisa ser conferido"*.
+
+### ✅ D7 — DECIDIDO em 2026-08-11: **NÃO republicar `ai-plum-chat`**
+
+Decisão do dono do produto, com o raciocínio: não criar risco novo no caminho mais
+exercitado do produto. Republicar sobe o repositório por cima do que está rodando, num
+arquivo que o `CLAUDE.md` §1 registra como já tendo divergido — é a única das duas opções
+que pode quebrar o chat **hoje**.
+
+**Efeito prático de não republicar: nenhum.** A cópia velha do extrator só seria problema se
+o chat *emitisse* `{col, trunc}`, e quem decide isso é o prompt do Agente A, que este PR não
+toca (D4).
+
+🚨 **A armadilha que isso cria, e ela precisa ser lida por quem vier depois:**
+
+> **Quem for ligar agrupamento por período no CHAT tem que republicar `ai-plum-chat` ANTES
+> de mudar o prompt do Agente A.** Se o prompt mudar sem o deploy, o chat vai emitir
+> `{col, trunc}`, a cópia antiga de `_shared/query_plan.ts` não vai extrair a coluna de data,
+> ela não entrará em `resolved_columns`, o executor não vai carregá-la e a pergunta morre em
+> `MissingColumnError`.
+
+Falha **fechada e barulhenta** — erro na tela, não número errado, e não é vazamento (§2).
+Mas é confusa de diagnosticar, e só acontece junto com uma mudança de prompt do chat, ou
+seja: com alguém já mexendo no chat de propósito.
+
+Registrar também no `CLAUDE.md` (§9, o checklist de `_shared/*`) ao concluir o PR 2, porque é
+lá que alguém vai olhar antes de publicar.
+
+---
+
+⚠️ **O raciocínio completo das duas opções, preservado:**
 
 Cada função carrega uma **cópia** de `_shared/query_plan.ts`, tirada no momento em
 que ela é publicada — não há compartilhamento em runtime. Mudar o arquivo e publicar

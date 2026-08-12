@@ -432,15 +432,20 @@ def test_filtrar_por_ano_continua_numerico(acervo):
 # inteiro."
 
 
+# ⚠️ `{"col": ..., "trunc": "month"}` ESTAVA nesta lista no PR 1 e saiu no PR 2,
+# porque o PR 2 é exatamente o que torna essa forma válida — ela não é mais erro
+# de tipo. A cobertura dela migrou para `test_periodo.py`, que agora garante o
+# resultado certo e as recusas nomeadas (coluna de texto, papel `ano`, `trunc`
+# fora do enum). O que sobra aqui é o que continua sendo tipo inválido.
 @pytest.mark.parametrize(
     "item_de_group_by",
     [
-        {"col": "regiao", "trunc": "month"},  # a forma que a Fase 5b vai introduzir
         {"trunc": "month"},                   # objeto sem `col`
         {"col": 123},                         # `col` que não é string
+        {"col": "   "},                       # `col` só com espaço
         ["regiao"],                           # lista aninhada
     ],
-    ids=["objeto_col_trunc", "objeto_sem_col", "col_nao_string", "lista"],
+    ids=["objeto_sem_col", "col_nao_string", "col_em_branco", "lista"],
 )
 def test_group_by_nao_string_falha_como_erro_do_executor(vendas, item_de_group_by):
     """

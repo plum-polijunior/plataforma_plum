@@ -30,7 +30,9 @@ import {
   CONTRASTE_MINIMO,
   QUANTOS_SLOTS,
   SUPERFICIE_DO_CARD,
+  SUPERFICIE_DO_CARD_ESCURO,
   corDaSerie,
+  corDeSerieUnica,
 } from "../components/dashboard/cores";
 
 /** Maior rampa que os consumidores pedem: `MAX_SEGMENTOS`/`MAX_FATIAS` = 6. */
@@ -211,6 +213,135 @@ describe("paleta de série na superfície clara", () => {
     // `Inicio.tsx` passa a posição do card na grade, que cresce sem limite.
     for (const slot of [-1, 0, QUANTOS_SLOTS, QUANTOS_SLOTS * 3 + 2]) {
       expect(corDaSerie(slot, 0, 4)).toMatch(/^hsl\(/);
+    }
+  });
+});
+
+describe("corDeSerieUnica — a linha do VizLinha", () => {
+  it("todos os 7 slots passam no piso de contraste sobre o cartão claro", () => {
+    const superficie = hexParaRgb(SUPERFICIE_DO_CARD);
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      const razao = contraste(hslStringParaRgb(corDeSerieUnica(slot)), superficie);
+      expect(
+        razao,
+        `slot ${slot}: ${razao.toFixed(2)}:1 sobre ${SUPERFICIE_DO_CARD}`,
+      ).toBeGreaterThanOrEqual(CONTRASTE_MINIMO);
+    }
+  });
+
+  it("⚠️ é MAIS CLARO que o degrau escuro da rampa — é o ponto da função", () => {
+    // A rampa multi-categoria manda o MAIOR valor para o tom mais escuro
+    // (`corDaSerie(slot, 0, 1)` → t = 1). Numa série única isso dava uma linha
+    // quase preta: azul L=25, verde e aqua L=14. Este teste trava a diferença,
+    // para que ninguém "unifique" as duas funções e traga o problema de volta.
+    const superficie = hexParaRgb(SUPERFICIE_DO_CARD);
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      const daRampa = contraste(hslStringParaRgb(corDaSerie(slot, 0, 1)), superficie);
+      const unica = contraste(hslStringParaRgb(corDeSerieUnica(slot)), superficie);
+      // Mais claro = MENOS contraste contra superfície clara.
+      expect(unica, `slot ${slot}`).toBeLessThan(daRampa);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A paleta do TEMA ESCURO
+//
+// Mesmos três critérios da superfície clara, contra a outra superfície. Existe
+// porque nenhum par de luminosidades serve aos dois fundos: no claro o contraste
+// vem de escurecer e o TETO de cada matiz aperta; no escuro vem de clarear e o
+// PISO manda. A paleta clara medida no escuro passava com folga desperdiçada
+// (5,5:1) e cor mais escura do que precisava — foi o que a revisão visual
+// reprovou como "cor sem diferença em relação ao fundo".
+//
+// ⚠️ Este bloco é a trava que impede a tabela escura de ser ajustada "a olho".
+// Sem ele, mexer num número de `MATIZES_ESCURO` não quebraria nada.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("paleta de série na superfície ESCURA", () => {
+  const superficieEscura = hexParaRgb(SUPERFICIE_DO_CARD_ESCURO);
+  const corEscura = (slot: number, i: number, quantos: number) =>
+    hslStringParaRgb(corDaSerie(slot, i, quantos, "escuro"));
+
+  it(`todo degrau de todo slot passa ${CONTRASTE_MINIMO}:1 contra o cartão escuro`, () => {
+    const reprovados: string[] = [];
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      for (let quantos = 1; quantos <= MAIOR_RAMPA; quantos++) {
+        for (let i = 0; i < quantos; i++) {
+          const razao = contraste(corEscura(slot, i, quantos), superficieEscura);
+          if (razao < CONTRASTE_MINIMO) {
+            reprovados.push(
+              `slot ${slot} · rampa de ${quantos} · degrau ${i} → ${razao.toFixed(2)}:1`,
+            );
+          }
+        }
+      }
+    }
+    expect(reprovados).toEqual([]);
+  });
+
+  it(`degraus vizinhos ficam distinguíveis (ΔE76 ≥ ${DELTA_E_MINIMO})`, () => {
+    const reprovados: string[] = [];
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      for (let i = 0; i < MAIOR_RAMPA - 1; i++) {
+        const e = deltaE76(
+          corEscura(slot, i, MAIOR_RAMPA),
+          corEscura(slot, i + 1, MAIOR_RAMPA),
+        );
+        if (e < DELTA_E_MINIMO) {
+          reprovados.push(`slot ${slot} · degraus ${i}/${i + 1} → ΔE ${e.toFixed(1)}`);
+        }
+      }
+    }
+    expect(reprovados).toEqual([]);
+  });
+
+  it(`o maior valor se separa do menor por ≥ ${AMPLITUDE_L_MINIMA} pontos de L*`, () => {
+    // A trava contra o bug histórico do azul: 1 ponto de L* entre a barra maior e
+    // a menor passava em contraste e não ordenava nada.
+    const reprovados: string[] = [];
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      const maior = lab(corEscura(slot, 0, MAIOR_RAMPA))[0];
+      const menor = lab(corEscura(slot, MAIOR_RAMPA - 1, MAIOR_RAMPA))[0];
+      const amplitude = Math.abs(maior - menor);
+      if (amplitude < AMPLITUDE_L_MINIMA) {
+        reprovados.push(`slot ${slot} → ${amplitude.toFixed(1)} pontos de L*`);
+      }
+    }
+    expect(reprovados).toEqual([]);
+  });
+
+  it("⭐ a rampa INVERTE de sentido: no escuro o maior valor é o mais CLARO", () => {
+    // É a diferença conceitual entre os dois temas, e a que alguém mais
+    // provavelmente "corrigiria" por engano ao unificar as tabelas. No claro o
+    // maior valor recebe o tom escuro; aqui, o claro. Os dois seguem a MESMA
+    // ideia — "maior valor, mais contraste contra o fundo" — em fundos opostos.
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      const lMaiorValor = lab(corEscura(slot, 0, MAIOR_RAMPA))[0];
+      const lMenorValor = lab(corEscura(slot, MAIOR_RAMPA - 1, MAIOR_RAMPA))[0];
+      expect(lMaiorValor, `slot ${slot} no escuro`).toBeGreaterThan(lMenorValor);
+
+      // E no claro é o oposto, no mesmo slot.
+      const claroMaior = lab(hslStringParaRgb(corDaSerie(slot, 0, MAIOR_RAMPA)))[0];
+      const claroMenor = lab(
+        hslStringParaRgb(corDaSerie(slot, MAIOR_RAMPA - 1, MAIOR_RAMPA)),
+      )[0];
+      expect(claroMaior, `slot ${slot} no claro`).toBeLessThan(claroMenor);
+    }
+  });
+
+  it("corDeSerieUnica passa no piso e é MAIS CLARA que no tema claro", () => {
+    for (let slot = 0; slot < QUANTOS_SLOTS; slot++) {
+      const escura = hslStringParaRgb(corDeSerieUnica(slot, "escuro"));
+      expect(
+        contraste(escura, superficieEscura),
+        `slot ${slot} sobre o cartão escuro`,
+      ).toBeGreaterThanOrEqual(CONTRASTE_MINIMO);
+
+      // A linha do tema escuro tem de ser mais luminosa que a do claro; se as
+      // duas fossem iguais, a segunda tabela não estaria sendo usada.
+      const clara = hslStringParaRgb(corDeSerieUnica(slot, "claro"));
+      expect(lab(escura)[0], `slot ${slot}`).toBeGreaterThan(lab(clara)[0]);
     }
   });
 });
