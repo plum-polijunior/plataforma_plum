@@ -5,66 +5,91 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import plumMascot from "@/assets/plum-mascot-transparent.png";
 
 const faqs = [
   {
-    question: "Os dados da minha empresa estão seguros?",
-    answer: "Sim, os dados permanecem nos servidores da sua empresa — o Plum apenas faz a consulta sob demanda.",
+    question: "Meus dados saem da empresa?",
+    answer:
+      "Não. O Plum consulta seu banco de dados sob demanda — as informações continuam na infraestrutura da sua empresa.",
   },
   {
-    question: "Quantos usuários podem usar o Plum?",
-    answer: "Não há limite. Toda a sua equipe pode consultar dados via WhatsApp simultaneamente.",
+    question: "O Plum funciona só no WhatsApp?",
+    answer:
+      "Não. Além do WhatsApp, o Plum também roda em uma plataforma web própria — você escolhe o canal que faz mais sentido em cada momento.",
   },
   {
-    question: "Preciso instalar algum software?",
-    answer: "Não. O Plum funciona 100% via WhatsApp. Não é necessário instalar aplicativos ou acessar painéis.",
+    question: "Como funciona o controle de quem vê o quê?",
+    answer:
+      "A plataforma é uma solução interna da sua empresa, com níveis de acesso configuráveis — cada pessoa enxerga apenas o que faz sentido para sua função.",
   },
   {
-    question: "Posso personalizar os relatórios automáticos?",
-    answer: "Sim. Você define quais métricas receber, em qual frequência (diária, semanal, mensal) e quem deve receber cada relatório.",
+    question: "Preciso trocar meu banco de dados atual?",
+    answer: "Não. O Plum se conecta à estrutura de dados que você já usa hoje e consulta a partir dela.",
+  },
+  {
+    question: "Dá para programar relatórios e lembretes automáticos?",
+    answer:
+      "Sim. Você define frequência, destinatário e conteúdo de cada envio, direto a partir do seu banco de dados.",
+  },
+  {
+    question: "O Plum serve para qual tipo de empresa?",
+    answer:
+      "Qualquer empresa com dados estruturados: varejo, indústria, financeiro, e-commerce, agências e consultórios, entre outros.",
   },
 ];
 
 export function FAQSection() {
   return (
-    <section
-      id="faq"
-      className="min-h-screen flex items-center justify-center py-20 px-4 relative overflow-hidden scroll-snap-start"
-    >
-      {/* Background glow */}
-      <div className="absolute top-1/2 left-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -translate-y-1/2" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
-
-      <div className="container mx-auto max-w-3xl relative z-10">
+    <section id="faq" className="bg-secondary py-[110px] px-6 overflow-hidden">
+      <div className="max-w-[820px] mx-auto">
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
+          transition={{ duration: 0.7 }}
           viewport={{ once: true }}
-          className="text-center mb-12"
+          className="flex items-center justify-center gap-9 flex-wrap mb-12"
         >
-          <h2 className="text-4xl md:text-5xl font-bold text-gradient mb-4">
-            FAQ
-          </h2>
-          <p className="text-muted-foreground">
-            Perguntas frequentes sobre o Plum.
-          </p>
+          <div className="flex-shrink-0">
+            <div className="relative bg-card border border-primary/20 rounded-2xl px-[18px] py-2.5 text-[15px] font-semibold text-primary whitespace-nowrap shadow-md mb-2.5 text-center">
+              Bateu alguma dúvida?
+              <div className="absolute -bottom-[7px] left-1/2 -translate-x-1/2 rotate-45 w-3.5 h-3.5 bg-card border-r border-b border-primary/20" />
+            </div>
+            <img
+              src={plumMascot}
+              alt="Mascote Plum"
+              className="w-[172px] h-auto animate-cloud-float"
+              style={{ filter: "drop-shadow(0 12px 20px hsl(329 44% 33% / 0.25))" }}
+            />
+          </div>
+
+          <div className="text-left max-w-[420px]">
+            <div className="text-[13px] font-bold tracking-[1.5px] uppercase text-primary mb-3.5">
+              FAQ
+            </div>
+            <h2 className="text-gradient font-extrabold m-0 mb-3 text-[clamp(28px,3.6vw,40px)]">
+              Perguntas frequentes
+            </h2>
+            <p className="text-[15px] text-muted-foreground m-0">
+              Sobre a plataforma, os dados e como o Plum se encaixa no seu dia a dia.
+            </p>
+          </div>
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
+          transition={{ duration: 0.7, delay: 0.15 }}
           viewport={{ once: true }}
-          className="glass rounded-2xl p-6"
+          className="bg-card border border-border rounded-[20px] px-7 py-2 shadow-sm"
         >
           <Accordion type="single" collapsible className="w-full">
             {faqs.map((faq, index) => (
-              <AccordionItem key={index} value={`item-${index}`} className="border-border/30">
-                <AccordionTrigger className="text-left text-foreground hover:text-primary transition-colors py-4">
+              <AccordionItem key={index} value={`item-${index}`} className="border-border">
+                <AccordionTrigger className="text-left text-[15.5px] font-semibold text-foreground hover:text-primary hover:no-underline transition-colors py-[18px]">
                   {faq.question}
                 </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground leading-relaxed pb-4">
+                <AccordionContent className="text-[14.5px] leading-[1.7] text-muted-foreground">
                   {faq.answer}
                 </AccordionContent>
               </AccordionItem>

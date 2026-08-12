@@ -16,9 +16,15 @@ import { cn } from "@/lib/utils";
  * (`--radius` 12px dá `md` 10px e `sm` 8px) e o protótipo especifica 9px em todo
  * controle de formulário. 1px de diferença é visível numa pilha de campos.
  *
- * `hero` e `glass` NÃO foram tocados: são variantes exclusivas da landing, que
- * segue no tema escuro. Elas usam `backdrop-blur`, proibido em App UI pelo
- * `DESIGN.md` §1 — o que está certo, porque nenhuma tela de produto as usa.
+ * `glass` NÃO foi tocado: variante exclusiva da landing, que segue no tema
+ * escuro. Usa `backdrop-blur`, proibido em App UI pelo `DESIGN.md` §1 — o que
+ * está certo, porque nenhuma tela de produto a usa.
+ *
+ * `hero` mudou no merge da landing nova (2026-08-12, ver
+ * docs/2026-08-12-PLANO-merge-landing-page.md §2): a versão glassy (pensada
+ * pro fundo escuro) virou sólida, porque o design novo usa `bg-primary` liso.
+ * Ainda é variante exclusiva da landing — só `Header.tsx`, `HeroSection.tsx` e
+ * `multistep-form.tsx` a usam, todos dentro da árvore `.dark` da landing.
  */
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[9px] text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -36,7 +42,7 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-surface-hover hover:text-foreground",
         ghost: "hover:bg-surface-hover hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        hero: "rounded-2xl backdrop-blur-md bg-primary/20 hover:bg-primary/30 text-foreground border border-primary/30 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300",
+        hero: "rounded-2xl bg-primary hover:bg-brand-hover text-primary-foreground shadow-md hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300",
         glass: "rounded-xl backdrop-blur-md bg-card/60 hover:bg-card/80 text-foreground border border-border/30 hover:border-border/50 transition-all duration-300",
       },
       size: {

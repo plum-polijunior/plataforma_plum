@@ -9,9 +9,10 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    // `dark` porque o 404 é a irmã da landing, não do produto: quem cai aqui
-    // veio de uma URL errada, não de dentro do app. Ver `src/index.css`.
-    <div className="dark flex min-h-screen items-center justify-center bg-muted">
+    // Claro, como o resto do produto desde a Direção A (2026-08-12) — o 404
+    // deixou de ser a única tela escura do sistema no merge da landing nova.
+    // Ver `docs/2026-08-12-PLANO-merge-landing-page.md` §1.
+    <div className="flex min-h-screen items-center justify-center bg-muted">
       <div className="text-center">
         <h1 className="mb-4 text-4xl font-bold">404</h1>
         <p className="mb-4 text-xl text-muted-foreground">Oops! Page not found</p>

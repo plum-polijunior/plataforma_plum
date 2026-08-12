@@ -475,7 +475,7 @@ export default function Dashboard() {
         </div>
 
         {organization && (
-          <div className="glass px-6 py-3 rounded-xl border border-primary/20 bg-primary/5 flex items-center gap-4 flex-wrap">
+          <div className="px-6 py-3 rounded-xl border border-primary/20 bg-primary/5 flex items-center gap-4 flex-wrap">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Sua Empresa</p>
               <p className="font-bold text-lg">{organization.name}</p>
@@ -563,7 +563,7 @@ export default function Dashboard() {
       </div>
 
       {!isAdmin && (
-        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-500 flex items-start gap-3">
+        <div className="p-4 rounded-xl border border-warn/30 bg-warn-bg text-warn flex items-start gap-3">
           <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" />
           <div>
             <h4 className="font-semibold">Acesso Restrito</h4>
@@ -582,7 +582,7 @@ export default function Dashboard() {
       )}
 
       {profile?.status === 'ativo' && (
-        <div className="glass p-6 rounded-2xl border border-border shadow-sm">
+        <div className="p-6 rounded-2xl border border-border">
           <Tabs defaultValue="pendentes" className="w-full">
             <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-3 mb-8 bg-muted/50">
               <TabsTrigger value="ativos" className="data-[state=active]:bg-background">Membros Ativos ({activeMembers.length})</TabsTrigger>
@@ -641,7 +641,7 @@ export default function Dashboard() {
                       <div key={member.id} className="flex flex-col p-5 rounded-xl border border-border bg-card/60 gap-4 transition-all">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 font-bold text-lg">
+                            <div className="h-12 w-12 rounded-full bg-warn-bg border border-warn/20 flex items-center justify-center text-warn font-bold text-lg">
                               {member.email.charAt(0).toUpperCase()}
                             </div>
                             <div>
@@ -666,7 +666,7 @@ export default function Dashboard() {
 
                               <Button
                                 variant="default"
-                                className="bg-green-600 hover:bg-green-700 text-white font-semibold shadow-sm"
+                                className="bg-ok hover:bg-ok/90 text-white font-semibold shadow-sm"
                                 onClick={() => {
                                   if (!selectedRoleId) {
                                     toast({ title: "Selecione um cargo para aprovar o usuário.", variant: "destructive" });
@@ -818,7 +818,7 @@ export default function Dashboard() {
 
       {/* Permission Matrix Dialog */}
       <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col bg-card border-border shadow-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col bg-card border-border">
           <DialogHeader className="border-b border-border pb-4">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Sliders className="h-5 w-5 text-primary" />

@@ -183,7 +183,7 @@ export default function DatabasePage() {
           {datasets.map((dataset) => (
             <div
               key={dataset.id}
-              className={`p-5 rounded-xl border cursor-pointer transition-all hover:border-primary/50 hover:bg-muted/20 ${selectedDataset?.id === dataset.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'border-border bg-background'}`}
+              className={`p-5 rounded-xl border cursor-pointer transition-all hover:border-line-hover hover:bg-muted/20 ${selectedDataset?.id === dataset.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'border-border bg-background'}`}
               onClick={() => {
                 setSelectedDataset(selectedDataset?.id === dataset.id ? null : dataset);
                 setIsEditingSchema(false);
@@ -195,7 +195,7 @@ export default function DatabasePage() {
                 <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center">
                   <FileSpreadsheet className="h-5 w-5 text-primary" />
                 </div>
-                <div className={`text-xs px-2 py-1 rounded-full font-medium ${dataset.status === 'active' ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                <div className={`text-xs px-2 py-1 rounded-full font-medium ${dataset.status === 'active' ? 'bg-ok-bg text-ok' : 'bg-warn-bg text-warn'}`}>
                   {dataset.status === 'active' ? 'Concluído' : 'Rascunho'}
                 </div>
               </div>
