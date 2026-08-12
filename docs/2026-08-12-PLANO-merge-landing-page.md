@@ -1,7 +1,8 @@
 # PLANO — Merge do novo design da landing page
 
-**Data:** 2026-08-12 · **Branch:** `plataforma` · **Estado:** plano aprovado, implementação
-ainda não começada. As pendências no fim do documento continuam abertas.
+**Data:** 2026-08-12 · **Branch:** `plataforma` · **Estado:** executado. Ver
+`docs/2026-08-12-landing-page-executada.md` para o que saiu diferente do planejado aqui, as
+pendências reais e o incidente de commit concorrente com a branch `rafaela`.
 
 ## Contexto
 

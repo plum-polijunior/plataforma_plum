@@ -101,7 +101,8 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `src/integrations/supabase/types.ts` | ⚠️ atualizar **SEMPRE** junto com migrations (§4.12) |
 | `src/integrations/supabase/client.ts` | gerado; URL e anon key hardcoded (dívida, §8) |
 | `src/pages/Cfgdatabase.tsx` | datasets + matriz de permissões (`?tab=permissoes`) + edição de schema |
-| `src/pages/Auth.tsx` | entrar / primeiro acesso / criar organização. Login pousa em **`/inicio`**, não em `/dashboard` (§7); "Entrar com Email" só **existe** quando e-mail e senha passam na validação local |
+| `src/pages/Auth.tsx` | entrar / primeiro acesso / criar organização. Login pousa em **`/inicio`**, não em `/dashboard` (§7); "Entrar com Email" só **existe** quando e-mail e senha passam na validação local. Desde 2026-08-12, sem painel lateral decorativo — só o formulário, centralizado |
+| `src/pages/Index.tsx` (landing) | rota `/`. Desde 2026-08-12 roda no `:root` claro (sem `.dark`) — ver §7. Seções em `src/components/sections/`; `plum-chat`/`DataPlaygroundSection` ("Simule o Plum") foram removidos, não confundir com `ai-plum-chat` |
 | `src/components/DatabasePipeline.tsx` | pipeline de importação em 5 etapas; rascunhos em `datasets.sketch` |
 | `src/components/ui/` | shadcn — preferir compor a editar |
 | `query_engine/security.py` | 4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna |
@@ -636,4 +637,5 @@ própria sessão ou digite `/`.
 | `docs/2026-08-11-entrada-e-guardiao-do-dashboard.md` | Tela de entrada (pouso em `/inicio`, hierarquia, validação) e o Agente Z-dash — inclui o custo de cota aceito e as pendências de deploy/validação |
 | `docs/2026-08-11-formato-da-resposta-do-chat.md` | Por que o `**` aparecia na tela (typography instalado e nunca registrado) e o contrato de formato do Agente C — traz o prompt **literal antes e depois**, a matriz de reversão e o `ezbr_sha256` anterior |
 | `docs/2026-08-12-direcao-a-no-app.md` | A Direção A portada para o app: o mecanismo `:root` claro × `.dark` na landing (e por que não o contrário), o mapa de tokens, as **cinco medições** que a paleta de série exigiu no claro, e a saída de emergência de uma palavra |
+| `docs/2026-08-12-PLANO-merge-landing-page.md` + `docs/2026-08-12-landing-page-executada.md` | O plano e a execução real do redesenho da landing — tokens, seções, remoção do "Simule o Plum". O segundo documento traz o bug do loop do marquee (matemática de `gap` vs margem por item) e o incidente de commit concorrente com a branch `rafaela`, resolvido com `push --force-with-lease` por decisão do usuário |
 | `infra/aws/PASSO-A-PASSO.md` | Como subir o executor |
