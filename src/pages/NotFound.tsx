@@ -8,6 +8,14 @@ const NotFound = () => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
 
+  // Defesa contra a classe `tema-escuro` (produto logado, `src/hooks/use-tema.ts`)
+  // ficar presa em `document.documentElement` de uma sessão anterior — o
+  // cleanup no próprio hook já cobre o caminho normal (logout), isto cobre o
+  // resto (ex.: chegar direto numa rota inexistente sem passar por ali).
+  useEffect(() => {
+    document.documentElement.classList.remove("tema-escuro");
+  }, []);
+
   return (
     // Sem `dark` desde 2026-08-12: o 404 continua sendo a irmã da landing, e a
     // landing saiu do escuro. Mantê-lo aqui faria desta a única tela escura do

@@ -192,6 +192,9 @@ export type Database = {
           organization_id: string | null
           role_id: string | null
           status: "pendente" | "ativo" | "rejeitado" | "desativado"
+          // NULL = nunca salvou preferência no servidor. Escrita só via RPC
+          // definir_tema() — não existe policy de self-UPDATE em profiles.
+          tema: "claro" | "escuro" | null
           created_at: string
           updated_at: string
         }
@@ -201,6 +204,7 @@ export type Database = {
           organization_id?: string | null
           role_id?: string | null
           status?: "pendente" | "ativo" | "rejeitado" | "desativado"
+          tema?: "claro" | "escuro" | null
           created_at?: string
         }
         Update: {
@@ -209,6 +213,7 @@ export type Database = {
           organization_id?: string | null
           role_id?: string | null
           status?: "pendente" | "ativo" | "rejeitado" | "desativado"
+          tema?: "claro" | "escuro" | null
           created_at?: string
         }
         Relationships: [
@@ -523,6 +528,10 @@ export type Database = {
       criar_organizacao: {
         Args: { p_nome: string }
         Returns: { org_id: string; org_join_code: string }[]
+      }
+      definir_tema: {
+        Args: { p_tema: string }
+        Returns: undefined
       }
     }
     Enums: {

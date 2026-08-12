@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { PlumThinkingBar } from "@/components/PlumThinkingBar";
 import { RespostaMarkdown } from "@/components/RespostaMarkdown";
+import { MascoteAnimado } from "@/components/sections/MascoteAnimado";
 import {
   REPETICOES_PARA_REUSAR,
   escolherPlanoDominante,
@@ -356,8 +357,12 @@ export default function PlumChat() {
 
             return (
               <div key={msg.id} className="flex animate-pl-up gap-[13px]">
-                <div className="flex h-[27px] w-[27px] flex-none items-center justify-center rounded-[7px] bg-primary font-display text-sm font-bold text-primary-foreground">
-                  P
+                {/* Era um quadrado "P" sólido; trocado pelo mesmo mascote animado
+                    da landing (`MascoteAnimado`, vídeo com alfa de verdade) — sem
+                    clipe/rounded ao redor, porque a silhueta tem pontas que um
+                    recorte cortaria (mesmo motivo documentado no componente). */}
+                <div className="h-[27px] w-[27px] flex-none">
+                  <MascoteAnimado className="h-full w-full" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <RespostaMarkdown content={msg.content} />
@@ -371,8 +376,8 @@ export default function PlumChat() {
 
           {isProcessing && (
             <div className="flex animate-pl-in gap-[13px]">
-              <div className="flex h-[27px] w-[27px] flex-none items-center justify-center rounded-[7px] bg-primary font-display text-sm font-bold text-primary-foreground">
-                P
+              <div className="h-[27px] w-[27px] flex-none">
+                <MascoteAnimado className="h-full w-full" />
               </div>
               <div className="min-w-0 flex-1">
                 <PlumThinkingBar isProcessing={isProcessing} />

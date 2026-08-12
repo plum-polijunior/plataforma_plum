@@ -28,6 +28,17 @@ const Index = () => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
 
+  // Defesa contra a classe `tema-escuro` (produto logado, `src/hooks/use-tema.ts`)
+  // ficar presa em `document.documentElement` de uma sessão anterior — o
+  // cleanup no próprio hook já cobre o caminho normal (logout), isto cobre o
+  // resto (ex.: um link direto para `/` numa aba onde a classe ficou presa por
+  // uma versão antiga do código). Ver `pendencias_e_dividas_tecnicas.md`,
+  // "parte 2": a landing precisa ser sempre clara, nunca herdar o tema do
+  // produto.
+  useEffect(() => {
+    document.documentElement.classList.remove("tema-escuro");
+  }, []);
+
   // Marca o item do menu correspondente à seção visível.
   useEffect(() => {
     const handleScroll = () => {

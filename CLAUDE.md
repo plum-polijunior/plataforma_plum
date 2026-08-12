@@ -134,7 +134,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | Tabela | Papel | Colunas notáveis |
 |---|---|---|
 | `organizations` | tenant | `join_code` (12 chars cripto, UNIQUE), `share_id` (4 chars, legado), `join_mode` ∈ `share_id`\|`dominio`, `dashboard_max_rows` (padrão 200000). `dashboard_k_min` ainda existe na coluna mas está **vestigial**: não é mais lido por nenhum código desde a remoção do k-anonimato (2026-08-08) |
-| `profiles` | usuário (estende `auth.users`) | `organization_id` (nullable!), `role_id`, `status` enum `profile_status`, `updated_at` |
+| `profiles` | usuário (estende `auth.users`) | `organization_id` (nullable!), `role_id`, `status` enum `profile_status`, `updated_at`, `tema` ∈ `claro`\|`escuro`\|`NULL` (preferência de tema do produto; escrita só via RPC `definir_tema()`, nunca `UPDATE` direto — §7) |
 | `roles` | cargo por org | `name` — Admin é **por nome**, não por flag |
 | `role_permissions` | permissão granular | `(role_id, dataset_id)` UNIQUE, `allowed_columns TEXT[]` default `'{}'` |
 | `datasets` | base conectada | `google_sheet_id` (fonte da verdade p/ o executor), `google_sheet_url` (só exibição), `google_sheet_gid` ⭐ (**qual aba**, e tem precedência sobre o nome — ver abaixo), `google_sheet_tab` (nome da aba, default `Sheet1`, usado só quando o `gid` é nulo), `schema_metadata jsonb` ⭐, `sketch jsonb`, `status` |
@@ -463,6 +463,15 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
     2026-08-11**, as 3 bases existentes ficaram com `gid` preenchido. É par indivisível com o
     front e com as duas Edge Functions (§4.12): sem a coluna, salvar base falha e todo
     `execute_plan` erra
+12. `20260812120000_dominios_guard.sql` — trigger `guardar_dominio_da_org` em
+    `organization_domains`: recusa provedor público **na escrita** (antes só o login
+    consultava a denylist), normaliza domínio para minúsculas, força
+    `verified_by`/`verified_at` no servidor. **Aplicada em produção em 2026-08-12**
+13. `20260812140000_plum_chat_plan_query.sql` — `plum_chat.plan_query`/`dataset_id`
+    (reuso de Query Plan pelo chat); `assunto` vira vestigial. **Aplicada em produção em
+    2026-08-12**
+14. `20260812150000_tema_do_usuario.sql` — `profiles.tema` + RPC `definir_tema()` (persistência
+    server-side da preferência de tema, §7)
 
 ---
 
@@ -487,10 +496,35 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   tema errado. ⚠️ Se `.dark` voltar a ser usado, os tokens `--glow-*`, `--glass-*` e
   `--gradient-*` precisam ser redefinidos lá dentro: eles foram retunados de roxo para vinho
   e só existem em `:root`. Ver `docs/2026-08-12-direcao-a-no-app.md`.
-- **Landing e produto ainda não compartilham a marca visual.** A landing usa
+- ⭐ **O produto logado TEM tema escuro — é um terceiro mecanismo, `.tema-escuro`, não `.dark`.**
+  Acrescentado depois do merge da landing (leva `feat/fase-5b-periodo-linha-e-tema`), então não
+  estava documentado aqui até agora. `src/hooks/use-tema.ts` (usado uma única vez, em
+  `DashboardLayout`) guarda a escolha em `localStorage["plum-tema"]` **e**, desde 2026-08-12,
+  em `profiles.tema` via a RPC `definir_tema()` — o `localStorage` só evita flash no primeiro
+  paint, a fonte de verdade é o servidor. Aplica a classe `tema-escuro` em
+  `document.documentElement`, pelo mesmo motivo do `.dark`/portal do Radix acima, mas com
+  paleta **on-brand** (matiz 329, `src/index.css:228+`), não o roxo antigo. `use-tema-ativo.ts`
+  é o observador (via `MutationObserver`) para quem precisa **calcular** cor em JS — hoje só
+  `cores.ts`, as séries do gráfico.
+  ⚠️ **Bug real, corrigido em 2026-08-12:** o `useEffect` que aplicava a classe não tinha
+  limpeza, então ela sobrevivia ao logout (`document.documentElement` é o `<html>`, único nó
+  para a SPA inteira) e vazava para a landing/`/auth`/404 — nenhuma delas tem opinião própria
+  sobre tema, então herdavam a paleta escura por cascata. Corrigido com `return () =>
+  classList.remove(...)` no efeito (fecha o caso normal, porque o hook só desmonta saindo do
+  produto) **e** um efeito defensivo idêntico em `Index.tsx`/`Auth.tsx`/`NotFound.tsx` (fecha
+  o resto). Ver `pendencias_e_dividas_tecnicas.md`, "parte 2".
+  ⚠️ **Escrita de `profiles.tema` é só via RPC**, nunca `UPDATE` direto: a única policy de
+  UPDATE em `profiles` exige `id <> auth.uid()` (regra 5 abaixo) — abrir self-UPDATE
+  reabriria a autopromoção que a migration de 2026-07-22 fechou. `definir_tema()` é
+  `SECURITY DEFINER`, só sabe escrever essa uma coluna, e não passa perto de
+  `role_id`/`status`/`organization_id`.
+- **Landing e produto ainda não compartilham a marca visual — parcialmente.** A landing usa
   `plum-mascot-transparent.png`; `DashboardLayout`, `Auth` e `AccessPending` seguem com
   `plum-logo.png`. Não é descuido — trocar a marca das telas de produto não estava no escopo
-  do merge da landing. Decisão pendente.
+  do merge da landing. Decisão pendente. Uma exceção pontual desde 2026-08-12: o avatar do
+  assistente em `PlumChat.tsx` (era um quadrado sólido com a letra "P") passou a ser o
+  `MascoteAnimado` (o mesmo vídeo com alfa da landing/FAQ) — não é a mesma decisão de "unificar
+  a marca do produto", é só o chat ganhando um rosto em vez de uma inicial.
 - ⚠️ **Hairline é `border-border`, sem opacidade.** `border-border/20` era o padrão no tema
   escuro e **desaparece no claro** (`--border` já é `#EBE3E7`, L 91%). Para o hover mais forte
   existe `border-line-hover`. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.

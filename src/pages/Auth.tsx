@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,16 @@ const Auth = () => {
   const [adminPassword, setAdminPassword] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
+
+  // Defesa contra a classe `tema-escuro` (produto logado, `src/hooks/use-tema.ts`)
+  // ficar presa em `document.documentElement` de uma sessão anterior — o
+  // cleanup no próprio hook já cobre o caminho normal (logout → cai aqui),
+  // isto cobre o resto (ex.: abrir `/auth` direto numa aba onde a classe
+  // ficou presa por uma versão antiga do código). `/auth` nunca teve opinião
+  // própria sobre tema; sempre herdou o que estivesse em `<html>`.
+  useEffect(() => {
+    document.documentElement.classList.remove("tema-escuro");
+  }, []);
 
   // 1. Procurar organização pelo ID de 4 dígitos
   const handleSearchOrg = async (e: React.FormEvent) => {

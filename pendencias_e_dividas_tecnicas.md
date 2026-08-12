@@ -50,5 +50,33 @@ parte 2:
 o problema: o usuário que prefere o fundo preto tem que sempre recolocar o fundo preto ao limpar o cache do navegador
 a correção: armazenar na table "profiles" em uma nova columm themes DARK/LIGHT
 
-o problema: o /auth não respeita o tema preto, e a landing page fica com a maioria das empresas parceiras escuras
-a solução: corrigir o return de auth.tsx, e colocar um filtro claro nas imagens de empresas parceiras
+o problema: a landing page fica escura quando o usuário seleciona o modo escuro dentro da interface do plum e sai da conta. mas a landing page deveria ser branca, para chamar mais atenção
+a solução: checar o return de auth.tsx e de index.tsx.
+
+-> FEITO (2026-08-12). Investigado antes de mexer: o alternador de tema (`src/hooks/use-tema.ts`,
+botão em `DashboardLayout`) é recente — entrou numa leva de commits de outro colega, depois do
+que este arquivo já documentava, por isso não aparecia em nenhum doc ainda. É um TERCEIRO
+mecanismo de tema, `tema-escuro`, diferente do `.dark` da landing (que continua sem consumidor).
+
+  1. Persistência: coluna `profiles.tema` (`'claro'`/`'escuro'`, os mesmos literais que o
+     código já usa — não os nomes em inglês do enunciado) +
+     `supabase/migrations/20260812150000_tema_do_usuario.sql`. Escrita só por RPC
+     `definir_tema()`, nunca `UPDATE` direto: a única policy de UPDATE em `profiles` exige
+     `id <> auth.uid()` de propósito (CLAUDE.md §4 regra 5, contra autopromoção), então uma
+     policy de self-UPDATE genérica reabriria a brecha que a migration de 22/07 fechou. A RPC
+     é `SECURITY DEFINER`, só sabe escrever essa uma coluna. `use-tema.ts` lê o servidor uma
+     vez (na montagem do `DashboardLayout`) e continua usando o `localStorage` só para não
+     ter flash no primeiro paint — a fonte de verdade passou a ser o banco.
+
+  2. O vazamento para a landing: a causa real não era o `.dark` que o enunciado supunha — era
+     o `tema-escuro`, cujo `useEffect` aplicava a classe em `document.documentElement` (o
+     `<html>`, único nó pra SPA inteira) sem nunca remover. Logout desmontava
+     `DashboardLayout` mas não tocava o `<html>`; a classe ficava presa, e a landing (que hoje
+     não tem opinião própria sobre tema) herdava a paleta escura por cascata. Corrigido na
+     fonte — `return () => classList.remove(...)` no próprio efeito de `use-tema.ts`, que fecha
+     o caso normal porque o hook só desmonta saindo do produto — **e** com o efeito defensivo
+     que o enunciado já apontava, em `Index.tsx`/`Auth.tsx`, mais `NotFound.tsx` pelo mesmo
+     motivo (é a "irmã" da landing, CLAUDE.md §2).
+
+Detalhe registrado em CLAUDE.md §7, porque é a primeira vez que o mecanismo `tema-escuro`
+aparece em algum `.md` do repo.
