@@ -387,3 +387,97 @@ hex da superfície escura (`#1E151B`) foi conferido contra o token `--card` do
 
 **Limpeza:** a página temporária `src/pages/TesteLinha.tsx` foi removida e o
 `src/App.tsx` voltou **idêntico** ao commit (`git diff --stat` vazio).
+
+
+---
+
+### Etapa 8 — Recuperar o que o force-push levou — [SUCESSO]
+
+Não estava no plano. Surgiu ao integrar depois que o **PR 1 foi mergeado**: o `git fetch`
+revelou que `origin/plataforma` havia sido **reescrito** (`+ 16d4747...624ec59 (forced
+update)`).
+
+**O que aconteceu, por autoria de commit**
+
+| Commit | Autor | Hora | O quê |
+|---|---|---|---|
+| `16d4747` | **Alexandre Delbim** | 11/08 23:17 | Landing da `rafaela` + tema escuro + tokens de contraste |
+| `9f320c5` | RicardoMoussalli | 11/08 23:31 | O PR 1 (nosso) |
+| `97148f0` | **bmchad** | 12/08 00:13 | Outra landing — o **force-push** que descartou o do Delbim |
+
+Duas pessoas mergeando a mesma tarefa em paralelo, 56 min de diferença, a partir de fontes
+diferentes e com decisões de conteúdo opostas. A do bmchad prevaleceu, e ele documentou o
+incidente em `docs/2026-08-12-landing-page-executada.md` §3 — é graças a esse registro que a
+reconstrução foi possível.
+
+⚠️ **Correção de uma afirmação minha:** eu disse ao usuário que o force-push tinha sido "por
+decisão sua", porque o documento diz *"sobrescrito por decisão do usuário"* e eu presumi de
+quem se tratava. Errado — aquele documento foi escrito na sessão do **bmchad**. O único commit
+do Ricardo nessa faixa é o `9f320c5`, puramente aditivo, que não toca `index.css` nem
+`DashboardLayout`.
+
+**Auditoria: o que se perdeu**
+
+| Item | Situação |
+|---|---|
+| `src/hooks/use-tema.ts` | ❌ perdido → **restaurado** |
+| Bloco `.tema-escuro` no `index.css` | ❌ perdido → **restaurado** |
+| Botão de tema no `DashboardLayout` | ❌ perdido → **restaurado** |
+| `--border` / `--input` / `--muted-foreground` escurecidos | ⚠️ revertidos → **restaurados** |
+| `src/components/ui/expand-map.tsx` | ✅ removido de propósito (mapa real) — **não** restaurado |
+| `src/assets/partners/hig.webp` | ✅ substituído de propósito — **não** restaurado |
+
+Os três tokens são o caso mais silencioso: foram escurecidos **a pedido do usuário** por baixo
+contraste, e **não constavam** na tabela de comparação do registro do incidente. Voltar aos
+valores claros desfez uma correção de acessibilidade sem ninguém decidir isso.
+
+**Nada do bmchad foi perdido:** `97148f0` é ancestral direto do `plataforma`. O logo
+`plum-mascot-transparent.png` no `DashboardLayout` é dele e foi preservado — o botão de tema
+foi reaplicado **por cima** da versão dele, não trazendo o arquivo do Delbim inteiro.
+
+**Por que NÃO usei `git merge`**
+
+O `git merge-tree` reportava **zero conflitos**, e era justamente o perigo. A base do merge
+seria `9f320c5`, que não tem nenhuma das duas landings; a branch antiga carregava a do
+`16d4747` e o `plataforma` tem a do `97148f0`. Sem conflito textual, o git **combinaria as
+duas em silêncio**, ressuscitando os 3 cards, o depoimento e o "Simule o Plum" que a decisão
+de produto havia removido.
+
+A branch foi **reconstruída** a partir de `origin/plataforma` (`feat/fase-5b-periodo-linha-e-tema`),
+com a restauração como primeiro commit e os quatro commits de feature por cherry-pick. Um
+conflito, em `index.css`, resolvido combinando os dois lados (o texto acentuado do `2667ce1`
+com a nota atualizada sobre `MATIZES_ESCURO`).
+
+**Preservação:** o commit descartado ficou sem referência nenhuma e seria coletado pelo
+garbage collector. Preservado na tag **`resgate/16d4747-delbim-landing-e-tema`**, publicada no
+remoto, com a lista do que só existe lá.
+
+**Efeito colateral bom:** a paleta por tema da Etapa 7, que estava virando código morto
+(o `useTemaAtivo` observava uma classe que ninguém aplicava), volta a ser funcional.
+
+**Comandos executados**
+
+```sh
+$ npm test
+ Test Files  7 passed (7)
+      Tests  155 passed (155)
+
+$ npm run build
+✓ built in 22.65s        # exit 0
+
+$ npx eslint <arquivos tocados>
+                          # limpo
+```
+
+⚠️ **Uma falha de pytest NÃO EXPLICADA, e registro por honestidade:** na primeira execução
+dos portões após a cirurgia de branch,
+`tests/test_periodo.py::test_gabarito_semanal_da_base_de_vendas` falhou uma vez. Depois disso:
+o teste passa isolado, e a suíte inteira passou **cinco vezes consecutivas** com zero falhas
+(268). Investigado e **não reproduzido**: não há plugin de ordem aleatória instalado, nenhum
+teste mexe em estado global do pandas, e o bytecode confere com a fonte.
+
+O suspeito mais plausível é o `query_engine/__pycache__/*.pyc` estar **rastreado no git** —
+a falha aconteceu no único momento em que `git checkout`/`cherry-pick` estavam reescrevendo
+`.py` e `.pyc` juntos. Não consegui fechar o mecanismo, então fica como **aberto**, não como
+resolvido. Recomendação: destrackear os `.pyc` (dívida pré-existente, já registrada na Etapa 0
+do log do PR 1 por forçar `git restore` antes de cada commit).
