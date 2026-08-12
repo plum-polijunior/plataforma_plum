@@ -285,3 +285,98 @@ $ grep -n "Ainda não sei agrupar\|NUNCA agrupe por data" supabase/functions/das
 
 **Resultado:** prompt atualizado. ⚠️ **Não publicado** — validação em produção depende
 do deploy manual, que é pendência.
+
+
+---
+
+### Etapa 7 — Paleta por tema e refinamento visual — [SUCESSO]
+
+Não estava no plano. Saiu de **sete rodadas de revisão visual** com o dono do produto,
+depois do commit `2667ce1`. Commit: `ba9b3f1`.
+
+**Arquivos alterados**
+
+| Arquivo | Ação | Mudança |
+|---|---|---|
+| `src/components/dashboard/cores.ts` | alterado | `MATIZES_ESCURO` (nova tabela), `TemaDaSerie`, `SUPERFICIE_DO_CARD_ESCURO`; `corDaSerie` e `corDeSerieUnica` ganham o tema como parâmetro (opcional, padrão `claro`) |
+| `src/hooks/use-tema-ativo.ts` | **criado** | observa a classe do `<html>` por `MutationObserver` |
+| `src/components/dashboard/rotulos.ts` | **criado** | 7 funções puras de seleção e posicionamento de rótulo, sem nenhum import |
+| `src/components/dashboard/VizLinha.tsx` | alterado | degradê, 3px, pontos em dois pesos, variação com triângulo, densidade adaptável, extremos pela direção, eixo curto, `monotone`, tooltip |
+| `VizBar` · `VizPie` · `VizStackedBar` | alterados | passam o tema para `corDaSerie` |
+| `CardDashboard.tsx` | alterado | botão "Ver maior" + diálogo reusando o mesmo `Corpo` |
+| `formato.ts` | alterado | `rotuloCurtoDePeriodo`, `anoDoPeriodo`, `variacaoPercentual`, `formatarVariacao`, `sentidoDaVariacao`, `leituraDoDelta`, `SEM_DATA` |
+| `src/lib/contraste-serie.test.ts` | alterado | +5 casos na superfície escura |
+| `src/lib/{variacao,lado-do-rotulo}.test.ts` | **criados** | 19 + 9 casos |
+| `DESIGN.md` | alterado | §4.1 (desvios da linha) + nota na §3 (duas tabelas) |
+
+**Decisões tomadas**
+
+- **A cor do delta segue `higher_is_better`, não a direção crua** (`DESIGN.md` §7).
+  O pedido foi "sobe verde, desce vermelho"; num card de **custo** subir é vermelho, e
+  `null` (padrão de card novo) não ganha cor. Contrariei o pedido literal citando o
+  documento, e foi aceito depois de ver os três casos lado a lado.
+- **`monotone` como suavização padrão.** O pedido original era "suavizar só nas viradas
+  drásticas", que não existe no recharts (`type` é da série, não do segmento). Reescrevi
+  o aviso "NUNCA SUAVIZAR" que eu mesmo havia posto: ele era mais categórico do que a
+  evidência sustenta. `natural`/`basis`/`cardinal` fazem **overshoot** e seguem
+  proibidas; `monotone` não sai do intervalo entre os dois pontos.
+- **Valor e variação têm regras SEPARADAS de densidade.** Variação mede ~34px, valor
+  ~62px. No ampliado a variação aparece em todos, o valor não — foi o pedido explícito
+  ("todas as variações mas não todos os valores").
+- **`DESIGN.md` atualizado só onde era necessário**, conforme instrução. A necessidade é
+  concreta: a §10 é lista de reprovação automática e a linha contraria a §4 em quatro
+  pontos literais. Sem registro, quem revisar desfaz decisões do dono do produto.
+
+**Bugs encontrados e soluções**
+
+- **Tooltip mostrava o valor duas vezes** → `Area` e `Line` com o mesmo `dataKey`; o
+  recharts monta o tooltip de todas as séries ativas → `tooltipType="none"` na `Area`.
+  Verificado no código do recharts (`getTooltipItem` propaga como `type`,
+  `DefaultTooltipContent` pula `type === 'none'`) em vez de confiar no tipo aceitar a prop.
+- **Eixo X mostrava "jan · abr · jul · dez"** em 12 meses → `jan/2026` mede ~46px e o
+  `minTickGap` descartava a maioria → rótulo curto (`jan`) + ano uma vez no fim. Série
+  que cruza anos marca a virada no próprio tick (`jan/28`).
+- **`interval={0}` era a causa raiz da sobreposição do eixo**, e blanquear texto no
+  `tickFormatter` não resolvia: o espaço já foi reservado.
+- **A alternância acima/abaixo estava por índice cru** → com densidade adaptável (de 2
+  em 2), todos os índices exibidos têm a mesma paridade e **todos iriam para o mesmo
+  lado**, desfazendo a alternância em silêncio → alternância pela ordem entre os
+  rótulos exibidos.
+- **`jan/2027` aparecia duas vezes** no gráfico de 18 meses → bug do gerador da página
+  de teste (`7 + i < 12 ? 2026 : 2027` só sabe dois anos; o 18º ponto é jan/**2028**).
+  O componente estava certo com entrada errada.
+- **Derivação da paleta escura, dois erros meus antes de acertar:** (1) não clampava a
+  saturação em 100%, produzindo `rgb(267,260,64)` fora de gamut — o teste existente já
+  clampava, então a paleta clara sempre esteve correta; (2) otimizar por amplitude dava
+  pastéis em L 91 sem identidade de matiz, e otimizar por croma dava amplitude de 8
+  pontos de L — que é exatamente o bug que o teste documenta.
+
+**Comandos executados**
+
+```sh
+$ npm test
+ Test Files  7 passed (7)
+      Tests  155 passed (155)
+
+$ cd query_engine && ../.venv/Scripts/python.exe -m pytest -q
+[…] 268 passed
+
+$ npm run build
+✓ built in 23.67s        # exit 0
+
+$ npx eslint <os 18 arquivos tocados>
+                          # sem saída = limpo
+```
+
+**Resultado:** **155 vitest** (eram 141), 268 pytest, build exit 0. Os 72 problemas que
+`npx eslint src/` reporta são **pré-existentes** (`components/ui/*` do shadcn e
+`DatabasePipeline.tsx`); nenhum arquivo tocado nesta etapa aparece na lista.
+
+A paleta escura foi validada contra a colorimetria **independente** do
+`contraste-serie.test.ts` (o teste implementa a própria conversão de propósito, para não
+usar o mesmo utilitário do código sob teste) — é verificação cruzada, não circular. E o
+hex da superfície escura (`#1E151B`) foi conferido contra o token `--card` do
+`.tema-escuro` (`hsl(320 16% 10%)`).
+
+**Limpeza:** a página temporária `src/pages/TesteLinha.tsx` foi removida e o
+`src/App.tsx` voltou **idêntico** ao commit (`git diff --stat` vazio).
