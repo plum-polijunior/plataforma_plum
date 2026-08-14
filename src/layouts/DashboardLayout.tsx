@@ -3,7 +3,7 @@ import { Outlet, Navigate, useNavigate, Link, useLocation } from "react-router-d
 import { Bot, Building2, ChevronRight, Database, LayoutDashboard, LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import plumLogo from "@/assets/plum-mascot-transparent.png";
+import { MascoteAnimado } from "@/components/sections/MascoteAnimado";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgAccess } from "@/hooks/use-org-access";
 import { useTema } from "@/hooks/use-tema";
@@ -164,7 +164,7 @@ export function DashboardLayout() {
         )}
       >
         <div className="flex h-[60px] flex-none items-center gap-[11px] border-b border-border px-[21px]">
-          <img src={plumLogo} alt="" className="block h-6 w-6 flex-none object-contain" />
+          <MascoteAnimado className="block h-6 w-6 flex-none" />
           <span
             className={cn(
               "whitespace-nowrap font-display text-base font-semibold tracking-[-0.01em] text-foreground transition-opacity duration-200",

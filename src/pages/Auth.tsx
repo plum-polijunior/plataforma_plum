@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Globe } from "lucide-react";
-import plumLogo from "@/assets/plum-mascot-transparent.png";
+import { MascoteAnimado } from "@/components/sections/MascoteAnimado";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -332,7 +332,7 @@ const Auth = () => {
         transition={{ duration: 0.4 }}
         className="relative mx-auto w-full max-w-[360px]"
       >
-          <img src={plumLogo} alt="Plum" className="mb-8 h-10 w-10 object-contain" />
+          <MascoteAnimado className="mb-8 h-10 w-10" />
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {activeTab === "" && (

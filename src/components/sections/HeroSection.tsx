@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { MASCOTE_PINGPONG, MascoteAnimado } from "./MascoteAnimado";
+import { FundoAnimado } from "./FundoAnimado";
+import { MascoteAnimado } from "./MascoteAnimado";
 
 interface HeroSectionProps {
   onNavigate: (sectionId: string) => void;
@@ -23,61 +23,15 @@ const NUMEROS = [
 ];
 
 export function HeroSection({ onNavigate }: HeroSectionProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [semMovimento, setSemMovimento] = useState(false);
-
-  // `prefers-reduced-motion` não alcança `<video autoplay>` por CSS — pausar é
-  // a única forma. Um laço de vídeo é exatamente o tipo de movimento contínuo
-  // que essa preferência existe para evitar.
-  //
-  // Ler a preferência aqui, e não uma vez fora do componente, porque ela pode
-  // mudar durante a sessão (o sistema operacional troca sem recarregar a
-  // página).
-  useEffect(() => {
-    const consulta = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-    const aplicar = () => {
-      setSemMovimento(consulta.matches);
-      const v = videoRef.current;
-      if (!v) return;
-      if (consulta.matches) {
-        v.pause();
-        v.currentTime = 0; // congela no primeiro quadro, não num meio de corte
-      } else {
-        void v.play().catch(() => {
-          // Autoplay recusado (política do navegador, economia de bateria).
-          // Não é erro: o véu e o fundo sólido abaixo já sustentam o texto.
-        });
-      }
-    };
-
-    aplicar();
-    consulta.addEventListener("change", aplicar);
-    return () => consulta.removeEventListener("change", aplicar);
-  }, []);
-
   return (
     <section className="relative flex min-h-[92vh] items-center justify-center overflow-hidden px-6 pb-20 pt-[120px]">
       {/* ── Fundo ────────────────────────────────────────────────────────────
           Substituiu, em 2026-08-12, os traços roxos animados em SVG
-          (`ui/background-paths.tsx`, removido).
-
-          `muted` não é preferência: sem ele o navegador recusa o autoplay.
-          `playsInline` impede o iOS de abrir o vídeo em tela cheia sozinho.
-          `aria-hidden` porque não há informação aqui — quem usa leitor de tela
-          não perde nada, e anunciar "vídeo" sem conteúdo só atrapalha. */}
-      <video
-        ref={videoRef}
-        className="absolute inset-0 h-full w-full object-cover"
-        src="/hero-fundo.mp4"
-        autoPlay={!semMovimento}
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        aria-hidden="true"
-        tabIndex={-1}
-      />
+          (`ui/background-paths.tsx`, removido). O `<video>` e o cuidado com
+          movimento reduzido moraram aqui até 2026-08-14, quando a seção
+          "Vamos conversar?" passou a pedir o mesmo fundo — ver
+          `FundoAnimado.tsx`. */}
+      <FundoAnimado />
 
       {/* Véu. O texto precisa de contraste garantido em QUALQUER quadro do
           vídeo, e o vídeo é provisório — sem esta camada, a legibilidade do H1
@@ -99,7 +53,7 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
           className="mx-auto w-[150px]"
           style={{ filter: "drop-shadow(0 14px 24px hsl(329 44% 33% / 0.3))" }}
         >
-          <MascoteAnimado src={MASCOTE_PINGPONG} className="aspect-square" />
+          <MascoteAnimado className="aspect-square" />
         </motion.div>
 
         {/* As três linhas vivem num elemento só, e não em dois como no

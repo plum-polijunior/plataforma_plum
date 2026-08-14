@@ -545,17 +545,23 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   assistente em `PlumChat.tsx` (era um quadrado sólido com a letra "P") passou a ser o
   `MascoteAnimado` — não é a mesma decisão de "unificar a marca do produto", é só o chat
   ganhando um rosto em vez de uma inicial.
-- ⭐ **O mascote animado tem DUAS fontes, e o vai-e-volta está no arquivo.**
-  `MascoteAnimado` (`src/components/sections/MascoteAnimado.tsx`) recebe a prop `src`:
-  `MASCOTE_PINGPONG` (hero da landing + avatar do chat) e `MASCOTE_LOOP` (só o FAQ, que
-  ficou com o vídeo antigo de propósito, a pedido). Os dois são WebM VP9 **com canal alfa**,
-  gerados por chroma key na origem — o navegador não faz chroma key sozinho, e MP4 não carrega
-  alfa. ⚠️ O efeito "toca de trás pra frente ao chegar no fim" é a ida e a volta **concatenadas
-  no próprio arquivo**, não JS: `playbackRate` negativo não existe em navegador nenhum, e
-  simular por `requestAnimationFrame` forçaria uma busca por quadro. A volta é gravada **sem as
-  duas pontas** (quadros 43…1 de 0…44) — com elas, os quadros extremos apareceriam duplicados e
-  dariam dois engasgos por ciclo. Refez com outro vídeo? Recalcule o `trim`. Comando completo e
-  medições no cabeçalho do componente.
+- ⭐ **Um mascote e um fundo, cada um em UM arquivo, desde 2026-08-14.**
+  `MascoteAnimado` (`src/components/sections/MascoteAnimado.tsx`) serve as **sete** superfícies
+  — logo da landing, hero, FAQ, "Vamos conversar?", `/auth`, cabeçalho do produto e avatar do
+  chat. `FundoAnimado` (mesmo diretório) serve o fundo do hero **e** o do contato. Antes disso
+  eram dois vídeos de mascote, um PNG de arte diferente e o `<video>` de fundo escrito à mão só
+  no hero. O componente **não recebe mais prop de `src`**: superfície nova usa o mesmo arquivo,
+  e trocar o mascote é trocar um arquivo em `public/`.
+  ⚠️ **O WebM tem canal alfa e é gerado por chroma key na ORIGEM** — o navegador não faz chroma
+  key sozinho, e MP4/H.264 não carrega alfa. Comando e medições no cabeçalho do componente.
+  ⚠️ **O PNG de fallback sai do próprio vídeo, e regenerá-lo é obrigatório ao trocar o vídeo.**
+  Até 2026-08-14 o fallback era de uma arte anterior, e o mascote mudou de desenho **e de cor**
+  (era roxo, virou azul) — fallback de arte diferente não é degradação elegante, é mostrar outro
+  personagem.
+  ⚠️ **Não há mais vai-e-volta.** O vídeo de 2026-08-12 era um movimento curto que não fechava
+  sozinho, e a ida+volta era concatenada no arquivo (`playbackRate` negativo não existe em
+  navegador nenhum). O vídeo atual fecha sozinho: repetição nativa basta. A técnica está no
+  commit `10a1add` se voltar a fazer falta — mas ela dobra o número de quadros do arquivo.
 - ⚠️ **Hairline é `border-border`, sem opacidade.** `border-border/20` era o padrão no tema
   escuro e **desaparece no claro** (`--border` já é `#EBE3E7`, L 91%). Para o hover mais forte
   existe `border-line-hover`. 57 ocorrências foram varridas em 2026-08-12; não reintroduza.

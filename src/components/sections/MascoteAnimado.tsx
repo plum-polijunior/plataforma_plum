@@ -1,83 +1,54 @@
 import { useEffect, useRef, useState } from "react";
 
-import plumMascoteEstatico from "@/assets/plum-mascot-transparent.png";
+import plumMascoteEstatico from "@/assets/plum-mascote.png";
 
 /**
- * Laço simples de ~10s. Hoje só o FAQ usa. Ver "AS DUAS FONTES" abaixo.
+ * O mascote, em um arquivo só (origem: `z_mascot_and_background/PLUM.mp4`).
  *
- * ⚠️ O MP4 de origem (`plum_mascot_2.mp4`) foi removido de
- * `z_mascot_and_background/` em 2026-08-14, na limpeza dos vídeos-fonte. Só o
- * derivado com alfa sobrevive, e ele é o que a página carrega — mas refazer o
- * processamento exige recuperar o original pelo histórico do git.
+ * Desde 2026-08-14 **todas** as sete superfícies usam este mesmo vídeo — logo da
+ * landing, hero, FAQ, "Vamos conversar?", `/auth`, cabeçalho do produto e avatar
+ * do chat. Antes eram dois arquivos e um PNG de arte diferente convivendo.
  */
-export const MASCOTE_LOOP = "/mascote-animado.webm";
-
-/**
- * Vai-e-volta de ~2,9s. Hero da landing e avatar do assistente no chat.
- *
- * ⚠️ Mesma observação: a origem (`mais_ou_menos_isso_plum.mp4`) saiu de
- * `z_mascot_and_background/` em 2026-08-14. Está no histórico, no commit
- * `10a1add`.
- */
-export const MASCOTE_PINGPONG = "/mascote-pingpong.webm";
+export const MASCOTE = "/mascote.webm";
 
 /**
  * O mascote animado, com fundo transparente de verdade.
  *
  * ── COMO A TRANSPARÊNCIA FUNCIONA AQUI ───────────────────────────────────
  *
- * Os dois arquivos de origem são MP4 com o mascote sobre **fundo verde**.
+ * O arquivo de origem é um MP4 com o mascote sobre **fundo verde** (`#12871E`).
  * MP4/H.264 não tem canal alfa, e o navegador não faz chroma key sozinho —
  * então o verde é removido **na origem**, e o que este componente carrega é um
  * **WebM VP9 com canal alfa**. Fazer o chroma key em tempo de execução (canvas
  * quadro a quadro) custaria centenas de milhares de pixels de JS por frame;
  * com alfa no arquivo, o navegador decodifica nativamente.
  *
- * Três decisões do processamento, todas medidas e não chutadas:
+ * O comando, para quem precisar refazer com outro vídeo:
  *
- *   • `chromakey` (YUV) e não `colorkey` (RGB). Com RGB a `similarity` que
+ *   ffmpeg -i PLUM.mp4 \
+ *     -vf "chromakey=0x12871E:0.14:0.05,despill=type=green:mix=0.6:expand=0,\
+ *          scale=480:-2,format=yuva420p" \
+ *     -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 34 -an -auto-alt-ref 0 \
+ *     mascote.webm
+ *
+ * Três decisões dentro dele, medidas e não chutadas:
+ *
+ *   • `chromakey` (YUV) e não `colorkey` (RGB). Em RGB a `similarity` que
  *     limpava o fundo já comia os tons azulados do próprio mascote — o corpo
- *     ficava semitransparente sobre fundo colorido. Medido no primeiro vídeo:
- *     1,45% de pixels esverdeados restantes com RGB contra 0,87% com YUV.
+ *     ficava semitransparente sobre fundo colorido. Isso importa **mais** neste
+ *     vídeo do que nos anteriores: o mascote agora é azul, mais perto do verde
+ *     no círculo de matiz do que o roxo de antes.
  *   • `despill` depois do key. Sem ele sobra franja verde na borda; com ele o
- *     resíduo medido é **zero** nos dois arquivos.
+ *     resíduo medido é **zero**.
  *   • `scale=480`. O maior uso na tela é ~172px, então 480 cobre tela 2x com
  *     folga. Sem isso o arquivo sairia várias vezes maior sem ganho visível.
  *
- * ── AS DUAS FONTES, E POR QUE SÃO DUAS ───────────────────────────────────
- *
- * `MASCOTE_LOOP` é o vídeo antigo, de laço simples. `MASCOTE_PINGPONG` é o
- * novo, em vai-e-volta. Em 2026-08-12 o pedido foi trocar **só** o hero e o
- * avatar do chat — o FAQ ficou de propósito com o antigo, não por descuido.
- * Se um dia o FAQ também mudar, é passar a prop e apagar a constante órfã.
- *
- * ⚠️ **O vai-e-volta está gravado no arquivo, não é feito em JS.** Navegador
- * nenhum toca vídeo de trás pra frente: `playbackRate` negativo não é
- * suportado, e simular por `requestAnimationFrame` mexendo em `currentTime`
- * força uma busca por quadro — caro e trêmulo, porque codec inter-frame
- * precisa decodificar pra frente pra reconstruir cada quadro. Com a ida e a
- * volta concatenadas no próprio arquivo, o atributo nativo de repetição
- * resolve tudo, sem uma linha de JS.
- *
- * O comando, para quem precisar refazer com outro vídeo:
- *
- *   ffmpeg -i origem.mp4 -filter_complex "\
- *     [0:v]chromakey=0x219C28:0.12:0.04,despill=type=green:mix=0.6:expand=0,\
- *          scale=480:-2,format=yuva420p,split[a][b];\
- *     [b]reverse,trim=start_frame=1:end_frame=44,setpts=PTS-STARTPTS[r];\
- *     [a][r]concat=n=2:v=1[out]" -map "[out]" \
- *     -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 34 -an -auto-alt-ref 0 \
- *     mascote-pingpong.webm
- *
- * ⚠️ **O `trim` no meio disso não é detalhe — é o que tira a travadinha.** A
- * origem tem 45 quadros (0…44). A volta precisa ser 43…1, **sem as duas
- * pontas**: com a volta inteira (44…0), o quadro 44 apareceria duas vezes
- * seguidas na virada e o quadro 0 duas vezes na emenda da repetição — dois
- * engasgos de ~66 ms por ciclo, bem visíveis num movimento de 1,5 s. Daí
- * `start_frame=1:end_frame=44` (fim exclusivo), que devolve 43 quadros e
- * fecha o ciclo em 88. Refez com outro vídeo? **Recalcule esses dois
- * números** a partir da contagem real de quadros; deixá-los fixos é o jeito
- * mais fácil de reintroduzir o engasgo sem perceber.
+ * ⚠️ **Não há vai-e-volta aqui, e não é esquecimento.** Uma versão anterior
+ * concatenava a ida com a volta invertida porque aquele vídeo era um movimento
+ * curto que não fechava sozinho. Este fecha: o atributo nativo de repetição
+ * basta. Se um vídeo futuro voltar a não fechar, a técnica está no histórico
+ * (commit `10a1add`) — mas não a reintroduza sem precisar, porque ela dobra o
+ * número de quadros do arquivo.
  *
  * ⚠️ **Não há recorte circular.** Uma versão antiga usava um, porque o vídeo
  * de então tinha fundo preto opaco e o recorte era o único jeito de escondê-lo.
@@ -85,12 +56,12 @@ export const MASCOTE_PINGPONG = "/mascote-pingpong.webm";
  * a silhueta irregular. Se um vídeo futuro voltar a ter fundo sólido, a
  * resposta certa é rodar o chroma key de novo, não reintroduzir a máscara.
  *
- * ⚠️ **LACUNA conhecida do `MASCOTE_PINGPONG`:** o mascote encosta na borda
- * INFERIOR do quadro e sai achatado ali — 6,04% da largura da base, medido
- * igual na origem (116 de 1920 px) e no derivado (29 de 480), ou seja, veio do
- * vídeo, não do processamento. Aumentar a resolução não resolve: o corte é
- * geométrico, os pixels não existem em lugar nenhum. Só uma reexportação da
- * animação com margem embaixo resolve de verdade.
+ * ⚠️ **LACUNA conhecida:** o mascote encosta na borda INFERIOR do quadro e sai
+ * achatado ali — 15,3% da largura da base, medido na origem (196 de 1280 px) e
+ * confirmado no derivado (68 de 480), ou seja, veio do vídeo e não do
+ * processamento. Aumentar a resolução não resolve: o corte é geométrico, os
+ * pixels não existem em lugar nenhum. Só uma reexportação da animação com
+ * margem embaixo resolve de verdade.
  *
  * ── O FALLBACK NÃO É DECORATIVO ──────────────────────────────────────────
  *
@@ -99,20 +70,19 @@ export const MASCOTE_PINGPONG = "/mascote-pingpong.webm";
  * navegador não sabe decodificar renderiza **nada** — o mascote sumiria da
  * página sem erro nenhum. Por isso existe o PNG estático como reserva.
  *
+ * ⚠️ **O PNG é gerado do PRÓPRIO vídeo** (um quadro, com o mesmo chroma key),
+ * e isso é obrigatório, não capricho. Até 2026-08-14 o fallback era
+ * `plum-mascot-transparent.png`, de uma arte anterior — e o mascote mudou de
+ * desenho *e de cor* (era roxo, agora é azul). Um fallback de arte diferente
+ * não é degradação elegante: é mostrar outro personagem. Trocou o vídeo?
+ * Regenere o PNG junto.
+ *
  * ⚠️ Ele é renderizado por TROCA, não empilhado atrás do vídeo. A primeira
- * versão deste componente empilhava, e ficou errado na tela: o PNG é um
- * mascote de desenho ANTIGO (blob liso) e o vídeo é outro, então o antigo
- * vazava por baixo do novo formando um halo. Empilhar só seria seguro se os
- * dois fossem a mesma arte. O `onError` abaixo garante que um, e só um, esteja
- * na tela a qualquer momento.
+ * versão deste componente empilhava, e ficou errado na tela: o PNG antigo
+ * vazava por baixo do vídeo formando um halo. O `onError` abaixo garante que
+ * um, e só um, esteja na tela a qualquer momento.
  */
-export function MascoteAnimado({
-  className,
-  src = MASCOTE_LOOP,
-}: {
-  className?: string;
-  src?: string;
-}) {
+export function MascoteAnimado({ className }: { className?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   // Começa `false` e vira `true` no `onError` do vídeo. Note a direção: o
   // padrão é CONFIAR no vídeo, e só cair para o PNG diante de falha real. O
@@ -120,10 +90,10 @@ export function MascoteAnimado({
   // uma troca de imagem no carregamento.
   const [videoFalhou, setVideoFalhou] = useState(false);
 
-  // Mesmo cuidado do vídeo de fundo do Hero (ver HeroSection.tsx): um laço
-  // contínuo é exatamente o tipo de movimento que `prefers-reduced-motion`
-  // existe para evitar, e a preferência não alcança um vídeo com reprodução
-  // automática via CSS — pausar por JS é a única forma.
+  // Mesmo cuidado do vídeo de fundo (ver `FundoAnimado.tsx`): um laço contínuo
+  // é exatamente o tipo de movimento que `prefers-reduced-motion` existe para
+  // evitar, e a preferência não alcança um vídeo com reprodução automática via
+  // CSS — pausar por JS é a única forma.
   useEffect(() => {
     const consulta = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -157,7 +127,7 @@ export function MascoteAnimado({
   return (
     <video
       ref={videoRef}
-      src={src}
+      src={MASCOTE}
       autoPlay
       muted
       loop

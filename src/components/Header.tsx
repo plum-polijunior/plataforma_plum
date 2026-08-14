@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import plumMascote from "@/assets/plum-mascot-transparent.png";
+import { MascoteAnimado } from "@/components/sections/MascoteAnimado";
 
 interface HeaderProps {
   onNavigate: (sectionId: string) => void;
@@ -75,7 +75,7 @@ export function Header({ onNavigate, activeSection }: HeaderProps) {
             onClick={() => handleNavClick("inicio")}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
           >
-            <img src={plumMascote} alt="Plum" className="h-8 w-8 object-contain" />
+            <MascoteAnimado className="h-8 w-8" />
             <span className="text-[19px] font-extrabold text-gradient">Plum</span>
           </button>
 
