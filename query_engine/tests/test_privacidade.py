@@ -6,7 +6,7 @@ vaza linha bruta. Cada um cita a premissa do design doc que sustenta.
 
 A supressão por k-anonimato (P3, grupo com poucas linhas de origem) existiu
 aqui e foi removida em 2026-08-08 por decisão de produto — ver
-`k-anonimato-removido.md` na raiz do repo para o raciocínio completo. P1.3
+`contexto/30-decisoes.md` D-012 para o raciocínio completo. P1.3
 (nenhuma linha bruta atravessa a fronteira, sempre) continua de pé e sem
 excecão: é isso que este arquivo protege agora.
 

@@ -247,7 +247,7 @@ export function extractColumns(plan: QueryPlan | null | undefined): Set<string> 
   // próprio `count`, e um Admin com todas as 7 colunas liberadas recebeu "sua
   // pergunta usa uma coluna que seu cargo nao pode ver" — porque `quantidade`
   // era exigida em `allowed_columns`, onde ela não pode estar. Era também a
-  // causa real de `investigacao-rbac-admin-colunas-negadas.md`, cujas hipóteses
+  // causa real da investigação de "admin com colunas negadas", cujas hipóteses
   // A–D procuravam desalinhamento de dado que não existia.
   //
   // Excluir o alias corrige duas coisas de uma vez: `required` vira o conjunto

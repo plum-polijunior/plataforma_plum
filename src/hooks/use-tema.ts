@@ -28,8 +28,8 @@ function lerTemaSalvo(): Tema {
  * para fora do grupo de rotas protegidas (`/`, `/auth`, 404). Sem essa
  * limpeza, a classe `tema-escuro` ficava presa em `document.documentElement`
  * depois do logout, e a landing (que não tem opinião própria sobre tema)
- * herdava por cascata a paleta escura — bug real, reportado em
- * `pendencias_e_dividas_tecnicas.md`, "parte 2".
+ * herdava por cascata a paleta escura — bug real, registrado em
+ * `contexto/31-incidentes-e-licoes.md` I-06.
  */
 export function useTema() {
   const [tema, setTema] = useState<Tema>(lerTemaSalvo);

@@ -277,8 +277,8 @@ describe("authorizePlan — expressão aritmética", () => {
 //
 // `order_by` roda depois da agregação, sobre o frame de saída, então ali um nome
 // pode ser um alias criado pelo próprio `select` em vez de coluna de origem.
-// Exigir esse alias em `allowed_columns` barrava plano legítimo: era a causa de
-// `investigacao-rbac-admin-colunas-negadas.md`, que procurou desalinhamento de
+// Exigir esse alias em `allowed_columns` barrava plano legítimo: era a causa da
+// investigação de "admin com colunas negadas", que procurou desalinhamento de
 // dado por quatro hipóteses sem achar, porque o problema estava aqui.
 // ─────────────────────────────────────────────────────────────────────────────
 

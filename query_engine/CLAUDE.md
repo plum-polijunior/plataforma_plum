@@ -3,8 +3,11 @@
 Roda como **imagem de container em AWS Lambda**, atrás de Function URL com `AuthType=AWS_IAM`.
 Como subir/operar: **`infra/aws/PASSO-A-PASSO.md`** — fonte única, não duplicar.
 
-⚠️ **`implementation.md` descreve a arquitetura EC2 ABANDONADA.** É histórico.
-⚠️ **`prd.md` §6 diz que o cache está desligado — está LIGADO** desde 2026-08-07 (TTL 15 min).
+⚠️ **`implementation.md` e `prd.md` foram apagados em 2026-08-14** — ficam registrados aqui porque
+os dois circularam bastante e podem reaparecer numa branch antiga ou no Drive. Se encontrar cópia:
+o `implementation.md` descreve a arquitetura **EC2 abandonada**, e o `prd.md` §6 afirma que o cache
+está desligado quando ele está **LIGADO** desde 2026-08-07 (TTL 15 min, `contexto/30-decisoes.md`
+D-011). Nenhum dos dois é fonte de verdade sobre nada.
 
 ## 1. Motorista cego — a regra que define esta pasta
 

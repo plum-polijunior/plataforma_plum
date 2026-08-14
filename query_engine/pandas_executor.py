@@ -1197,7 +1197,7 @@ def _fmt_nenhuma(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     return s
 
 
-# Enum fechado de `type` de formatação (query_engine/urgent.md). Expandir só
+# Enum fechado de `type` de formatação (contexto/20-pendencias.md). Expandir só
 # com decisão explícita — nunca em silêncio.
 _FORMATTERS: Dict[str, Callable[[pd.Series, Dict[str, Any]], pd.Series]] = {
     "moeda_brl": _fmt_moeda_brl,
@@ -1242,7 +1242,8 @@ def apply_formatting_rules(
 
     `type` fora do enum ou `"nenhuma"` não transforma a coluna, mas loga um
     warning — a falha de tipagem precisa ficar visível para alguém, nunca
-    sumir em silêncio (era o problema central do `query_engine/urgent.md`).
+    sumir em silêncio (era o problema central da dívida de keyword-match,
+    hoje em `contexto/20-pendencias.md`).
     """
     df = df.copy()
     for col, rule in (formatting_rules or {}).items():

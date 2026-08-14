@@ -1,7 +1,7 @@
 """
 Dispatcher de formatação estruturada (Agente 3/3.1 → pandas_executor).
 
-`query_engine/urgent.md` documentou que `apply_formatting_rules` decidia por
+Estava documentado que `apply_formatting_rules` decidia por
 keyword-match em texto livre, e que qualquer regra fora do vocabulário
 hardcoded passava sem transformação, em silêncio. Estes testes cobrem o
 substituto: `type` de um enum fechado, com warning explícito quando a coluna
@@ -139,7 +139,7 @@ def test_nenhuma_e_no_op():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Falha visível, nunca silenciosa (o problema central do urgent.md)
+# Falha visível, nunca silenciosa (o problema central daquela dívida)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_type_desconhecido_nao_transforma_mas_loga_warning(caplog):

@@ -3,14 +3,21 @@ import { useEffect, useRef, useState } from "react";
 import plumMascoteEstatico from "@/assets/plum-mascot-transparent.png";
 
 /**
- * Laço simples de ~10s (origem: `z_mascot_and_background/plum_mascot_2.mp4`).
- * Hoje só o FAQ usa. Ver o bloco "AS DUAS FONTES" abaixo.
+ * Laço simples de ~10s. Hoje só o FAQ usa. Ver "AS DUAS FONTES" abaixo.
+ *
+ * ⚠️ O MP4 de origem (`plum_mascot_2.mp4`) foi removido de
+ * `z_mascot_and_background/` em 2026-08-14, na limpeza dos vídeos-fonte. Só o
+ * derivado com alfa sobrevive, e ele é o que a página carrega — mas refazer o
+ * processamento exige recuperar o original pelo histórico do git.
  */
 export const MASCOTE_LOOP = "/mascote-animado.webm";
 
 /**
- * Vai-e-volta de ~2,9s (origem: `z_mascot_and_background/mais_ou_menos_isso_plum.mp4`).
- * Hero da landing e avatar do assistente no chat.
+ * Vai-e-volta de ~2,9s. Hero da landing e avatar do assistente no chat.
+ *
+ * ⚠️ Mesma observação: a origem (`mais_ou_menos_isso_plum.mp4`) saiu de
+ * `z_mascot_and_background/` em 2026-08-14. Está no histórico, no commit
+ * `10a1add`.
  */
 export const MASCOTE_PINGPONG = "/mascote-pingpong.webm";
 

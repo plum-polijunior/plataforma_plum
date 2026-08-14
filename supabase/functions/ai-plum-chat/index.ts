@@ -3,7 +3,7 @@
  *
  * Três ações continuam sendo só um proxy para o Gemini: `guard` (Agente Z),
  * `plan_query` (Agente A) e `synthesize_answer` (Agente C). A quarta,
- * `execute_plan`, é nova (2026-08-07, Fase 2 de `organizar_tudo.md`): fecha o
+ * `execute_plan`, é nova (2026-08-07): fecha o
  * buraco que existia desde sempre entre o Agente A gerar o Query Plan e o
  * Agente C precisar de um resultado de verdade — antes disso, o passo do meio
  * era um vetor fingido (`PlumChat.tsx:143-144`, agora removido).
@@ -298,7 +298,7 @@ async function handleExecutePlan(
 // então a mesma pergunta saía como "Vendas" numa execução e "Venda" ou
 // "Estudos Técnicos" na seguinte. Previsão de assunto não escala em
 // multi-tenant sem empurrar a taxonomia para o usuário, e nada no produto
-// chegou a consumir o campo (`TODOS.md` #7). Note a ironia registrada acima:
+// chegou a consumir o campo (`contexto/30-decisoes.md` D-026). Note a ironia acima:
 // foi justamente o `assunto` que causou o incidente que motivou este schema.
 const SCHEMA_GUARD = {
   type: "OBJECT",

@@ -16,8 +16,8 @@
 --    nada restringia o valor — a mesma pergunta saía como "Vendas" numa
 --    execução e "Venda" ou "Estudos Técnicos" na seguinte. Previsão de
 --    assunto não escala em multi-tenant sem jogar essa complexidade para o
---    usuário, e o `TODOS.md` #7 já registrava que o campo "nunca foi
---    consultado" por nada.
+--    usuário, e já estava registrado que o campo nunca foi consultado por
+--    nada (hoje em `contexto/30-decisoes.md` D-026).
 --
 -- 2. O QUE ENTRA: `plan_query` e `dataset_id`.
 --    Hoje o Query Plan que o Agente A gera é usado uma vez e descartado — é

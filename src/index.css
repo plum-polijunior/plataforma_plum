@@ -224,7 +224,7 @@
      Mesma especificidade de `:root`; por vir depois no arquivo, vence quando
      a classe estiver presente. Valores são ponto de partida, não medição
      final — contraste WCAG AA ainda precisa ser conferido (ver
-     docs/2026-08-12-PLANO-merge-landing-page.md, Parte C). */
+     contexto/30-decisoes.md D-029). */
   .tema-escuro {
     --background: 320 18% 7%;
     /* --foreground/--muted-foreground clareados (pedido do usuário: dark já

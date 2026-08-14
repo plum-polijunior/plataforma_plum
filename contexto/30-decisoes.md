@@ -215,8 +215,12 @@ entrando por `execute_plan` e passando por `authorizePlan` com o `allowed_column
 pergunta **agora**.
 ⚠️ **Plano com data absoluta nunca é guardado** (`planoTemData`): "quanto faturei hoje" vira
 `["2026-08-12", …]` e reusar amanhã devolveria o dia errado em silêncio.
-**Rejeitado:** estender o cache a datas relativas — ver
-`contexto/30-decisoes.md` D-024.
+**Rejeitado:** estender o cache a datas relativas (um marcador `date_ref` resolvido no servidor,
+em `handleExecutePlan`, antes do `authorizePlan`). Recusado pelo usuário em 2026-08-12, com o
+argumento de que seria "mais uma camada de imprevisibilidade para um produto multi-tenant que já
+trabalha com uma gama de bancos de dados diferentes". O plano detalhado existiu em
+`PLANO-cache-de-perguntas-com-data.md`, apagado em 2026-08-14 — está no histórico do git, se
+alguém quiser reabrir a discussão.
 **Status:** vigente.
 
 ### D-025 · 2026-08-12 · Escopo do reuso é por USUÁRIO, não por organização

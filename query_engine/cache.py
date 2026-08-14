@@ -1,11 +1,11 @@
 """
-Cache TTL em memória para os dados lidos do Google Sheets (query_engine/prd.md §6) — evita
+Cache TTL em memória para os dados lidos do Google Sheets (contexto/30-decisoes.md D-011) — evita
 bater no limite de 60 req/min da API do Google Sheets quando várias pessoas da mesma empresa
 perguntam ao mesmo tempo.
 
 Só vale dentro deste processo: se a EC2 um dia rodar mais de uma réplica, cada uma terá seu
 próprio cache (trocar por Redis/ElastiCache seria o próximo passo, não necessário no volume
-descrito no PRD — "dezenas de usuários da mesma empresa").
+atual — "dezenas de usuários da mesma empresa").
 """
 
 from __future__ import annotations

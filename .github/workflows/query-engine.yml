@@ -59,7 +59,7 @@ jobs:
       # Este passo é o que impede a garantia de privacidade de virar só uma
       # frase de apresentação: se o bloqueio de linha bruta ou a verificação
       # de assinatura quebrarem, o PR não passa. (k-anonimato foi removido em
-      # 2026-08-08 por decisão de produto — ver k-anonimato-removido.md.)
+      # 2026-08-08 por decisão de produto — ver contexto/30-decisoes.md D-012.)
 
       - uses: actions/setup-node@v4
         with:

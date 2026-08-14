@@ -1133,7 +1133,8 @@ export default function Dashboard() {
 
             {/* ── ENTRADA & DOMÍNIOS ─────────────────────────────────────────
                 Antes de 2026-08-12 isto não existia: verificar um domínio era
-                rodar um INSERT à mão no SQL Editor (docs/SSO-DOMINIO.md).
+                rodar um INSERT à mão no SQL Editor. Ver
+                `contexto/30-decisoes.md` D-019.
 
                 A aba inteira é visível para qualquer membro — a policy
                 "membros veem dominios da org" permite a leitura, e saber por

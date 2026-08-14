@@ -16,7 +16,8 @@ implementado:
 
 O PLUM só lê. Nenhum método deste arquivo escreve na planilha do cliente.
 
-CACHE DE DADOS (TTL 15 min): decisão tomada em 2026-08-07 (ver `TODOS.md` #1) — as
+CACHE DE DADOS (TTL 15 min): decisão tomada em 2026-08-07 (ver
+`contexto/30-decisoes.md` D-011) — as
 linhas lidas do Google ficam até 15 minutos na memória do processo, via
 `query_engine/cache.py`, chaveadas por planilha+aba+conjunto exato de colunas.
 Isto estende a vida do dado bruto do cliente de "uma requisição" para "até 15

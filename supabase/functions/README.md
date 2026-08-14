@@ -2,8 +2,8 @@
 
 Convenção única desde 2026-08-07: cada função é uma pasta com `index.ts`, no
 padrão do Supabase CLI. A convenção antiga (`supabase/edge-functions/`, um
-arquivo solto por função, colado manualmente no painel) foi aposentada — ver
-`organizar_tudo.md` §2.3 para o histórico de por que existia e por que saiu.
+arquivo solto por função, colado manualmente no painel) foi aposentada em
+2026-08-07, quando as funções passaram a viver no formato do CLI.
 
 | Pasta | Função | O que faz |
 |---|---|---|
