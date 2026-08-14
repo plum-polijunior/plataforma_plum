@@ -1,0 +1,50 @@
+antes, um contexto que ficou confuso:
+a plataforma plum é vertical e foi feita pra qualquer cliente ter um gostinho do plum. gostando, nós implementamos uma solução vertical.
+gostaria que você separa-se bem
+-> o que é da plataforma (multi-tenant)
+-> o que é da implementação (dicionário, os insights, o conhecimento da base de dados do cliente)
+
+adendo geral:
+para a implementação do remake, vou jogar o projeto no obisidian para separar bem os contextos e o claude code não se perder. faça, por favor, um tópico explicando essa implementação.
+
+além disso, o plum prospectar (maisa + apollo) poderia ficar para uma etapa 2. para a etapa 1, apenas fazer com que a IA consiga usar o pandas para fazer as análises que o usuário quer sobre o banco de dados.
+
+a ideia do plum é funcionar desse jeito para um banco de dados com diferntes planilhas e .csv, não só pra uma
+insghts:
+O PLUM NÃO É MAIS UMA CONSULTA DE DADOS PARA O USUÁRIO, É UMA CONSULTA DE DADOS PARA A IA
+
+sobre ##!1
+infelizmente a leitura pessimista está correta, hoje a equipe do plum é o produto, e o serviço é não escalável (consultoria)
+a leitura 3 também está correta, e hoje o foco de prospecção são empresas de médio porte, no setor de varejo, que mtas vezes tem bases bagunçadas, equipe técnica pequena e orçamento para nos contratar. para eles, a dificuldade para a consulta de dados não é só um incômodo. é uma dor real.
+mas, sem conseguir trazer insights de maneira multi-tenant com o produto, morreremos com ticket médio de 23k e itip de 2k (sem clientes grandes)
+
+sobre ##2
+a sua ideia de que a cada llm nova o motor fica mais valioso é genial.
+o plum deve ser um ARQUITETO. ele deve traduzir a pergunta do usuário em um plano de ação analítico. deixar o usuário direto com a llm gera confusão para a llm. fazer usuário <-> plum <-> llm é ensinar a llm a fazer a análise certa.
+
+sobre #2.3 temos a api paga do gemini, mas também a equipe técnica está discutindo sobre a implementação da api do claude
+
+a implementação 3.2 é mto boa, mas senti que você gostaria de colocar regras de proteção como k-anonimato. testamos, e elas tem grande risco de falha, por isso retiramos.
+
+uma das implementações mais importantes para um produto melhor está em "**Nota de produto que vale mais que a solução técnica:**"
+
+em ##4, entendi a regra de interface de agragação obrigatória, mas e se o usuário quiser apenas um dado específico? Será que poderia ser usada uma arquitetura híbrida?
+além disso, era pra ia ver os dados só durante o onboarding, e depois inferir pelo contexto e usando regras de formatação já criadas. mas se ver os dados durante o prompt é a melhor maneira de ela de fato, mais que consultar, mas interpretar dados, que seja feito.
+
+sobre ##5
+mas usando a arquitetura {{ IA PEDE DADOS PRO PLUM <-> PLUM RETORNA OS DADOS }
+} a ia poderia fazer mais análises do que um catálogo poderia prever. por exemplo, se o dado A alterar, como fica o dado B. ou estou errado?
+
+sobre ##6 
+eu acho que essas regras de segurança falhariam no modelo multi tenant, porque qualquer previsão de segurança com certeza falharia com a variedade de planilhas.
+a segurança deve entrar para a etapa de implementação (não dá plataforma, mas da solução em si. lembrando que a plataforma é uma DEMO, usamos o modelo dela para criar uma solução personalizada para o cliente)
+
+até mesmo porque, qualquer uso de chat bot (palavras chave) em multi tenant é uma grande perda de tempo. e é isso que vocabulario_exposto propõe, não é?
+
+sobre ##11
+1)retenção não é o problema, é encontrar os clientes que aceitam uma mera camada de consulta. o foco agora é criar e vender uma camada de INTERPRETAÇÃO de dados.
+2)o plum é horizontal, mas a implementação dele é vertical. a plataforma deve funcionar pra qualquer planilha que o usuário fizer o onboarding. ser plug and play
+3)a amostra entra, e a tese de "a ia não lê seus dados cai". mas vai valer a pena pelo avanço tecnológico do produto
+4)sim, nome: onboarding de dados
+5)é público, a ideia é que o plum rode em qualquer interface 
+6)primeiro vc tem que me responder a pergunta que te fiz em "sobre ##5"

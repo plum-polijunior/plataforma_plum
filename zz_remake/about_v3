@@ -1,0 +1,35 @@
+adendo: use também as recentes alterações do contexto para produzir v4
+
+acho que não precisa matar a "receita" de insights por completo, mas ter UMA forte como modelo
+
+temos que discutir melhor como vai ser a estrutura das queryes enviadas ao pandas
+a ideia é: a ia "arquiteta" recebe dados da planilha pra gerar contexto de quais colunas consultar para resolver o problema. depois ela consulta via a atual arquitetura do plum
+
+o mais importante é: QUANTO MELHOR FOR A PLATAFORMA, MAIS FÁCIL É A IMPLEMENTAÇÃO.
+sobre 1.1 é exatamente isso, o plum plataforma interpreta os dados e produz um resultado. o usuário (o stakeholder) decide o que ele significa
+
+sobre ##2 você não precisa se aproveitar da atual arquitetura dos agentes de ia, você pode sugerir uma nova
+já começando a pensar na implementação técnológica, é importante gerar logs no supabase para reconhecer mais facilmente os erros
+
+sobre ##2.3, pode usar o gemini flash (raciocínio rápido) + claude (pensamento)
+
+sobre ##3.1, a ia pode errar, mas a resposta deve conter como ela pensou, os cálculos que ela fez. criar um parâmetro que trava a ia de "tentar" chegar na resposta é receber "desculpa, não posso responder isso" a cada prompt. o plum não será assim. mas a implementação do plum pode criar essa "regra de negócios"
+
+sobre ##3.2
+`margem = receita − custo − glosa`; `glosa é perda`; grão = 1 linha por atendimento isso pode ser adicionados como "skills" dos agentes de ia na plataforma também (em "minha base de dados")
+
+sobre ##3.3
+catálogo de padrões analíticos, as regras de negócio deveriam ser mostrados no front
+
+sobre ##5.3 implemente a
+
+sobre ##6
+a tese de "a ia não lê seus dados" é fraca, pois o google/anthropic é mais confiável que a equipe. a equipe ler os dados gera incômodo. o google ler os dados gera indiferença.
+
+##6.1
+5 linhas não é suficiente? é o que o onboarding da plataforma já faz
+
+#6.2
+concordo
+
+##7.1 ok

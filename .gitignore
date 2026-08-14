@@ -55,3 +55,11 @@ venv/
 
 #dados privados
 test_data
+
+#arquivos pessoais
+
+# pytest cache (gerado)
+query_engine/.pytest_cache/
+
+# configuracao local do Claude Code (nao versionar)
+.claude/settings.local.json

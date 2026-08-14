@@ -1,0 +1,33 @@
+1) maiores insigts trazidos pelo documento:
+
+realmente minha pergunta de "aumente a glosa em 20k" foi mal pensada e não dialoga com a ideia do produto
+
+usar o plum como motor de conhecimento da empresa, e a maisa como motor que traduz a linguagem natural para a linguagem que o plum entende é genial
+
+realmente o plum alterar dados é uma péssima ideia
+
+o plum interno é um MOTOR
+a inteligência artificial fala, em linguagem de código: "pra tomar essa decisão, preciso da soma das colunas X no intervalo de tempo t1, da Y no t2 e da Z no t3. salve respectivamente como info_1, info_2 e info_3"
+o plum devolve o dado, a ia traz o insight
+adendo: a narrativa comercial de que "a ia não treina com seus dados" deixará de ser adotada, mas, sinceramente, a maioria das empresas não ligam pra isso. E essa é uma barreira tecnológica fortíssima.
+
+exemplo de insights:
+```
+User: "e se a glosa subir 20k, minha margem ainda fecha positiva?"
+Plum: "Com glosa de R$ 50k (hoje R$ 30k), a margem do mês cai de 12,4% para 4,1%.
+       Fecha positiva, mas abaixo da sua meta de 8%."
+       [cenário salvo · comparar com o real · alterar premissa]
+```
+
+dúvida para o produto: se retira-se a estrutura de query do pandas, tudo ficaria mais simples:
+Ex: quanto o vendedor NOME SOBRENOME vendeu?
+a estrutura da query fica complexa, where nome = NOME? where nome = NOME SOBRENOME? e se o NOME SOBRENOME estiver diferente na linha do banco de dados?
+
+2) RESSALVAS:
+o pitch de encurtar a distância entre a pergunta e a ação já é explorado na landig page "Plum. Do dado à decisão. Em segundos"
+
+o plum já teve 4 vendas com ticket médio de 23k, mas elas exploraram mais a equipe técnica (para formatar e organizar a base de dados) que o produto em si
+
+quanto à 4, de fato devemos analisar a viabilidade de fazer um produto que gere insights fazendo a IA ler diretamente a planilha VS. a ia fazendo solicitações para o panda para puxar dados específicos.
+
+em 5, a permanência da agragação obrigatória ainda é uma discussão da equipe técnica

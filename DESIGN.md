@@ -37,7 +37,7 @@ produto. Num dashboard o produto é o número, e tudo que compete com ele é ru�
 Desde 2026-08-12 o ambiente interno é claro: o plano é `#FFFFFF`, a superfície do card é
 `#FAF7F8`, a tinta é `#191317` e a marca é `#7A2F56`. Os nomes `--app-*`, `--ink*` e `--brand`
 nunca existiram no código — a verdade está em `src/index.css` (`:root` claro, `.dark` para a
-landing). Ver `docs/2026-08-12-direcao-a-no-app.md`.
+landing). Ver `contexto/30-decisoes.md` D-029.
 
 ```css
 /* Superfícies. Derivadas dos tokens existentes, convertidas para hex. */
@@ -309,6 +309,6 @@ Se algum destes aparecer numa tela de app do PLUM, está errado:
   série foi re-degrau e revalidada, não invertida — cinco medições, faixa de luminosidade **por
   matiz** (os tetos no claro vão de 32% a 65%), e o sinal do desvio de matiz **invertido**, porque
   no claro ele cancelava a rampa em vez de proteger o contraste. Ver
-  `docs/2026-08-12-direcao-a-no-app.md` §2 e o teste `src/lib/contraste-serie.test.ts`.
+  `contexto/30-decisoes.md` D-029 e o teste `src/lib/contraste-serie.test.ts`.
   ⚠️ **Uma parte do alvo NÃO foi cumprida:** o ΔE sob daltonismo. Ver a nota na §3.
 - **Movimento além de transição de estado.** Fora de escopo por escolha: App UI.

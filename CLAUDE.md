@@ -2,6 +2,20 @@
 
 Contexto operacional para agentes de código. Leia isto antes de qualquer alteração.
 
+> ⭐ **Este arquivo é a verdade sobre o que ESTÁ NO AR** — comandos, schema real, armadilhas.
+> Para entender **o produto, o negócio e para onde vamos**, comece por
+> **`contexto/00-LEIA-PRIMEIRO.md`**. E antes de mexer em qualquer pasta, leia o `CLAUDE.md`
+> **dela** (`src/`, `query_engine/`, `supabase/functions/`, `supabase/migrations/`).
+>
+> ⚠️ Existem **duas** coisas chamadas "Plum": a **plataforma** (multi-tenant, plug-and-play, uma
+> demo) e a **implementação** (vertical, por cliente — é o que se vende). Confundir as duas é o erro
+> mais caro do projeto: `contexto/02-plataforma-vs-implementacao.md`.
+>
+> ⚠️ **`docs/` e `contexto/90-arquivo/` foram APAGADOS em 2026-08-14.** O que sobrou daquele
+> material está em `contexto/30-decisoes.md` (o porquê de cada escolha) e
+> `contexto/31-incidentes-e-licoes.md` (o que deu errado e virou regra). Referência a arquivo de
+> `docs/` neste repositório é resquício — se encontrar alguma, corrija.
+
 **O que é:** plataforma multitenant de *Natural Language Query* sobre planilhas.
 O usuário conecta um Google Sheets, a IA gera um dicionário semântico da base, e depois
 conversa com os dados em português. **A IA nunca calcula: ela planeja, o Python executa.**
@@ -39,12 +53,12 @@ O CI (`.github/workflows/query-engine.yml`) roda `npm test` + `pytest` a cada pu
 toque `query_engine/`, `supabase/functions/` ou `src/lib/`, e só publica no Lambda se os dois
 passarem — são as barreiras de privacidade/segurança (bloqueio de linha bruta, extração de
 coluna do RBAC) que não podem regredir em silêncio. (k-anonimato foi removido em 2026-08-08
-por decisão de produto — ver `k-anonimato-removido.md` na raiz do repo.)
+por decisão de produto — ver `contexto/30-decisoes.md` D-012.)
 
 **Migrations não são aplicadas por CLI.** `supabase/config.toml` só contém `project_id`;
-o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar
-(ver `docs/PASSO-A-PASSO-APLICAR.md`). Edge Functions vivem em `supabase/functions/<nome>/index.ts`
-(padrão CLI, ver `supabase/functions/README.md`).
+o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar, na ordem do §6, lendo o
+bloco de verificação no fim de cada uma (ver `supabase/migrations/CLAUDE.md`). Edge Functions vivem
+em `supabase/functions/<nome>/index.ts` (padrão CLI, ver `supabase/functions/README.md`).
 
 ⚠️ **Deploy de Edge Function NÃO é automático — verificado em 2026-08-10.** Esta seção dizia
 que a integração nativa GitHub↔Supabase publicava sozinha a cada push em `plataforma`. Não
@@ -95,6 +109,12 @@ Migrations continuam manuais, de propósito.
 `ls` mostra a árvore. Aqui só o que ela **não** mostra — o que cada arquivo esconde, e as
 armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 
+> ⚠️ **Sobreposição conhecida, a resolver:** desde 2026-08-14 existe um `CLAUDE.md` por pasta de
+> código (`src/`, `query_engine/`, `supabase/functions/`, `supabase/migrations/`) com as armadilhas
+> **daquela** pasta. Parte do conteúdo de §2 e §7 aqui está repetida lá. **O dono da armadilha
+> específica de uma pasta é o `CLAUDE.md` dela**; este arquivo deve ficar só com o que é global.
+> Enxugar §2/§7 é a próxima limpeza — até então, se os dois discordarem, vale o da pasta.
+
 | Arquivo | O que o nome não conta |
 |---|---|
 | `src/hooks/use-org-access.ts` | ⭐ estado de acesso derivado das **claims do JWT**, não do banco |
@@ -110,9 +130,9 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `src/lib/colunas.ts` | ⭐ metade de um contrato entre duas linguagens — normaliza nome de coluna, e o Python espelha. Tabela de casos replicada nos testes dos dois lados |
 | `src/lib/google-sheets.ts` | extrai `id` **e `gid`** da URL colada (`extrairSheetRef`); `extrairSheetId` é wrapper |
 | `query_engine/config.py` | segredos via SSM Parameter Store — nunca `.env` com valor |
-| `query_engine/cache.py` | TTL de 15 min, **ligado** desde 2026-08-07 (`TODOS.md` #1) |
-| `query_engine/prd.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
-| `query_engine/implementation.md` | histórico do plano de EC2 **abandonado** — aponta pra `infra/aws/` |
+| `query_engine/cache.py` | TTL de 15 min, **ligado** desde 2026-08-07 (`contexto/30-decisoes.md` D-011) |
+| `contexto/12-visao-tecnologica.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
+| `infra/aws/PASSO-A-PASSO.md` | histórico do plano de EC2 **abandonado** — aponta pra `infra/aws/` |
 | `supabase/migrations/` | aplicar **em ordem** (§6), e à mão pelo SQL Editor |
 | `supabase/functions/ai-plum-chat/` | chat: Agente Z/A/C + `execute_plan` (executor real) |
 | `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. **Dois** agentes dentro de `gerar_card`: Z-dash (escopo) e Tarsila do Amaral (planejador) — §5. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
@@ -120,14 +140,14 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `supabase/functions/_shared/query_plan.ts` | ⭐ **único** interpretador de Query Plan (extrai colunas p/ RBAC) |
 | `infra/aws/PASSO-A-PASSO.md` | ⭐ fonte única de verdade do executor — **não duplicar** |
 | `testes/chat/` | roteiros de validação **manual** — não roda no CI (ver README lá) |
-| `docs/PRD-PLUM2.0.md` | visão/roadmap — **NÃO** é o schema real (§3) |
-| `docs/INCIDENTE-2026-07-22-*.md` | ⭐ pós-mortem do escalonamento de privilégio (origem do §4) |
+| o PRD antigo (apagado em 2026-08-14) | visão/roadmap — **NÃO** é o schema real (§3) |
+| `contexto/31-incidentes-e-licoes.md` I-01 | ⭐ pós-mortem do escalonamento de privilégio (origem do §4) |
 
 ---
 
 ## 3. Modelo de dados (schema real)
 
-> A verdade é `supabase/migrations/` + `login_supabase.sql`. O `docs/PRD-PLUM2.0.md`
+> A verdade é `supabase/migrations/` (inclusive o `login_supabase.sql` que está lá dentro). O o PRD antigo (apagado em 2026-08-14)
 > descreve um modelo aspiracional (`tenants`, `tenant_users`, `data_dictionary`, …) que
 > **não existe no banco**. Não codifique contra o PRD.
 
@@ -320,11 +340,11 @@ Três invocações sequenciais, todas recebendo `schemaMetadata`:
    ⚠️ **Plano com data absoluta nunca é guardado** (`planoTemData`): "quanto faturei hoje"
    vira `["2026-08-12", ...]`, e reusar amanhã devolveria o dia errado em silêncio. Estender
    o cache a datas relativas foi avaliado e **recusado** — ver
-   `PLANO-cache-de-perguntas-com-data.md`.
+   `contexto/30-decisoes.md` D-024.
 3. `synthesize_answer` — **Agente C** (Sintetizador). Vê a pergunta + o vetor de resultados
    do executor, **nunca a base**. Não inventa número que não esteja no resultado.
 
-**Entre (2) e (3) roda o executor real, desde 2026-08-07 (Fase 2 de `organizar_tudo.md`)** —
+**Entre (2) e (3) roda o executor real, desde 2026-08-07 (Fase 2)** —
 uma quarta ação, `execute_plan`, no mesmo `ai-plum-chat`: resolve `allowed_columns` do cargo
 do usuário para o dataset, autoriza o plano do Agente A com `authorizePlan`
 (`_shared/query_plan.ts` — o mesmo interpretador que `dashboard-execute` usa, não uma segunda
@@ -357,7 +377,7 @@ sem ele, pela mesma razão do chat: o endurecimento não pode ser o que derruba 
 cota do Gemini é por requisição, a quantidade de cards por dia cai pela metade — troca aceita
 conscientemente para impedir o pior caso, que não era erro: um card estruturalmente válido
 sobre uma coluna real qualquer, com título fora de contexto, **publicável** no dashboard da
-organização. Ver o risco R17 em `docs/fases dashboard/2026-08-10-fase-4-PLANO-pagina-inicial.md`.
+organização. Registrado como risco R17 na época.
 
 Logs, no padrão do chat (uma linha com a resposta inteira do agente):
 `[gerar_card/z-dash]` e `[gerar_card/tarsila]`. **A pergunta crua nunca vai para o log**, nos
@@ -391,9 +411,9 @@ precisa de agregação, sempre, sem exceção), teto de linhas verificado **ante
 nunca um filtro silenciosamente ignorado. `column_roles` (percent/date/number/text) substitui
 a antiga constante global `_PCT_COLS`/`_STRING_COLS` — mas continua derivado por **keyword-
 match em texto livre** sobre a `cleaning_rule` do Agente 3, a mesma dívida do
-`query_engine/urgent.md`. Havia também **k-anonimato** aqui (grupo com menos de `k_min`
+`contexto/20-pendencias.md` P7. Havia também **k-anonimato** aqui (grupo com menos de `k_min`
 linhas de origem era suprimido, contado em `suppressed_groups`) — removido em 2026-08-08 por
-decisão de produto, ver `k-anonimato-removido.md` na raiz do repo. `suppressed_groups`
+decisão de produto, ver `contexto/30-decisoes.md` D-012. `suppressed_groups`
 continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 
 ### Invariantes de produto
@@ -423,7 +443,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - **R-12 k-Anonimato — removido em 2026-08-08.** Existia aqui até então: nenhum vetor de
   resultado saía sem agregação (isso **continua** valendo, ver R-02) e todo grupo precisava de
   no mínimo `k_min` linhas de origem, configurável por organização. A parte de "mínimo de
-  linhas por grupo" foi removida por decisão de produto — ver `k-anonimato-removido.md` na
+  linhas por grupo" foi removida por decisão de produto — ver `contexto/30-decisoes.md` D-012 na
   raiz do repo pelo raciocínio completo. Mantido aqui como registro histórico do número, não
   reintroduzir sem decisão de produto equivalente.
 - **O Plum não cria planilhas.** O usuário cola a URL da própria planilha e compartilha com
@@ -434,7 +454,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   os cards/perguntas de uma vez. O teto de linhas é checado **antes** do parse, pelos
   metadados da planilha. **Cache de dados (linhas) com TTL de 15 min ligado desde
   2026-08-07** (`query_engine/cache.py`, chave por planilha+aba+conjunto exato de colunas —
-  decisão registrada em `TODOS.md` #1, aceitando conscientemente que a linha bruta do cliente
+  decisão registrada em `contexto/30-decisoes.md` D-011, aceitando conscientemente que a linha bruta do cliente
   fica até 15 min na memória do processo). Cabeçalho e contagem de linhas têm cache próprio,
   separado, também 15 min.
 - **Chat é 100% privado por usuário.** RLS de `plum_chat` é `auth.uid() = user_id`.
@@ -444,7 +464,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 
 ## 6. Ordem das migrations
 
-1. `login_supabase.sql` — base (fora de `migrations/`)
+1. `supabase/migrations/login_supabase.sql` — base
 2. `create_role_permissions_table.sql` — dropa `roles.permissions`, cria `role_permissions`
    (`add_role_permissions.sql` é histórico, **não aplicar**)
 3. `20260714224747_*.sql` e `20260714225052_*.sql` — `Leads`
@@ -487,7 +507,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - ⭐ **Duas superfícies, UM tema — e `.dark` hoje não tem consumidor.** Desde 2026-08-12
   (Direção A) `:root` é o tema **claro**, com a marca `#7A2F56`. Naquele momento a landing
   ficou no escuro via `className="dark"` em `Index.tsx`/`NotFound.tsx`; no merge do novo
-  design da landing (mesma data, `docs/2026-08-12-PLANO-merge-landing-page.md`) as duas
+  design da landing (mesma data) as duas
   saíram do `.dark`, porque o design novo **já usava o mesmo `#7A2F56`** — o que separava as
   superfícies era só aquela classe. Hoje **nada** opta por `.dark`; o bloco fica como saída
   de emergência, não como código morto por descuido.
@@ -495,7 +515,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   fora da árvore do layout, então um wrapper claro no app daria a todo diálogo do produto o
   tema errado. ⚠️ Se `.dark` voltar a ser usado, os tokens `--glow-*`, `--glass-*` e
   `--gradient-*` precisam ser redefinidos lá dentro: eles foram retunados de roxo para vinho
-  e só existem em `:root`. Ver `docs/2026-08-12-direcao-a-no-app.md`.
+  e só existem em `:root`. Ver `contexto/30-decisoes.md` D-029.
 - ⭐ **O produto logado TEM tema escuro — é um terceiro mecanismo, `.tema-escuro`, não `.dark`.**
   Acrescentado depois do merge da landing (leva `feat/fase-5b-periodo-linha-e-tema`), então não
   estava documentado aqui até agora. `src/hooks/use-tema.ts` (usado uma única vez, em
@@ -512,7 +532,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   sobre tema, então herdavam a paleta escura por cascata. Corrigido com `return () =>
   classList.remove(...)` no efeito (fecha o caso normal, porque o hook só desmonta saindo do
   produto) **e** um efeito defensivo idêntico em `Index.tsx`/`Auth.tsx`/`NotFound.tsx` (fecha
-  o resto). Ver `pendencias_e_dividas_tecnicas.md`, "parte 2".
+  o resto). Ver `contexto/31-incidentes-e-licoes.md` I-06.
   ⚠️ **Escrita de `profiles.tema` é só via RPC**, nunca `UPDATE` direto: a única policy de
   UPDATE em `profiles` exige `id <> auth.uid()` (regra 5 abaixo) — abrir self-UPDATE
   reabriria a autopromoção que a migration de 2026-07-22 fechou. `definir_tema()` é
@@ -577,7 +597,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   link ou emoji. Quem renderiza é `src/components/RespostaMarkdown.tsx`, e **só** a bolha do
   assistente: a do usuário é texto literal, porque interpretar Markdown na pergunta reescreveria
   o que ele digitou. Mexeu no contrato de um lado, mexa no outro — prompt novo com front antigo
-  entrega `- ` literal ao usuário. Ver `docs/2026-08-11-formato-da-resposta-do-chat.md`.
+  entrega `- ` literal ao usuário. Ver `contexto/30-decisoes.md` D-027.
 - ⚠️ **O extrator de classes do Tailwind é regex sobre o arquivo e não pula comentário.** Citar
   o nome de uma classe dentro de um comentário faz o CSS dela ser gerado — utilitário morto no
   bundle (custou 2,08 kB em 2026-08-11, só por explicar o que havia antes). Descreva a classe
@@ -596,8 +616,9 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - Objetos no banco sem migration: `assistants`, `conversations`, `messages`, enums
   `chat_canal`/`chat_direcao`, funções `get_user_org_id()`, `rls_auto_enable()`,
   `touch_updated_at()`.
-- Arquivos citados por `docs/PASSO-A-PASSO-APLICAR.md` que não existem no repo:
-  `supabase/aplicar/APLICAR_TUDO.sql`, `supabase/forensics/*`, `supabase/seed/*`.
+- Arquivos que documentação antiga citava e que **nunca existiram** no repo:
+  `supabase/aplicar/APLICAR_TUDO.sql`, `supabase/forensics/*`, `supabase/seed/*`. Se alguém pedir
+  por eles, não procure — não há.
 - `src/integrations/supabase/client.ts` tem URL e anon key hardcoded, apesar de existir
   `.env.example` com `VITE_SUPABASE_*`. Chave `anon` é pública por design (protegida por
   RLS), mas a inconsistência é real.
@@ -611,8 +632,8 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   propósito, para não ter a mesma heurística em duas linguagens. O que sobra de dívida real é
   menor: quem escolhe o `type` continua sendo um LLM (Agente 3) olhando 5 linhas de amostra.
 - A matriz de permissões (quais colunas cada cargo vê) ainda mora só em `Dashboard.tsx`,
-  duplicada em intenção com um plano nunca aplicado (`reorganizacao_cargos_e_permissoes`, na
-  raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `organizar_tudo.md` §2.1 — o
+  duplicada em intenção com um plano nunca aplicado (`contexto/20-pendencias.md` P9, na
+  raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `contexto/20-pendencias.md` P9 — o
   plano continua válido, só não é prioridade no momento.
 - ~~Pelo menos uma base em produção tem `datasets.google_sheet_id` guardando a URL completa~~
   — **não se confirmou (conferido em 2026-08-11).** As 3 bases em produção têm ID puro, 44
@@ -642,7 +663,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   algum dia o `schema_metadata` passar a guardar o cabeçalho original por coluna, a normalização
   em Python deixa de ser necessária — e é a saída preferível, porque elimina a duplicação
   acima. Não é retroativo: o original das bases atuais já foi perdido.
-- Chat real (`execute_plan`) — RESOLVIDO em 2026-08-08, ver `TODOS.md` #8. O 403
+- Chat real (`execute_plan`) — RESOLVIDO em 2026-08-08, ver `contexto/31-incidentes-e-licoes.md` I-07. O 403
   `"base nao encontrada"` original não reproduzia mais, e o 403 diferente que apareceu depois
   (`aws4fetch` → Function URL do Lambda) já tinha sido corrigido: a Function URL com
   `AuthType=AWS_IAM` exige tanto `lambda:InvokeFunctionUrl` quanto `lambda:InvokeFunction` na
@@ -698,6 +719,10 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
       (`mcp__supabase__list_edge_functions`). `version` sobe sozinho em mudança de secret, sem
       código novo — não serve de prova. Ver §1.
 - [ ] Explique brevemente cada alteração feita (convenção deste projeto).
+- [ ] ⭐ **Mudou algum FATO sobre o produto** (não só código) — uma decisão, uma pendência, um
+      comportamento, uma crença que se revelou falsa? **Rode a skill `contexto-plum`.** Ela roteia a
+      mudança para o arquivo certo de `contexto/` e impede que o mesmo fato ganhe dois donos. Sem
+      esse passo, `contexto/` apodrece como `docs/` apodreceu.
 
 ---
 
@@ -715,11 +740,20 @@ própria sessão ou digite `/`.
 
 | Arquivo | O que traz |
 |---|---|
+| Arquivo | O que traz |
+|---|---|
+| ⭐ `contexto/00-LEIA-PRIMEIRO.md` | O roteador. Se você é novo aqui, comece por ele |
+| ⭐ `contexto/03-erros-comuns.md` | As crenças falsas que este repo produz, com a verdade ao lado. 60 linhas |
+| ⭐ `contexto/30-decisoes.md` | **O porquê de cada escolha**, com o que foi rejeitado junto. É o que o código não conta |
+| `contexto/31-incidentes-e-licoes.md` | O que já deu errado e qual regra nasceu disso |
+| `contexto/20-pendencias.md` | Trabalho adiado, por dificuldade, com o raciocínio junto |
+| `contexto/02-plataforma-vs-implementacao.md` | O teste que toda proposta de feature tem de passar |
+| `contexto/12-visao-tecnologica.md` | Arquitetura-alvo do remake (⚠️ proposta, não é o que está no ar) |
 | `DESIGN.md` | Sistema de design: as duas superfícies, paleta validada, os cinco estados do card |
-| `TODOS.md` | Trabalho conscientemente adiado, com o raciocínio junto |
-| `docs/fases dashboard/` | Um arquivo por fase, com resumo estruturado por task |
-| `docs/2026-08-11-entrada-e-guardiao-do-dashboard.md` | Tela de entrada (pouso em `/inicio`, hierarquia, validação) e o Agente Z-dash — inclui o custo de cota aceito e as pendências de deploy/validação |
-| `docs/2026-08-11-formato-da-resposta-do-chat.md` | Por que o `**` aparecia na tela (typography instalado e nunca registrado) e o contrato de formato do Agente C — traz o prompt **literal antes e depois**, a matriz de reversão e o `ezbr_sha256` anterior |
-| `docs/2026-08-12-direcao-a-no-app.md` | A Direção A portada para o app: o mecanismo `:root` claro × `.dark` na landing (e por que não o contrário), o mapa de tokens, as **cinco medições** que a paleta de série exigiu no claro, e a saída de emergência de uma palavra |
-| `docs/2026-08-12-PLANO-merge-landing-page.md` + `docs/2026-08-12-landing-page-executada.md` | O plano e a execução real do redesenho da landing — tokens, seções, remoção do "Simule o Plum". O segundo documento traz o bug do loop do marquee (matemática de `gap` vs margem por item) e o incidente de commit concorrente com a branch `rafaela`, resolvido com `push --force-with-lease` por decisão do usuário |
-| `infra/aws/PASSO-A-PASSO.md` | Como subir o executor |
+| `infra/aws/PASSO-A-PASSO.md` | Como subir o executor — fonte única |
+| `supabase/migrations/CLAUDE.md` | Como aplicar migration, e as regras de segurança do banco |
+
+⚠️ **O histórico narrativo foi apagado em 2026-08-14** (`docs/`, incluindo `fases dashboard/`, os
+logs de PR e os documentos de fase). O que sobreviveu daquilo é o **fato** e o **porquê**, em
+`contexto/30-decisoes.md` e `contexto/31-incidentes-e-licoes.md`. Medições e prompts literais que
+só existiam nos documentos de fase **não** foram preservados — se precisar deles, `git log`.

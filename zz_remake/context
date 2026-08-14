@@ -1,0 +1,14 @@
+tem muitos documentos desatualizados do plum, um claude em 1 shot que pega pra ler os arquivos tem uma visão
+errada do que é o plum. por isso, sugiro
+->arquivo do que é o plum como plataforma
+->arquivo explicando a diferença do plum plataforma (quando eu disser plum aqui, entenda como a plataforma) e o plum que se personaliza para o cliente (plum implementado) 
+->arquivo da visão comercial do plum
+->arquivo da visão do plum como produto
+->arquivo da visão tecnológica do plum
+->arquivo explicando o que pode ser implementadado (adicionado ou melhorado) para o plum vendido com o onboarding
+->resumir as pendências da plataforma em um arquivo (organizados em hierarquia de dificuldade),
+->arquivo de planos futuros (como plum ser um assistente para os clientes e prospectar)
+->claude .md em cada pasta, explicando contextos específicos
+->mais arquivos que você achar necessário
+->uma skill para que o claude sempre atualize eles
+-> apagar o resto, e organizar os contextos no obisidian
