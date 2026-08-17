@@ -1,0 +1,21 @@
+o pandas pode ter desvio padrao, mediana, quantil, regressão. é até algo que gostaria de fazer, já respondendo 6.3
+
+com isso, outlier e tendência podem ser calculados, seja por ad_hoc ou por catálogo
+
+sobre os "padrões universais", acredito que só a decomposição de variação possa "sobrecarregar" o ad_hoc.
+
+por isso, faça um ad_hoc bem feito, implemente somente decomposição da variação no catálogo, e deixe anotados como ideias futuras:
+Cruzamento por grão comum
+Cenário (`overrides`)
+Outlier
+Tendência
+Concentração (Pareto)
+Composição / mix deixe anotado para depois
+
+não existe e não existirá whitelist de agg
+
+o mapa termo->coluna será implementação.
+
+anote como ideia futura ter uma "memória" do plum, ou seja, o usuário pode configurar via front end para o agente entender, por exeplo, "meu mês fecha no dia 5"
+
+multiplanilhas entra após ad_hoc ser validado (ou seja, continuar sobrescrevendo from: producao)
