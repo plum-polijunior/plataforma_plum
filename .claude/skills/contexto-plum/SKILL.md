@@ -5,9 +5,6 @@ description: Mantém a pasta contexto/ do Plum atualizada e sem duplicação. Us
 
 # Manter o contexto do Plum
 
-> ⚠️ **Instalação:** mova ou copie esta pasta para `.claude/skills/contexto-plum/` para o Claude Code
-> reconhecer a skill. Ela ficou em `skills/` porque `.claude/` é protegida em algumas sessões.
-
 Você vai rotear uma mudança para **um** arquivo de `contexto/`, sem criar um segundo dono para o
 mesmo fato.
 
@@ -52,8 +49,9 @@ Responda as três antes de escrever qualquer coisa:
   quê**, **o que foi rejeitado**, status. Sem o rejeitado, alguém vai propor de novo o que já foi
   descartado.
 - **Contradisse algo?** Marque o antigo como superado **e datado** (o padrão do repo é
-  `⚠️ Correção de <data>:`), não apague. Se for um arquivo inteiro, mova para `contexto/90-arquivo/`
-  com o aviso de três linhas no topo e link para o substituto.
+  `⚠️ Correção de <data>:`), não apague — é a `30-decisoes.md` D-041. Se um documento inteiro
+  perdeu a validade, **extraia o porquê para `30-decisoes.md` antes** de apagá-lo: o porquê é a
+  única informação que não se recompra, e `git log` é invisível para um agente em uma passada.
 - **Resolveu pendência?** Mova para a seção "Já resolvido — não reabrir" de `20-pendencias.md`, com o
   que ficou. Não delete a linha.
 
@@ -66,7 +64,10 @@ Responda as três antes de escrever qualquer coisa:
 
 ## Proibições
 
-- ⛔ **Nunca escreva em `contexto/90-arquivo/`.** É material superado.
+- ⛔ **Não recrie uma pasta de arquivo morto.** `contexto/90-arquivo/` e `docs/` existiram e foram
+  apagados em 2026-08-14, depois de o porquê de cada coisa ser extraído para `30-decisoes.md` e
+  `31-incidentes-e-licoes.md`. Guardar documento superado "por via das dúvidas" foi exatamente o
+  que produziu o problema que o `contexto/` veio resolver.
 - ⛔ Não crie arquivo novo sem tirar conteúdo de outro. Arquivo novo é redistribuição, não adição.
 - ⛔ Não repita fato que já tem dono.
 - ⛔ Não misture "o que é" com "o que queremos" no mesmo arquivo.
