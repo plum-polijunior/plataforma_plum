@@ -1,4 +1,12 @@
-O que vale é plano de implementação v2.
+O que vale é o plano de implementação **v3** (`PLANO-implementacao-remake_V3.md`).
+
+⚠️ O v2 está no repositório e **não vale mais**: ele supunha ambiente paralelo (Supabase novo,
+Lambda de dev), e o time decidiu em 2026-08-18 fazer o remake direto em produção. Ele fica como
+plano B — se o remake em produção se mostrar insustentável, é o caminho de volta.
+
+⭐ A diferença que muda o dia a dia: o isolamento agora é por **organização**
+(`organizations.remake_habilitado`), não por ambiente. E ela cobre a camada de agentes, **não** o
+`query_plan.ts` nem o `query_engine/` — o que mexer ali chega aos 4 clientes ao publicar.
 
 A regra para execução: encontrou algo que parece errado e o plano não pediu? Vai para PENDENTE-DECISAO.md, não para o código.
 

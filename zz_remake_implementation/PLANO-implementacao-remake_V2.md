@@ -1,5 +1,17 @@
 # Plano de implementação do remake — V2
 
+> ⛔ **SUPERADO PELA V3 EM 2026-08-18.** O time decidiu fazer o remake **direto em produção**, o que
+> invalida a Etapa 0 inteira deste documento (Supabase novo, Lambda de dev, service account nova) e
+> a premissa que o organizava — *"ter onde quebrar coisas"*.
+>
+> **Leia `PLANO-implementacao-remake_V3.md`.** O remake em si (os 10 blocos, as Etapas 3–6) não
+> mudou; o que mudou foi a fronteira de isolamento, que deixou de ser o ambiente e passou a ser a
+> organização.
+>
+> Mantido, e não apagado, por dois motivos (D-041): ele descreve o caminho do ambiente paralelo
+> passo a passo, que continua sendo o plano B se o remake em produção se mostrar insustentável — e
+> a branch `newnew_plum` está parada no commit `1a0b67e` esperando exatamente isso.
+
 **Substitui a V1.** Base: V6 (decisões) + V7 (spec do `ad_hoc`) + `about_implementation1`.
 **O que mudou da V1:** o plano passa a separar **quem faz o quê** (a implementação será codada pelo
 Claude Code), define os **documentos que o Claude Code produz**, e corrige a §0.4.
