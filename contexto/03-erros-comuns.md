@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-18
 ---
 
 # Erros comuns — o que se acredita e é falso
@@ -21,6 +21,7 @@ atualizado_em: 2026-08-14
 | ❌ Crença errada | ✅ Verdade | Onde conferir |
 |---|---|---|
 | A Plataforma Plum **é** o produto vendido | É uma **demo** plug-and-play. O vendido é a implementação vertical | `02-plataforma-vs-implementacao.md` |
+| ⭐ Os 4 clientes usam **esta** plataforma, então mudar aqui os afeta | **Não usam.** A implementação deles é um deploy separado (Supabase, Lambda e service account próprios). Aqui só há devs e demo. ⚠️ Saber que "é uma demo" **não** imuniza contra este erro — ver o caso de 2026-08-18 | `02-plataforma-vs-implementacao.md` |
 | O Plum é um produto de dashboard / BI | É consulta e interpretação em linguagem natural. Dashboard é uma superfície, não a tese | `01-o-que-e-o-plum.md` |
 | O Plum é aquele agente de WhatsApp | Aquilo é o **legado single-tenant** da Poli Júnior, outro sistema. A plataforma foi construída depois, do zero | `01-o-que-e-o-plum.md` |
 | O Plum cria planilhas para o cliente | Nunca. O cliente cola a URL da **própria** planilha e compartilha com a service account como Leitor | `30-decisoes.md` D-018 |

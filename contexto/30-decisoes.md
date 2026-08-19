@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-18
 ---
 
 # Decisões
@@ -434,3 +434,18 @@ resposta binária.
 **Continua necessário, e é política:** coluna em `allowed_columns` e `vocabulario_exposto = true`
 (default `false`, ligado na revisão do onboarding).
 **Status:** proposta.
+
+### D-046 · 2026-08-18 · O remake fica na plataforma e **não** é portado para a implementação
+**Decisão:** o remake melhora 🏗️ a plataforma. Ele não é levado para o deploy separado que os 4
+clientes usam, e os clientes não são migrados para cá.
+**Por quê:** o valor dele é **converter cliente futuro** (a demo passa a mostrar um produto melhor) e
+**dar motivo de renovação** ao atual (capacidade nova que entra na conversa comercial). Nenhum dos
+dois exige que o código rode na implementação deles.
+**Rejeitado:** (a) portar o remake para cada implementação — custo por cliente, e a implementação é
+justamente onde mora o que é feito à mão; (b) migrar os clientes para a plataforma — projeto muito
+maior que o remake, e que jogaria fora a customização já entregue.
+⚠️ **Consequência que reordena o plano de implementação:** sem usuário real nesta plataforma, o
+remake **perde o sinal de qualidade** que viria do uso (`presuncao_corrigida`, taxa de `inviavel`).
+O conjunto de 25–30 perguntas de avaliação deixa de ser insumo e vira o **único critério de parada**.
+Ver `zz_remake_implementation/PLANO-implementacao-remake_V3.md` §0-ter.
+**Status:** vigente.

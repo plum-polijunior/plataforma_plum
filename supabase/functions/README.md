@@ -9,26 +9,49 @@ arquivo solto por função, colado manualmente no painel) foi aposentada em
 |---|---|---|
 | `ai-agents/` | `ai-agents` | Agentes 0/1/2/3/3.1 do pipeline de importação (`DatabasePipeline.tsx`) |
 | `ai-plum-chat/` | `ai-plum-chat` | Agente Z/A/C do chat + `execute_plan` (chama o executor real) |
+| `dashboard-agent/` | `dashboard-agent` | Cria card a partir de pergunta (`gerar_card`) + `executar_previa`. Dois agentes dentro: Z-dash (escopo) e Tarsila do Amaral (planejador). ⚠️ Faltava nesta tabela até 2026-08-18 — ficou em produção sem existir em commit nenhum até 2026-08-11 |
 | `dashboard-execute/` | `dashboard-execute` | RBAC de coluna + chama o executor real para os cards do dashboard |
 | `send-auth-email/` | `send-auth-email` | E-mails transacionais (aprovação de conta, convite, lead) via Resend |
-| `_shared/query_plan.ts` | — | Único interpretador de Query Plan do sistema. `ai-plum-chat` e `dashboard-execute` importam daqui — nunca duplicar esta lógica |
+| `_shared/query_plan.ts` | — | Único interpretador de Query Plan do sistema. ⭐ **Três** consumidores: `ai-plum-chat`, `dashboard-execute` e `dashboard-agent` — nunca duplicar esta lógica |
 
 ## Deploy
 
-**Automático, desde 2026-08-07**, via integração nativa GitHub↔Supabase (Project Settings →
-Integrations → GitHub, conectada ao branch `plataforma`, diretório `supabase`). Todo push que
-muda algo em `supabase/functions/**` publica sozinho — sem comando manual, sem passar pelo
-painel. A integração cobre só Edge Functions; migrations continuam manuais, de propósito (ver
-`CLAUDE.md` §1).
+⚠️ **Publique à mão. Sempre.** Esta seção afirmava, até 2026-08-18, que o deploy era *"automático
+desde 2026-08-07 — todo push que muda algo em `supabase/functions/**` publica sozinho"*. **Foi
+medido, e é falso.**
 
-Comando manual (só para debug local, ou publicar antes de dar push):
+Existe uma integração nativa GitHub↔Supabase (Project Settings → Integrations → GitHub, ligada ao
+branch `plataforma`, diretório `supabase`), e ela **publica** — mas com **cobertura desconhecida**.
+No push medido, ela republicou duas funções que aquele commit não tocava e **deixou de fora a
+única** que ele mudava. O relato completo está em `contexto/31-incidentes-e-licoes.md` **I-03**; não
+é repetido aqui para não criar um segundo dono do fato.
+
+As duas regras que sobreviveram àquela medição:
+
+1. Publique à mão a função que você mexeu (comando abaixo).
+2. **Confirme que subiu:** o `ezbr_sha256` tem de mudar. O `version` sobe sozinho em troca de
+   secret, sem código novo — **não serve de prova**.
+
+⚠️ Vale o inverso também: uma função que você **não** mexeu pode ter sido republicada pelo push de
+outra pessoa. Como `_shared/` é empacotado **por função** e não compartilhado em runtime, isso deixa
+cópias divergentes do interpretador de RBAC no ar sem ninguém ter feito deploy.
+
+Migrations continuam manuais, de propósito (`contexto/30-decisoes.md` D-005).
+
+Comando:
 
 ```bash
 npx supabase functions deploy ai-agents --project-ref rjwidarrsykufuifzunu
 npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
+npx supabase functions deploy dashboard-agent --project-ref rjwidarrsykufuifzunu
 npx supabase functions deploy dashboard-execute --project-ref rjwidarrsykufuifzunu
 npx supabase functions deploy send-auth-email --project-ref rjwidarrsykufuifzunu
 ```
+
+⭐ **Mexeu em `_shared/query_plan.ts`? Publique os TRÊS consumidores** — `ai-plum-chat`,
+`dashboard-execute` e `dashboard-agent`. Publicar um só deixa cópias divergentes do interpretador de
+RBAC no ar. O `dashboard-agent` faltava nesta lista até 2026-08-18, o que tornava esse erro o
+resultado natural de seguir o README.
 
 ## Segredos
 

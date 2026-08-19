@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-18
 ---
 
 # Plataforma × Implementação
@@ -136,6 +136,28 @@ multi-tenant com dado de 5 empresas é alvo tão legítimo quanto produção —
 
 ⭐ **A regra:** *a plataforma fornece os cofres; a implementação decide o que guardar em cada um.*
 Cofre sem chave é inútil; chave sem cofre é pior.
+
+---
+
+## ⭐ Elas rodam em infraestruturas diferentes — e ninguém tinha escrito isso
+
+**A implementação de cada cliente é um deploy TOTALMENTE separado:** Supabase próprio, Lambda
+próprio, service account do Google própria. Ela foi derivada desta plataforma e já está pronta e
+entregue.
+
+**Consequência que mais importa no dia a dia:** 🏗️ **esta plataforma não tem usuário cliente.** Quem
+a usa são os **devs**, para testar, e prospects, numa demonstração. Mudar, quebrar ou republicar
+qualquer coisa aqui **não alcança os 4 clientes**.
+
+⚠️ **Isto não afrouxa nada — muda o que está em risco.** O que se protege aqui não é o cliente no
+ar, é a **demonstração**: a plataforma é como o cliente experimenta o produto antes de comprar, e
+uma demo quebrada custa uma venda.
+
+⚠️ **É a armadilha mais fácil deste repositório, e ela pega quem já leu a frase 4 do
+`00-LEIA-PRIMEIRO`.** Saber que "a plataforma é uma demo" não basta: dá para saber disso e ainda
+assim planejar como se os clientes estivessem conectados aqui. Aconteceu em 2026-08-18, na primeira
+redação do `zz_remake_implementation/PLANO-implementacao-remake_V3.md` — metade do documento era
+proteção contra um dano impossível. Ver `03-erros-comuns.md`.
 
 ---
 

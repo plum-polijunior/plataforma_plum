@@ -2,28 +2,39 @@
 
 **Substitui a V2.** Base: V6 (decisões) + V7 (spec do `ad_hoc`), inalteradas — o remake em si não
 mudou.
-**O que mudou da V2, e é só isto:** o time decidiu fazer o remake **direto em produção**. Cai o
-ambiente paralelo; entra a flag por organização como fronteira de isolamento.
-**Ambiente:** produção. Supabase `rjwidarrsykufuifzunu`, Lambda `plum-query-engine`, branch
-`plataforma`. Os 4 clientes seguem usando enquanto o remake acontece.
+**O que mudou da V2:** o time decidiu fazer o remake **direto nesta plataforma**, sem ambiente
+paralelo. Cai a Etapa 0 da V2 inteira (Supabase novo, Lambda de dev, service account nova).
 **Convenções:** 🤖 Claude Code · 👤 Bernardo · `⚠️` armadilha · `⭐` central · `❓` decisão pendente
+
+> ⚠️ **Correção de 2026-08-18, e ela é a mais importante deste cabeçalho.** A primeira redação da V3
+> foi escrita sobre a premissa de que *"os 4 clientes seguem usando a plataforma enquanto o remake
+> acontece"*. **Falso.** Os clientes usam a **implementação** — um deploy **totalmente separado**
+> (Supabase próprio, Lambda próprio, service account própria), já pronta e entregue. Nada feito aqui
+> os alcança.
+>
+> É exatamente o erro que o `contexto/00-LEIA-PRIMEIRO.md` frase 4 chama de "o mais comum e mais
+> caro": confundir 🏗️ Plataforma com 🔧 Implementação. Metade da V3 original era proteção contra um
+> dano impossível. Esta redação corrige.
 
 ---
 
-## ⭐ A frase que organiza a V3
+## ⭐ O ambiente, agora dito direito
 
-**A V2 isolava por ambiente. A V3 isola por organização.**
+| | Quem usa | O que o remake faz com ela |
+|---|---|---|
+| 🏗️ **Plataforma** (este repositório) | os **devs**, e prospects numa demonstração | é o que o remake muda |
+| 🔧 **Implementação** (deploy separado) | os **4 clientes** | ⛔ intocada — e não é destino deste trabalho |
 
-A ferramenta não é nova — a própria V2 já a usava, na Etapa 2 (*"flag por organização decide, uma
-organização primeiro, rollback instantâneo"*). O que a V3 faz é **subir a flag para a Etapa 0** e
-torná-la a espinha: nenhum caminho novo nasce ligado para ninguém.
+**Para que serve o remake, então:** melhorar a plataforma para **clientes futuros**, e gerar
+**motivo de renovação** para os atuais. Ele não é portado para a implementação; o valor dele chega
+ao cliente pela conversa comercial, não por deploy.
 
-⚠️ **E a flag protege metade do sistema, não o sistema.** Ela vive na Edge Function, então cobre a
-camada de agentes. Ela **não** cobre `_shared/query_plan.ts` nem `query_engine/`, que são código
-compartilhado e chegam aos 4 clientes no minuto em que publicam.
+⭐ **A frase que organiza a V3:** *não há quem proteger — há o que não quebrar.*
 
-Essa assimetria é o fato central da V3. É ela que separa os blocos em duas classes (§1.1) e que faz
-o B02 trocar de papel (§1.2).
+O que não pode quebrar é a **demonstração**. A plataforma é "como o cliente experimenta"
+(`contexto/02`), então derrubá-la não tira ninguém do ar, mas pode custar uma venda se acontecer na
+semana de uma demo. É um risco menor que o da V2, e de outra natureza — e está escrito assim de
+propósito, em vez de inflado.
 
 ---
 
@@ -31,21 +42,19 @@ o B02 trocar de papel (§1.2).
 
 | Etapa | O quê | Esforço | Termina quando |
 |---|---|---|---|
-| **0** | ⭐ A rede de proteção: flag por organização, `plum_logs`, base de teste na Machado Lmtd | 2–3 dias | uma pergunta roda com a flag ligada, e a de um cliente roda igual com ela desligada |
-| **1** | ⭐ **O remake:** agentes, executor, gramática de query. Dashboard intocado | 5–7 semanas | 20 perguntas reais respondidas com presunções visíveis, e os cards batem número a número |
-| **2** | Ligar a flag para o primeiro cliente real, com medição | 1–2 semanas | uma organização cliente usando o `ad_hoc`, com taxa de correção medida |
+| **0** | A bancada: `plum_logs`, chave de desenvolvimento, base de teste suja | 2 dias | uma pergunta roda Z→A→C nos dois caminhos, e o log registra os dois |
+| **1** | ⭐ **O remake:** agentes, executor, gramática de query. Dashboard intocado | 5–7 semanas | as 25–30 perguntas de avaliação passam, e os cards batem número a número |
+| **2** | ⭐ **Provar sem usuário real** — o problema novo da V3 | 1–2 semanas | existe roteiro de demo sobre base suja e lista escrita do que virou argumento de renovação |
 | **3** | Multi-planilha (o `from` deixa de ser sobrescrito) | 2–3 semanas | conectar 3 abas e perguntar sem escolher base |
 | **4** | ⭐ **Morte do Tarsila:** card vira "salvar esta resposta" | 2 semanas | `dashboard-agent` deletado, um planejador só |
 | **5** | Dicionário camadas 3 e 4 + memória do Plum | 3–4 semanas | cenário e "se A muda, B" passam a existir |
 | **6** | Ideias futuras, por gatilho | — | §6 |
 
-**Só as Etapas 0 e 1 são detalhadas.** O resto é esboço de propósito.
+**Só as Etapas 0, 1 e 2 são detalhadas.** O resto é esboço de propósito.
 
 ---
 
 # §0 · COMO ESTE PLANO É EXECUTADO
-
-*(Inalterado em relação à V2, exceto onde marcado.)*
 
 ## 0.1. A divisão
 
@@ -53,19 +62,20 @@ o B02 trocar de papel (§1.2).
 
 | 🤖 Claude Code | 👤 Bernardo |
 |---|---|
-| Todo código em `src/`, `supabase/functions/`, `query_engine/` | Painel do Supabase: **colar migrations**, criar secrets, ligar/desligar a flag |
+| Todo código em `src/`, `supabase/functions/`, `query_engine/` | Painel do Supabase: **colar migrations**, criar secrets |
 | Escrever o SQL das migrations novas, com bloco de verificação | `npx supabase functions deploy` (ver ⚠️ abaixo) |
-| Testes (`vitest`, `pytest`) e rodá-los | ⭐ A **base de teste** e o **conjunto de perguntas** (§0.4, §6) |
+| Testes (`vitest`, `pytest`) e rodá-los | ⭐ **O conjunto de 25–30 perguntas** — ver §2 e §6, virou o item crítico |
 | Os 4 prompts, em arquivos próprios | Ler o `PENDENTE-DECISAO.md` e responder |
-| Atualizar `contexto/` via skill `contexto-plum` | ⭐ **Comparar os cards reais antes de cada publicação compartilhada** (novo na V3) |
+| Atualizar `contexto/` via skill `contexto-plum` | A base de teste (§0.3) |
 | Os 4 documentos da §0.2 | |
 
-⚠️ **Migrations continuam manuais** (D-005). Na V2 isso era conveniência; na V3 é a **única rede**,
-porque não existe mais ensaio em ambiente limpo. Ler o bloco de verificação linha a linha deixou de
-ser zelo e virou obrigação.
+⚠️ **Migrations continuam manuais** (D-005). Sem ambiente de ensaio, o bloco de verificação
+autoexecutável é a única rede — ler linha a linha deixou de ser zelo. Em compensação, o dado sobre o
+qual elas rodam é de teste, então o custo de errar é refazer, não avisar cliente.
 
-⚠️ **Deploy de Edge Function é 👤, e agora com mais razão.** O I-03 registra que o deploy deste
-projeto só é confiável à mão, conferido por `ezbr_sha256`. Em produção não há segunda chance.
+⚠️ **Deploy de Edge Function é 👤.** O I-03 registra que o deploy deste projeto só é confiável à mão,
+conferido por `ezbr_sha256` — e isso vale independentemente de quem é afetado, porque o problema é a
+confiabilidade do deploy, não o público dele.
 
 ## 0.2. Os documentos que o 🤖 produz
 
@@ -89,7 +99,7 @@ O que mudou, arquivo a arquivo, **e por quê**. Inclui o que foi tentado e desca
 alimenta `30-decisoes.md` depois. Prosa curta, não changelog gerado.
 
 ### `MANUAL.md` — por bloco
-⭐ **Separado em ANTES e DEPOIS.** Na V3 ele ganha uma terceira seção obrigatória:
+⭐ **Separado em ANTES e DEPOIS**, porque a ordem importa:
 
 ```markdown
 ## Antes de rodar este bloco
@@ -100,16 +110,15 @@ alimenta `30-decisoes.md` depois. Prosa curta, não changelog gerado.
 3. Publicar `ai-plum-chat` e conferir que o `ezbr_sha256` mudou
 4. Rodar uma pergunta e verificar 4 linhas em `plum_logs`
 
-## ⭐ Se der errado (novo na V3)
+## Se der errado
 5. O comando exato do rollback, escrito ANTES de publicar
 ```
 
-⚠️ Sem o "antes", o 🤖 entrega código que não roda e ninguém sabe por quê. **Sem o "se der errado",
-o rollback é improvisado com cliente na linha** — que é o pior momento para pensar nele.
+⚠️ Sem o "antes", o 🤖 entrega código que não roda e ninguém sabe por quê.
 
 ### `CONTEXTO-alteracoes.md` — ponteiros, não resumo
-⚠️ Não pode ser um resumo do que mudou no `contexto/` — criaria um segundo dono para o mesmo fato,
-o que a regra 1 de `contexto/CLAUDE.md` proíbe. Uma linha por mudança:
+⚠️ Não pode ser um resumo do que mudou no `contexto/` — criaria um segundo dono para o mesmo fato, o
+que a regra 1 de `contexto/CLAUDE.md` proíbe. Uma linha por mudança:
 
 ```
 B03 · criou D-051 (metadados expõe distintos) · atualizou 12-visao §3.1 · 03-erros: linha do `from`
@@ -135,60 +144,64 @@ ou `RESOLVIDO: <decisão>`. ⭐ Entrada resolvida vira candidata a `30-decisoes.
 1. 🤖 implementa, escreve `DIARIO.md` e `MANUAL.md` (com o rollback), roda `npm test` e
    `npm run test:py`
 2. 👤 executa o "antes", se houver
-3. ⭐ **Se o bloco for compartilhado:** 🤖 compara os cards afetados número a número (§1.2)
+3. 🤖 se o bloco tocar `query_plan.ts` ou o executor: rodar os cards de teste e comparar número a
+   número (§1.2)
 4. 👤 publica e executa o "depois"
 5. 🤖 roda a skill `contexto-plum` e acrescenta a linha em `CONTEXTO-alteracoes.md`
 
 ---
 
-# §0-bis · ⚠️ O QUE MUDA POR TRABALHAR EM PRODUÇÃO
+# §0-bis · ⚠️ O QUE TRABALHAR SEM AMBIENTE PARALELO REALMENTE CUSTA
 
-A seção que a V2 não precisava ter. O custo da decisão, escrito — em vez de descoberto no meio.
+A V2 tinha uma tabela de risco baseada em "isso chega aos 4 clientes". Com a implementação separada,
+**nenhuma linha daquela tabela vale como estava.** Esta é a versão honesta — os fatos técnicos são os
+mesmos, a consequência é outra.
 
-| Risco | Estado |
+| Fato técnico | Consequência real |
 |---|---|
-| ⭐ **O executor vai direto para o ar.** `query-engine.yml` usa `update-function-code` **sem `--publish` e sem alias**: todo push em `plataforma` tocando `query_engine/**` passa a servir os 4 clientes no mesmo minuto. Não há estágio intermediário | **ACEITO** (decisão do time). Trava = `pytest` + `vitest`, que o CI exige antes do `publicar`. ⭐ **Consequência que vira regra:** mudança no executor é **só aditiva**, e o teste que a cobre entra **no mesmo commit** — sem isso a trava não existe |
-| **Sheets: 60 req/min é por service account**, e agora ela é a mesma dos clientes | **MITIGADO, não eliminado.** Cache de 15 min, base de teste pequena, carga pesada fora do horário comercial. Se um cliente reclamar de lentidão durante a Etapa 1, esta é a primeira hipótese |
-| **Migration roda sobre dado real, sem ensaio** — o Supabase novo foi abandonado | O bloco de verificação autoexecutável deixa de ser boa prática e passa a ser a **única** rede. Não destrutiva, sempre (§4.9). ⭐ Nenhuma migration da Etapa 1 apaga ou renomeia coluna |
-| **A integração GitHub↔Supabase publica Edge Function com cobertura desconhecida** (`CLAUDE.md` §1, medido). Estamos *na* `plataforma`, então ela dispara | **👤 AÇÃO: desconectar** — Supabase → projeto → Integrations → GitHub. Deploy volta a ser deliberado, como o I-03 pede. Enquanto não desconectar, um push pode publicar função sem ninguém mandar |
-| **B02, B09 e B10 chegam ao dashboard sem passar pela flag** | Já era o §1.2 da V2. A diferença é que o dashboard agora é o **dos clientes** — ver §1.2 |
-| ⚠️ **O botão "Run workflow"** (`workflow_dispatch`) publica no Lambda ignorando qualquer condição | Não usar durante a Etapa 1, exceto para republicar uma versão anterior num rollback |
+| **O executor vai direto para o ar.** `query-engine.yml` usa `update-function-code` **sem `--publish` e sem alias**: todo push em `plataforma` tocando `query_engine/**` substitui o executor no mesmo minuto | **Baixa.** Quem consome é a demo e os devs. ⭐ Mas a regra que vem daí continua valendo por outro motivo: mudança no executor é **só aditiva**, e o teste que a cobre entra **no mesmo commit** — porque `pytest`/`vitest` são o único sinal de que algo quebrou, já que não há usuário para reclamar |
+| **Não existe ensaio de migration** | **Baixa.** O dado é de teste; errar custa refazer. O bloco de verificação continua obrigatório, mas como higiene, não como rede de contenção |
+| **Sheets: 60 req/min por service account** | **Nula.** A implementação usa service account própria. Teste pesado aqui não alcança cliente nenhum |
+| **A integração GitHub↔Supabase publica Edge Function sozinha**, com cobertura desconhecida (I-03, medido). Ela observa o branch `plataforma` + diretório `supabase` — e é em `plataforma` que trabalhamos | ⭐ **Média, e é a única que sobra com dente.** Ver §0.4: o remake passa 7 semanas commitando estado intermediário de `ai-plum-chat`, e um push com import quebrado pode ser publicado sem ninguém pedir. ⚠️ **A chave não protege disso** — ela gateia um caminho *dentro* da função; função que não sobe devolve 500 para `plan_query` também, e o chat morre inteiro |
+| **B02, B09 e B10 alcançam o dashboard** | **Baixa.** São cards de teste. O portão do §1.2 encolhe de "levantar cards de produção" para "rodar os cards que existem" |
+| ⚠️ **A plataforma é a demo de vendas** | ⭐ **É o risco que substitui todos os acima.** Quebrá-la não tira ninguém do ar, mas custa uma venda se coincidir com uma demonstração. Mitigação barata: antes de publicar algo compartilhado, saber se há demo marcada na semana |
 
-⭐ **A regra que resume a seção:** *antes de publicar qualquer coisa, saber responder duas perguntas
-— o que muda para o cliente agora, e qual é o comando que desfaz.* Se alguma das duas não tem
-resposta escrita, o bloco não está pronto.
+⭐ **A regra que resume a seção:** *antes de publicar, saber o que muda e qual é o comando que
+desfaz.* Continua valendo — só que agora por disciplina, não por medo.
 
 ---
 
-# ETAPA 0 — a rede de proteção
+# §0-ter · ⭐ O PROBLEMA QUE A V3 HERDA E NÃO PODE RESOLVER SOZINHA
 
-**Objetivo:** poder errar sem que os 4 clientes vejam. Nada de remake ainda.
-**Esforço:** 2–3 dias.
+**O remake perdeu o sinal de qualidade que a V2 contava ter.**
 
-## 0.1. ⭐ A flag por organização
+A V2 e a primeira V3 planejavam medir `presuncao_corrigida`, custo por pergunta e taxa de `inviavel`
+**no uso real**, e usar isso como critério de que o `ad_hoc` ficou bom. Sem usuário real nesta
+plataforma, esse sinal **não existe** — e não vai existir por deploy nenhum.
 
-Migration não destrutiva:
+Consequência direta, e ela reordena as prioridades do plano:
 
-```sql
-alter table organizations
-  add column if not exists remake_habilitado boolean not null default false;
-```
+⭐ **O conjunto de 25–30 perguntas de avaliação deixa de ser insumo e vira o único critério de
+parada que o remake tem.** Ele estava em "§6 · não atribuído — anda assim que alguém pegar". Sobe
+para **bloqueante**: sem ele, ajustar o prompt do A3 por sete semanas é ajustar texto até parecer
+bom, e ninguém sabe dizer quando parar.
 
-`default false` é o ponto inteiro: o caminho novo nasce desligado para **todo mundo**, inclusive
-para quem for criado depois.
+Pelo mesmo motivo, a **cópia anonimizada da base de um cliente** (§6) sobe de valor: sem usuário
+real, dado realista é o único substituto de realidade que resta.
 
-⚠️ **Resolvida no servidor, a partir do `organization_id` do JWT — nunca vinda do cliente.** É a
-regra 1 do `CLAUDE.md` §4, e vale mesmo aqui, onde a flag não decide permissão: um cliente que
-consiga ligar o caminho novo passa a usar código não validado sem ninguém saber.
+⚠️ **Não confundir com "o log virou inútil".** O `plum_logs` continua na Etapa 0 e continua valendo —
+ele mede custo, latência e o formato das falhas dos **devs** usando a plataforma. O que ele não mede
+é satisfação, porque não há quem se satisfaça.
 
-**Rollback:** `update organizations set remake_habilitado = false where id = …`. Um comando, efeito
-imediato, sem deploy.
+---
 
-## 0.2. `plum_logs` — primeiro, e por um motivo diferente
+# ETAPA 0 — a bancada
 
-Era o B01 da V2. Sobe para a Etapa 0 porque em produção ele muda de função: deixa de ser
-instrumentação e vira **o jeito de saber se o caminho novo piorou alguma coisa** antes de o cliente
-contar.
+**Objetivo:** ter como medir e como voltar atrás. **Esforço:** 2 dias.
+
+## 0.1. `plum_logs`
+
+Era o B01 da V2. Continua primeiro: é como se sabe o custo por pergunta e onde o caminho novo falha.
 
 ```sql
 create table plum_logs (
@@ -211,22 +224,32 @@ create table plum_logs (
 ⚠️ **A pergunta crua NÃO entra** (D-022) — registra-se a forma, nunca o texto.
 RLS: a organização lê o próprio log; `service_role` lê tudo.
 
-⭐ **Registrar a linha de base antes de mexer em qualquer outra coisa.** Uma semana de log do
-caminho atual é o que torna possível dizer, depois, se o `ad_hoc` ficou melhor ou pior. Sem isso a
-comparação vira impressão.
+⭐ **Registrar a linha de base do caminho atual antes de mexer em qualquer outra coisa.** Sem ela,
+"o `ad_hoc` custa X" não tem com o que ser comparado.
 
-## 0.3. A base de teste — na Machado Lmtd
+## 0.2. A chave de desenvolvimento
 
-A organização cobaia é a **Machado Lmtd**: é nossa, já tem domínio SSO e base conectada, e não é
-cliente pagante. A multitenancy que já existe é a fronteira de dados.
+```sql
+alter table organizations
+  add column if not exists remake_habilitado boolean not null default false;
+```
 
-⚠️ **Compartilhar a planilha de teste com a service account de PRODUÇÃO**
-(`plum-polijunior@plataforma-plum.iam.gserviceaccount.com`). A service account nova
-(`newplum@new-new-plum…`) foi abandonada junto com o Supabase novo — o Lambda de produção lê o
-segredo de `/plum/prod/google-sa-json`, e trocar isso afetaria os 4 clientes.
+⚠️ **Rebaixada em relação à primeira V3.** Lá ela era a espinha do plano — a fronteira que protegia
+os clientes. Sem clientes aqui, ela deixa de ser proteção e vira o que permite construir o `ad_hoc`
+pela metade **sem quebrar o caminho de demonstração**. Continua valendo porque é barata (uma coluna)
+e porque alternar sem republicar é útil numa demo.
 
-Os seis defeitos a plantar seguem os da V2 §0.4 — o que precisa estar sujo é **o valor**, não o nome
-da coluna, porque o pipeline já normaliza cabeçalho (`DatabasePipeline.tsx:70`):
+Resolvida no servidor, a partir do `organization_id` do JWT — não porque um cliente possa abusar
+dela, mas porque decisão de servidor lida do cliente é o padrão que a §4 regra 1 proíbe, e abrir
+exceção "porque aqui não importa" é como a regra morre.
+
+## 0.3. A base de teste
+
+Vai para uma organização de teste desta plataforma (Machado Lmtd, Babygoat ou uma nova — tanto faz,
+todas são nossas). Compartilhada com a service account desta plataforma.
+
+O que precisa estar sujo é **o valor**, não o nome da coluna, porque o pipeline já normaliza
+cabeçalho (`DatabasePipeline.tsx:70`):
 
 | Defeito | Por que importa |
 |---|---|
@@ -239,22 +262,39 @@ da coluna, porque o pipeline já normaliza cabeçalho (`DatabasePipeline.tsx:70`
 
 ⚠️ **Bug real do produto atual, e vale plantar:** `DatabasePipeline.tsx` monta
 `normMap[h] = normalizeString(h)` num objeto simples e depois `obj[normMap[h]] = row[i]`. **Dois
-cabeçalhos que normalizam para o mesmo nome se sobrescrevem em silêncio** — uma coluna some sem
-erro. Abrir como pendência independente do remake.
+cabeçalhos que normalizam para o mesmo nome se sobrescrevem em silêncio** — uma coluna some sem erro.
+Abrir como pendência independente do remake.
 
-## 0.4. 👤 Desconectar a integração GitHub↔Supabase
+## 0.4. 👤 O que fazer com a integração GitHub↔Supabase
 
-Ver §0-bis. É a única ação de painel obrigatória da Etapa 0.
+⚠️ **Não é obrigatório, e a primeira redação da V3 dizia que era.** É uma escolha entre três, e vale
+entender o mecanismo antes de escolher.
+
+**O que pode dar errado:** a integração observa `plataforma` + `supabase/`, e o remake passa sete
+semanas commitando estados intermediários de `ai-plum-chat` — um `adhoc/` pela metade, um import
+quebrado, um refactor do `index.ts` no meio. A integração publica **sem ninguém pedir**.
+
+⚠️ **E a chave `remake_habilitado` não cobre isso.** Ela gateia um caminho de código *dentro* da
+função. Uma função que quebra no import não chega a olhar a chave: devolve 500 para **todas** as
+ações, `plan_query` inclusive. O chat morre inteiro — e chat morto é demo morta, que é a única coisa
+que esta V3 pede para não quebrar (§0 do topo).
+
+O agravante é a cobertura desconhecida do I-03: não há aviso, não se sabe quais funções se moveram,
+e o campo `version` não serve de prova. Você descobre quando alguém abre o chat.
+
+| Opção | Custo | O que resolve |
+|---|---|---|
+| ⭐ **Desconectar** (recomendada) | um clique | elimina a classe inteira. O publicado passa a ser sempre ato deliberado — que é o que o I-03 já manda fazer, e que a integração torna inaplicável |
+| **Manter e conferir `ezbr_sha256`** a cada push que toque `supabase/functions/**` | recorrente, por 7 semanas | detecta **depois**, não previne. Se escolher esta, a conferência entra no fecho de bloco (§0.3) |
+| **Não commitar estado intermediário** de Edge Function | disciplina | frágil ao longo de sete semanas, e falha justo quando alguém está com pressa |
+
+O deploy volta a ser manual de qualquer forma (§0.1): a integração nunca foi confiável o bastante
+para substituir o `functions deploy` conferido.
 
 ## 0.5. Critério de pronto
 
-⭐ **Os dois lados, não um:**
-
-1. Uma pergunta roda Z→A→C na **Machado Lmtd** com `remake_habilitado = true`.
-2. Uma pergunta de um **cliente real** roda Z→A→C igual, com a flag desligada, e o `plum_logs`
-   mostra que ela passou pelo caminho antigo.
-
-O item 2 é o que prova que a flag isola. Sem ele, "funciona" só quer dizer "não quebrou ainda".
+Uma pergunta roda Z→A→C com a chave ligada e com a chave desligada, e o `plum_logs` registra as
+duas — mostrando por qual caminho cada uma passou.
 
 ---
 
@@ -297,34 +337,28 @@ query_engine/
 ⚠️ **`prompts/` em arquivo separado, nunca string dentro do `index.ts`.** O prompt do A3 vai ser
 reescrito dezenas de vezes; diff de prompt enterrado num arquivo de 500 linhas é ilegível.
 
-## 1.1. ⭐ Os blocos, e quem cada um alcança
+## 1.1. Os blocos
 
-A coluna nova é a que importa na V3.
-
-| # | Bloco | Depende | Sem | Alcança quem | Rollback |
+| # | Bloco | Depende | Sem | Onde aparece | Rollback |
 |---|---|---|---|---|---|
-| 1 | `plum_logs` + `_shared/log.ts` | — | 0,5 | **aditivo** — tabela nova, ninguém lê | dropar nada; parar de escrever |
-| 2 | ⚠️ **redutora × seletora** | 1 | 0,5 | ⭐ **TODOS** — aperta comportamento | republicar os 3 consumidores |
-| 3 | `metadados` (Python + tipo de pedido) | — | 0,5 | **aditivo** — tipo de pedido novo | republicar Lambda |
-| 4 | `vocabulario` + resolvedor de entidade | 3 | 1 | atrás da flag | desligar a flag |
-| 5 | `_shared/llm.ts` + adaptadores | — | 0,5 | atrás da flag | desligar a flag |
-| 6 | A1 + A2 + cache de A2 | 3, 5 | 1 | atrás da flag | desligar a flag |
-| 7 | A3 + A4 + presunções | 4, 6 | 1,5 | atrás da flag | desligar a flag |
-| 8 | Negação parcial por pedido | 2, 7 | 0,5 | atrás da flag | desligar a flag |
-| 9 | `agg` ampliado (`std`, `median`, `var`, `quantile`) | 2 | 0,5 | **aditivo** — nenhum card usa | republicar Lambda |
-| 10 | `registro` + `amostra` + orçamento | 2, 8 | 1 | atrás da flag (caminho novo) | desligar a flag |
+| 1 | `plum_logs` + `_shared/log.ts` | — | 0,5 | aditivo — tabela nova | parar de escrever |
+| 2 | ⚠️ **redutora × seletora** | 1 | 0,5 | ⭐ caminho antigo **e** novo | republicar os 3 consumidores |
+| 3 | `metadados` (Python + tipo de pedido) | — | 0,5 | aditivo — tipo de pedido novo | republicar Lambda |
+| 4 | `vocabulario` + resolvedor de entidade | 3 | 1 | atrás da chave | desligar a chave |
+| 5 | `_shared/llm.ts` + adaptadores | — | 0,5 | atrás da chave | desligar a chave |
+| 6 | A1 + A2 + cache de A2 | 3, 5 | 1 | atrás da chave | desligar a chave |
+| 7 | A3 + A4 + presunções | 4, 6 | 1,5 | atrás da chave | desligar a chave |
+| 8 | Negação parcial por pedido | 2, 7 | 0,5 | atrás da chave | desligar a chave |
+| 9 | `agg` ampliado (`std`, `median`, `var`, `quantile`) | 2 | 0,5 | aditivo — nenhum card usa | republicar Lambda |
+| 10 | `registro` + `amostra` + orçamento | 2, 8 | 1 | atrás da chave | desligar a chave |
 
 **~7 semanas.** Blocos 1, 3 e 5 paralelizáveis.
 
-⭐ **Seis dos dez blocos morrem com um `UPDATE`.** Três são aditivos. Sobra **um** que muda o que o
-cliente já vê — e é o próximo parágrafo.
+## 1.2. O B02 e o caminho antigo
 
-## 1.2. ⚠️ O B02 troca de papel
-
-Na V2, o B02 era *"o único bloco que vale portar para produção antes do resto"* — porque conserta um
-furo real: `RawRowsBlocked` verifica que **existe** agregação, não que ela **agrega**. `min`/`max`
-sobre coluna de **texto** devolvem valor literal — 500 nomes de clientes, um por grupo, sem consumir
-nada.
+O B02 conserta um furo real: `RawRowsBlocked` verifica que **existe** agregação, não que ela
+**agrega**. `min`/`max` sobre coluna de **texto** devolvem valor literal — 500 nomes de clientes, um
+por grupo, sem consumir nada.
 
 ```
 Redutora  sum avg count std median var quantile   → livre
@@ -333,34 +367,30 @@ Seletora  min max first last nunique
             └ coluna de TEXTO → consome orçamento + respeita sensibilidade
 ```
 
-Na V3 ele vira **o bloco de maior cuidado**, e a razão é a mesma que o tornava atraente: ele é o
-único que **aperta** comportamento em vez de só somar. Um card publicado que use `min`/`max` sobre
-coluna de texto **muda de resultado** no minuto da publicação — e é um card de cliente.
+⚠️ **Não é whitelist** (V6 decisão 4) — é classificação por comportamento, e o `column_roles` já
+distingue `text` de `number`.
 
-**Portão obrigatório antes de publicar o B02:**
+É o único bloco que **aperta** comportamento em vez de só somar, então é o único que pode mudar o
+resultado de um card que já existe. Com os cards sendo de teste, o portão é barato — mas continua
+existindo, porque um card que muda sem ninguém notar é um card que mente na próxima demo:
 
 1. 🤖 `npm test` + `npm run test:py`
-2. 🤖 **levantar todos os cards de produção que usam `min`/`max`/`first`/`last`/`nunique` sobre
-   coluna de texto** — é uma consulta em `dashboard_cards.query_plan`, não uma inspeção manual
-3. 🤖 rodar cada um antes e depois, comparando **número a número**
-4. 👤 se algum mudar: decidir caso a caso **antes** de publicar. Mudança correta ainda é mudança, e
-   o cliente merece saber
-5. 👤 publicar **os três** consumidores de `query_plan.ts`, conferindo `ezbr_sha256` — `version`
-   sobe em mudança de secret e **não serve de prova**
+2. 🤖 rodar os cards de teste antes e depois, comparando número a número
+3. 👤 publicar **os três** consumidores de `query_plan.ts`, conferindo `ezbr_sha256` — `version` sobe
+   em mudança de secret e **não serve de prova**
 
-⚠️ **Resolver a exceção D-028 antes do B02.** `ai-plum-chat` está em produção com cópia **antiga**
-de `query_plan.ts`, de propósito (a Fase 5b não a publicou). Publicar o B02 nos três de uma vez
-fecha essa divergência e é a hora certa — mas registre o `ezbr_sha256` dos três **antes**, como
-marco zero.
+⚠️ **Resolver a exceção D-028 aqui.** `ai-plum-chat` está com cópia **antiga** de `query_plan.ts`, de
+propósito (a Fase 5b não a publicou). Publicar o B02 nos três fecha a divergência — registre o
+`ezbr_sha256` dos três **antes**, como marco zero.
 
 ## 1.3. Os demais blocos, em uma linha cada
 
 **B03 `metadados`** — por coluna: `tipo`, `distintos`, `nulos_pct`, `min`, `max`. Zero linhas
-expostas. ⭐ `n_linhas ÷ distintos` responde o grão sem olhar dado nenhum; amostra aleatória pode,
-por azar, não repetir data nenhuma, a razão nunca erra.
+expostas. ⭐ `n_linhas ÷ distintos` responde o grão sem olhar dado nenhum; amostra aleatória pode, por
+azar, não repetir data nenhuma, a razão nunca erra.
 
-**B04 `vocabulario` + entidade** — ⭐ zero mudança no executor: é `group_by [col] + count + order
-desc + limit 200`, um Query Plan comum. O casamento difuso é **código** (normalização + distância de
+**B04 `vocabulario` + entidade** — ⭐ zero mudança no executor: é `group_by [col] + count + order desc
++ limit 200`, um Query Plan comum. O casamento difuso é **código** (normalização + distância de
 edição), não LLM. Dois candidatos plausíveis → **pergunta**, não escolhe. ⚠️ Travas: coluna em
 `allowed_columns`, teto de cardinalidade (>200 = identificador, recusa), flag `vocabulario_exposto`
 default `false`.
@@ -370,10 +400,10 @@ modelo em tabela de configuração: `porteiro`/`reconhecedor` → Flash; `planej
 Claude. ⚠️ **Não abstraia demais** — prompt, saída estruturada, temperatura, contagem de token.
 Unificar cache de prompt, tool use e streaming fica mais complexo que dois clientes separados.
 
-**B06–B07 os agentes** — prompts na V7 §5, **ponto de partida, não entrega**. `amostra` aleatória
-com **semente determinística**: `df.sample(5, random_state=hash((dataset_id, len(df))))`. Mesma base
-→ mesma amostra → mesmo plano. Aleatório puro quebraria reprodutibilidade, que é metade da razão de
-o arquiteto existir.
+**B06–B07 os agentes** — prompts na V7 §5, **ponto de partida, não entrega**. `amostra` aleatória com
+**semente determinística**: `df.sample(5, random_state=hash((dataset_id, len(df))))`. Mesma base →
+mesma amostra → mesmo plano. Aleatório puro quebraria reprodutibilidade, que é metade da razão de o
+arquiteto existir.
 
 **B09 `agg` ampliado** — aditivo. ⚠️ `quantile` precisa do parâmetro `p` na gramática **e** no
 executor; sem ele o enum aceita um agg que o Python não sabe executar.
@@ -387,30 +417,38 @@ violar teto nenhum.
 
 | # | Verificação | Quem |
 |---|---|---|
-| 1 | 20 perguntas reais respondidas, cada uma com coluna→conceito, nº de linhas e presunções | 👤 |
+| 1 | ⭐ As **25–30 perguntas de avaliação** passam, cada uma com coluna→conceito, nº de linhas e presunções | 👤 + 🤖 |
 | 2 | Pergunta com nome torto **desambigua** em vez de devolver zero | 🤖 teste |
 | 3 | Cargo sem `margem` recebe resposta parcial honesta | 🤖 teste |
 | 4 | Orçamento de 200 linhas barra na 201ª, com log | 🤖 teste |
 | 5 | `min` sobre coluna de texto consome orçamento | 🤖 teste |
-| 6 | ⭐ Cards **de produção** batem número a número | 👤 |
-| 7 | `plum_logs` permite calcular custo por pergunta e taxa de correção | 🤖 |
-| 8 | ⭐ **Nenhum cliente com a flag desligada teve comportamento alterado** — conferido no log, não na intuição | 👤 (novo na V3) |
+| 6 | Cards de teste batem número a número | 🤖 |
+| 7 | `plum_logs` permite calcular custo por pergunta | 🤖 |
 
-⚠️ O item 7 precisa de um gesto no front ("não é isso") para `presuncao_corrigida` existir. É 🤖, mas
-ninguém tinha listado — sem ele a métrica que valida a Etapa 2 não é capturável.
+⚠️ O item 1 é o único que não é automatizável e o único sem o qual os outros não significam nada —
+ver §0-ter.
 
 ---
 
-# ETAPA 2 — ligar a flag para o primeiro cliente
+# ETAPA 2 — ⭐ provar sem usuário real
 
-**1–2 semanas.** Deixa de ser "estreia em produção" — já estamos nela desde o primeiro dia. Vira o
-gesto de **ligar `remake_habilitado` para uma organização cliente**.
+**1–2 semanas.** A etapa que a V2 chamava de "estreia em produção" e a primeira V3 chamava de "ligar
+a flag para o primeiro cliente". As duas supunham usuário real. **Não há.**
 
-`plan_query` e `ad_hoc` convivem no `ai-plum-chat`; a flag decide. Uma organização por vez, rollback
-instantâneo. Mede: custo/pergunta, latência, `presuncao_corrigida`, `inviavel` — todos contra a
-linha de base registrada na Etapa 0 §0.2.
+O que substitui, e é o que de fato converte o remake em valor:
 
-❓ O limiar de correção é decisão de produto e vira o critério que libera a Etapa 3.
+1. **A suíte de avaliação roda como suíte.** As 25–30 perguntas deixam de ser um documento e viram
+   execução repetível, com o resultado de cada uma registrado. É o que permite dizer "mexi no prompt
+   e melhorou" em vez de "achei que melhorou".
+2. **Um roteiro de demonstração sobre a base suja.** ⭐ O valor do remake é mais fácil de **mostrar**
+   que de descrever: a mesma pergunta que hoje devolve zero por causa de um nome escrito torto passa
+   a desambiguar; a resposta passa a dizer de qual coluna saiu e o que presumiu. Isso é a demo.
+3. **A lista escrita do que virou argumento de renovação.** Uma linha por capacidade nova, em
+   linguagem de cliente, não de arquitetura. É o entregável que a área comercial usa — e sem ele o
+   remake fica sendo uma melhoria que só os devs enxergam.
+
+❓ **Decisão em aberto:** quem escreve o item 3, e para quando. É comercial, não técnico, e não
+depende do fim da Etapa 1 — dá para começar assim que os blocos 6–7 estiverem de pé.
 
 ---
 
@@ -431,9 +469,10 @@ vira card vazio em silêncio; (c) cruzamento acontece **depois** da agregação 
 Criar card deixa de ser "descreva o que você quer" e vira **"salvar esta resposta como card"** — o
 card nasce de uma resposta que o usuário **já conferiu**. `dashboard-agent` é deletado.
 
-**Ganhos:** um planejador em vez de dois (mata a D-021) · some o Z-dash e sua cota ·
-`query_plan.ts` passa a ter dois consumidores.
-⚠️ **Só depois da Etapa 2 validada** — se o `ad_hoc` não se provar, o produto fica sem criar cards.
+**Ganhos:** um planejador em vez de dois (mata a D-021) · some o Z-dash e sua cota · `query_plan.ts`
+passa a ter dois consumidores.
+⚠️ **Só depois da Etapa 2** — se o `ad_hoc` não se provar na avaliação, o produto fica sem criar
+cards.
 
 ## Etapa 5 — dicionário camadas 3 e 4 + memória · 3–4 semanas
 
@@ -461,52 +500,52 @@ A **memória do Plum** é a camada 4 em self-service.
 
 # §6 · O QUE ESTÁ BLOQUEADO × O QUE SÓ NÃO FOI ATRIBUÍDO
 
-## Bloqueado — não anda por decisão interna
-
-| # | O quê | Depende de |
-|---|---|---|
-| 1 | ⭐ **Cópia anonimizada da base de um cliente** (§0.3) | conversa comercial com um dos 4 |
-
-⭐ **Na V3 este item ficou mais fácil, não mais difícil.** O argumento comercial melhorou: não é mais
-"queremos copiar sua base para um ambiente nosso", é "queremos testar melhorias na sua própria
-organização, atrás de uma chave que só nós ligamos".
-
-## Não atribuído — anda assim que alguém pegar
+## ⭐ Bloqueante — a Etapa 1 não fecha sem isto
 
 | # | O quê | Natureza |
 |---|---|---|
-| 2 | ⭐ **O conjunto de 25–30 perguntas de avaliação** | ver abaixo |
-| 3 | Gesto de "não é isso" no front | 🤖, tarefa normal |
-| 4 | `p` do `quantile` na gramática + executor | 🤖, tarefa normal |
-
-### ⭐ Sobre o item 2 — por que ele não é "escrever o prompt do A3"
-
-Prompt não tem "pronto"; ele é **sintonizado contra um conjunto de perguntas**. Sem esse conjunto,
-mexer no prompt não tem critério de parada e vira alguém ajustando texto até parecer bom.
+| 1 | ⭐⭐ **O conjunto de 25–30 perguntas de avaliação** | 👤 — **subiu de "não atribuído" para bloqueante** na V3 revisada. Ver §0-ter: sem usuário real, é o único critério de parada que existe |
 
 **O entregável é:** 25–30 perguntas reais e, para cada uma, (a) qual seria a resposta certa,
 (b) quais presunções são aceitáveis, (c) o que caracteriza falha — recusou quando devia responder?
 respondeu quando devia perguntar?
 
-Antes do log existir, vêm das 4 vendas. Depois, do log — que na V3 existe desde a Etapa 0, então o
-corpus começa a crescer semanas antes.
-
 ⚠️ **Não é tarefa de uma semana, é papel pelas 7** — o prompt será reescrito a cada bloco novo
-(quando o `vocabulario` entrar, quando o orçamento entrar, quando o `agg` ampliar). É 👤, e é o único
-item sem o qual a Etapa 1 não tem critério de parada.
+(quando o `vocabulario` entrar, quando o orçamento entrar, quando o `agg` ampliar).
+
+As perguntas vêm das 4 vendas já feitas. Depois, do `plum_logs` — que existe desde a Etapa 0, então o
+corpus começa a crescer semanas antes de fazer falta.
+
+## Depende de conversa comercial
+
+| # | O quê | Depende de |
+|---|---|---|
+| 2 | **Cópia anonimizada da base de um cliente** | conversa com um dos 4 |
+
+⭐ **Subiu de valor na V3 revisada.** Sem usuário real, dado realista é o único substituto de
+realidade. E o argumento comercial ficou mais fácil: não é "queremos sua base para testar em
+produção", é "queremos usar sua base, anonimizada, para construir melhorias que entram na sua
+renovação".
+
+## Não atribuído — anda assim que alguém pegar
+
+| # | O quê | Natureza |
+|---|---|---|
+| 3 | Gesto de "não é isso" no front | 🤖, tarefa normal |
+| 4 | `p` do `quantile` na gramática + executor | 🤖, tarefa normal |
 
 ---
 
 # §7 · O QUE A V3 NÃO RESOLVE
 
-Escrito para não ser descoberto no meio.
-
-1. **Não existe ensaio de migration.** O Supabase novo foi abandonado; o bloco de verificação é a
-   única rede. Uma migration errada é corrigida em produção, com clientes conectados.
-2. **Não existe estágio no executor.** Aceito pelo time. O dia em que um bug passar pelos testes,
-   ele chega aos 4 clientes junto.
-3. **A flag não cobre o executor nem o `query_plan.ts`.** Repetido de propósito: é o mal-entendido
-   mais provável desta V3. "Está atrás da flag" vale para a camada de agentes, e só.
-4. **A `newnew_plum` continua existindo**, parada no commit `1a0b67e`, sem push. Se o remake em
-   produção se mostrar insustentável, ela é o ponto de retomada da estratégia de isolamento — e a
-   V2 continua no repositório com o passo a passo daquele caminho.
+1. ⭐ **Não há como medir satisfação.** O remake será julgado por uma suíte de perguntas escrita por
+   nós, não por gente usando. É a limitação estrutural desta V3, e §0-ter existe para que ela não
+   seja esquecida no meio do caminho.
+2. **Não existe ensaio de migration nem estágio no executor.** Custo baixo aqui, mas os dois viram
+   risco de verdade se algum dia esta plataforma passar a ter usuário externo.
+3. ⚠️ **O remake não chega à implementação dos clientes.** É deliberado — mas significa que os 4
+   clientes atuais só veem valor disto pela conversa de renovação. Se alguém esperar que o remake
+   melhore o que eles usam hoje, vai esperar em vão.
+4. **A V2 e a branch `newnew_plum`** (parada em `1a0b67e`) continuam existindo como o caminho do
+   ambiente paralelo. Com a implementação separada, esse caminho perdeu quase toda a razão de ser —
+   mas não custa nada mantê-lo registrado.
