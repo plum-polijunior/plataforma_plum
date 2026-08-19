@@ -20,6 +20,15 @@ Depois, as oito linhas de verificação. Duas merecem olhar:
 - *"Identidade tem default vindo do JWT"* — é o que dispensa a Edge Function de mandar
   `organization_id`/`user_id`. Sem os defaults, todo insert de log falha por `NOT NULL`.
 
+**2-bis. Colar `supabase/migrations/20260818120000_plum_logs_resposta.sql`.**
+
+Acrescenta `resposta_agente` — a saída de cada agente. Migration separada porque a anterior já está
+aplicada, e migration aplicada não se edita.
+
+⚠️ **Esta tem de rodar ANTES do deploy**, não depois: a função nova manda a coluna no insert. Como
+`registrar()` engole o próprio erro, a ordem trocada não derruba o chat — só produz um punhado de
+linhas perdidas com `column resposta_agente does not exist` no console da função.
+
 ## Publicar
 
 ```bash
@@ -55,19 +64,50 @@ não existe. Era exatamente o estado anterior: o Gemini devolvia a contagem e o 
 **4. Faça uma pergunta fora de escopo** ("resuma a revolução francesa") e confira que a linha do
 `guard` saiu com `status = 'bloqueado'`, não `'ok'`.
 
-**5. ⚠️ Prove que o log não derruba a pergunta.** É o único teste que vale, porque é o modo de falha
-que transformaria observabilidade em incidente:
+**5. Confira que a saída do agente foi gravada.**
+
+```sql
+select etapa, status, jsonb_pretty(resposta_agente) as saida
+from plum_logs
+where turno_id = '<cole o turno_id do passo 3>'
+order by created_at;
+```
+
+Esperado: `guard` com `{"status": "PERMITIDO", ...}`, `plan_query` com o Query Plan inteiro,
+`synthesize_answer` com o texto da resposta.
+
+⚠️ **`execute_plan` sai com `resposta_agente` nulo, e isso é o certo** — ele não é agente, e a saída
+dele é dado de negócio do cliente. Se um dia aparecer conteúdo ali, alguém criou uma segunda cópia
+dos números do cliente numa tabela com outra retenção.
+
+---
+
+## O que saiu deste manual, e por quê
+
+**O passo antigo — "prove que o log não derruba a pergunta" — virou teste automatizado.**
+
+O que ele pedia era isto, e **não funciona**:
 
 ```sql
 begin;
   revoke insert on public.plum_logs from authenticated;
-  -- agora faça uma pergunta no chat: ela TEM de responder normalmente,
-  -- só sem gravar log (o erro aparece no log da Edge Function)
+  -- ... faça uma pergunta no chat
 rollback;
 ```
 
-Se o chat quebrar, o `registrar()` está lançando em vez de engolir, e isso precisa ser corrigido
-antes de qualquer bloco seguinte.
+Um `REVOKE` dentro de transação não commitada é invisível para qualquer outra conexão — a Edge
+Function continuaria inserindo normalmente, e o teste "passaria" sem ter testado nada. Na prática ele
+nem chegaria lá: o REVOKE pega lock no objeto, e a sessão do chat travaria esperando.
+
+⭐ **Mas a garantia que ele queria verificar é a mais importante da Etapa 0.** O `registrar()` roda em
+*toda* pergunta; se ele lançar em vez de engolir, o log deixa de ser observabilidade e vira o motivo
+de o chat estar fora do ar. E é um caminho que nunca executa em operação normal — o tipo de garantia
+que apodrece em silêncio.
+
+Por isso ela agora é `supabase/functions/_shared/log_core.test.ts`: um client dublê que falha de
+propósito (erro do banco, exceção de rede, `throw` de string), verificado a cada `npm test` em vez de
+uma vez, na mão. Foi o que motivou separar `log_core.ts` de `log.ts` — o segundo importa o
+`supabase-js` de uma URL, que o vitest não resolve.
 
 ## Se der errado
 

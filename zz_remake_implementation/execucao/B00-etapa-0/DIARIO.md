@@ -84,17 +84,76 @@ toda pergunta é `legado`, ligada ou não. O critério vira exigível no primeir
 
 ---
 
+## Depois da primeira rodada de testes do 👤
+
+Os passos 1 a 4 do manual passaram. Duas coisas vieram da revisão.
+
+### 4. ⭐ A D-022 foi aplicada por analogia onde ela não vale
+
+A migration do log dizia "a pergunta crua nunca entra aqui (D-022)" e, por tabela, também não gravava
+a **saída** dos agentes — só a forma dela (status, latência, tokens).
+
+Mas a D-022 é sobre `dashboard_cards.origin_question`, e o racional dela é explícito: *"já foi
+decidido não guardar isso no banco; reintroduzir pelo log seria contornar a própria decisão"*. No
+fluxo de card a pergunta realmente não é persistida em lugar nenhum. **No chat é o contrário:**
+`plum_chat.content` guarda a pergunta por design — é o histórico que a pessoa lê na tela. Não há
+decisão a contornar, e portanto nada a estender.
+
+O 👤 apontou a assimetria: não gravar a pergunta é certo, mas por **redundância**, não por sigilo. E
+a saída dos agentes não é redundante — hoje ela se perde:
+
+- o veredito do Agente Z não é gravado em lugar nenhum;
+- o Query Plan só chega ao `plum_chat.plan_query` quando é **cacheável** — plano com data é
+  descartado (D-024), e é justamente o mais provável de estar errado;
+- quando o fluxo falha, o `plum_chat` fica com a pergunta e sem resposta: o que o agente produziu
+  antes de quebrar não existe em canto nenhum.
+
+**Feito:** `20260818120000_plum_logs_resposta.sql` (separada, porque a anterior já está aplicada) com
+`resposta_agente JSONB`, e `saida` nas quatro saídas de `handleAgente` — incluindo o texto que não
+parseou, que é onde ela mais rende.
+
+⚠️ **O resultado do `execute_plan` fica de fora de propósito.** Não é agente: é o Python, e a saída é
+dado de negócio agregado do cliente. Guardá-lo criaria uma segunda cópia dos números do cliente numa
+tabela com outra retenção e outra policy.
+
+### 5. O passo 5 do manual estava errado — e virou teste
+
+O 👤 disse não ter entendido o passo 5 ("prove que o log não derruba a pergunta") nem para que
+servia. Ao reler, **ele não funcionava**: pedia `begin; revoke insert …; rollback;` e um REVOKE não
+commitado é invisível para a conexão da Edge Function. O teste seria um no-op — ou travaria, porque o
+REVOKE toma lock no objeto.
+
+A garantia que ele queria, porém, é a mais importante da etapa: `registrar()` roda em toda pergunta,
+e se lançar em vez de engolir, o log deixa de ser observabilidade e vira a causa de um chat fora do
+ar. É também um caminho que **nunca executa em operação normal** — o tipo de garantia que apodrece
+sem ninguém notar.
+
+**Feito:** `log_core.test.ts`, com client dublê que falha de três jeitos (erro devolvido pelo banco,
+exceção de rede, `throw` de string não-Error), mais um caso que grava com sucesso — sem ele, os
+outros passariam com uma implementação que nunca escreve nada.
+
+Isso exigiu separar `log_core.ts` (lógica pura, testável) de `log.ts` (monta o client): o segundo
+importa o `supabase-js` de uma URL `https://`, que o vitest sob Node não resolve. O `log.ts`
+re-exporta tudo, então nada mudou para quem importa.
+
+O passo 5 do manual virou "confira que `resposta_agente` foi gravada", com a explicação do que saiu.
+
+---
+
 ## Arquivos
 
 **Novos:** `supabase/migrations/20260818100000_remake_habilitado.sql` ·
-`supabase/migrations/20260818110000_plum_logs.sql` · `supabase/functions/_shared/log.ts`
+`supabase/migrations/20260818110000_plum_logs.sql` ·
+`supabase/migrations/20260818120000_plum_logs_resposta.sql` ·
+`supabase/functions/_shared/log.ts` · `supabase/functions/_shared/log_core.ts` ·
+`supabase/functions/_shared/log_core.test.ts`
 
 **Editados:** `supabase/functions/ai-plum-chat/index.ts` (instrumentação das 4 saídas de
 `handleAgente` + invólucro do `execute_plan`) · `src/pages/PlumChat.tsx` (`sessaoId`/`turnoId` nas 4
 chamadas) · `src/integrations/supabase/types.ts` (`plum_logs` + `remake_habilitado`)
 
-**Verificado:** `npx tsc --noEmit` limpo · `npm run build` passa · 189 testes · lint na baseline
-(65 erros, nenhum novo).
+**Verificado:** `npx tsc --noEmit` limpo · `npm run build` passa · **199 testes** (189 + os 10 do
+`log_core`) · lint na baseline (65 erros, nenhum novo).
 
 ⚠️ **Nada disso está em produção ainda** — as duas migrations e o deploy da função são 👤. Ver
 `MANUAL.md`.

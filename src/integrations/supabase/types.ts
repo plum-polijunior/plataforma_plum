@@ -71,6 +71,10 @@ export type Database = {
           presuncoes_qtd: number | null
           rodada_extra: boolean | null
           cache_hit_a2: boolean | null
+          // Saida do agente: veredito do Z, Query Plan do A, texto do C. Nunca
+          // o resultado do executor nem a pergunta -- ver a migration
+          // 20260818120000_plum_logs_resposta.sql.
+          resposta_agente: Json | null
           created_at: string
         }
         Insert: {
@@ -102,6 +106,7 @@ export type Database = {
           presuncoes_qtd?: number | null
           rodada_extra?: boolean | null
           cache_hit_a2?: boolean | null
+          resposta_agente?: Json | null
           created_at?: string
         }
         // Sem Update: a tabela é append-only, e não há policy de UPDATE.

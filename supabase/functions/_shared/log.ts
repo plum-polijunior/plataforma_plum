@@ -1,74 +1,39 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
+import {
+  type CaminhoLog,
+  type ClienteDeLog,
+  criarRegistradorCom,
+  type DadosDoTurno,
+  type LinhaDeLog,
+} from "./log_core.ts";
+
 /**
  * Escrita em `plum_logs` — a observabilidade do chat.
  *
- * ⭐ **A regra que governa este arquivo: o log NUNCA derruba a pergunta.**
- * Toda falha aqui é engolida e vira um `console.error`. Uma tabela de
- * observabilidade que quebra o produto é pior que não ter tabela — e este
- * caminho roda em toda pergunta, então um erro não tratado aqui tira o chat
- * do ar inteiro.
+ * Este arquivo é só o fio: monta o client do Supabase com o JWT de quem
+ * perguntou e entrega para o `log_core.ts`, onde mora a lógica e onde ela é
+ * testada. **A regra de que o log nunca derruba a pergunta é implementada lá**,
+ * e o motivo da separação está documentado no cabeçalho daquele arquivo.
  *
- * ⚠️ **A pergunta crua não entra em nada disto** (D-022). Registra-se a FORMA
- * — quantos pedidos, de que tipos, quantas linhas —, nunca o texto. Se você
- * for acrescentar um campo e ele for `string` livre vinda do usuário, pare.
- *
- * ── POR QUE UM INSERT POR INVOCAÇÃO, E NÃO UM BUFFER ─────────────────────
- *
- * Parece que uma pergunta deveria gerar um insert com 4 linhas de uma vez. Não
- * é o caso: o `PlumChat.tsx` chama a Edge Function **uma vez por ação**
- * (`guard`, depois `plan_query`, depois `execute_plan`, depois
- * `synthesize_answer`). Cada invocação é um processo próprio e enxerga só a
- * própria etapa. O que costura as quatro é o `turno_id`, gerado no cliente.
- *
- * ── IDENTIDADE ───────────────────────────────────────────────────────────
- *
- * `organization_id` e `user_id` **não são enviados daqui**. As colunas têm
- * default `current_org_id()` e `auth.uid()`, resolvidos no banco a partir do
- * JWT — ver `20260818110000_plum_logs.sql`. Mandar daqui seria reintroduzir
- * "identificador vindo do cliente" (CLAUDE.md §4 regra 1) num lugar onde ele
- * simplesmente não precisa existir.
- *
- * Por isso o client é montado com o JWT de quem perguntou, e não com
- * `service_role` — mesma postura do resto do `ai-plum-chat`.
+ * O client é montado com o JWT do usuário, e não com `service_role` — mesma
+ * postura do resto do `ai-plum-chat`, onde há um comentário explicando que
+ * *"service role aqui transformaria um bug de filtro em vazamento entre
+ * organizações"*. Abrir `service_role` só para gravar log contrariaria isso
+ * numa função que já foi palco do I-01.
  */
 
-/** As etapas do caminho atual. O remake acrescenta as suas ao CHECK da tabela. */
-export type EtapaLog =
-  | "guard"
-  | "plan_query"
-  | "execute_plan"
-  | "synthesize_answer";
-
-export type StatusLog =
-  | "ok"
-  | "bloqueado"
-  | "negado"
-  | "inviavel"
-  | "desambiguacao"
-  | "erro";
-
-export interface DadosDoTurno {
-  /** uuid do cliente, por conversa. Ver o cabeçalho da migration. */
-  sessaoId: string;
-  /** uuid do cliente, por pergunta. É o que costura as etapas. */
-  turnoId: string;
-  datasetId?: string | null;
-}
-
-export interface LinhaDeLog {
-  etapa: EtapaLog;
-  status: StatusLog;
-  codigoErro?: string | null;
-  modelo?: string | null;
-  provedor?: string | null;
-  tokensEntrada?: number | null;
-  tokensSaida?: number | null;
-  latenciaMs?: number | null;
-  linhasOrigem?: number | null;
-  linhasBrutasEntregues?: number | null;
-  cacheHitA2?: boolean | null;
-}
+export {
+  type CaminhoLog,
+  type ClienteDeLog,
+  criarRegistradorCom,
+  type DadosDoTurno,
+  type EtapaLog,
+  extrairUsoDeTokens,
+  type LinhaDeLog,
+  montarLinha,
+  type StatusLog,
+} from "./log_core.ts";
 
 /**
  * Devolve uma função que grava uma linha de log, já amarrada ao turno.
@@ -87,8 +52,8 @@ export interface LinhaDeLog {
 export function criarRegistrador(
   authHeader: string | null,
   turno: Partial<DadosDoTurno>,
-  caminho: "legado" | "ad_hoc" = "legado",
-) {
+  caminho: CaminhoLog = "legado",
+): (linha: LinhaDeLog) => Promise<void> {
   const podeRegistrar = Boolean(authHeader && turno.sessaoId && turno.turnoId);
 
   if (!podeRegistrar) {
@@ -96,64 +61,14 @@ export function criarRegistrador(
     console.warn(
       "[log] turno incompleto (sessao/turno/auth ausentes) — pergunta segue sem registro",
     );
-    return async (_linha: LinhaDeLog) => {};
+    return criarRegistradorCom(null, turno, caminho);
   }
 
-  const supabase = createClient(
+  const cliente = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader! } } },
-  );
+  ) as unknown as ClienteDeLog;
 
-  return async function registrar(linha: LinhaDeLog): Promise<void> {
-    try {
-      const { error } = await supabase.from("plum_logs").insert({
-        sessao_id: turno.sessaoId,
-        turno_id: turno.turnoId,
-        dataset_id: turno.datasetId ?? null,
-        caminho,
-        etapa: linha.etapa,
-        status: linha.status,
-        codigo_erro: linha.codigoErro ?? null,
-        modelo: linha.modelo ?? null,
-        provedor: linha.provedor ?? null,
-        tokens_entrada: linha.tokensEntrada ?? null,
-        tokens_saida: linha.tokensSaida ?? null,
-        latencia_ms: linha.latenciaMs ?? null,
-        linhas_origem: linha.linhasOrigem ?? null,
-        linhas_brutas_entregues: linha.linhasBrutasEntregues ?? null,
-        cache_hit_a2: linha.cacheHitA2 ?? null,
-      });
-
-      if (error) console.error("[log] insert falhou:", error.message);
-    } catch (e) {
-      // Rede, JWT expirado, tabela ainda não criada — nada disso é motivo para
-      // a pessoa não receber a resposta dela.
-      console.error("[log] excecao engolida:", e instanceof Error ? e.message : e);
-    }
-  };
-}
-
-/**
- * Extrai a contagem de tokens da resposta do Gemini.
- *
- * ⚠️ **O código descartava isso.** O Gemini devolve `usageMetadata` em toda
- * resposta e nada no `ai-plum-chat` lia — então "custo por pergunta", que é a
- * métrica principal do log, sairia nulo. Conferido em 2026-08-18: não havia
- * nenhuma ocorrência de `usageMetadata` no repositório.
- *
- * Tolerante de propósito: campo ausente vira `null`, não exceção. O formato da
- * resposta é de terceiro e pode mudar sem aviso.
- */
-export function extrairUsoDeTokens(
-  corpo: unknown,
-): { entrada: number | null; saida: number | null } {
-  const uso = (corpo as { usageMetadata?: Record<string, unknown> } | null)
-    ?.usageMetadata;
-  const numero = (v: unknown) => (typeof v === "number" ? v : null);
-
-  return {
-    entrada: numero(uso?.promptTokenCount),
-    saida: numero(uso?.candidatesTokenCount),
-  };
+  return criarRegistradorCom(cliente, turno, caminho);
 }

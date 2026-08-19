@@ -336,7 +336,12 @@ async function handleAgente(
   const responder = async (
     resposta: Response,
     status: StatusLog,
-    extras: { codigoErro?: string; corpoGemini?: unknown } = {},
+    extras: {
+      codigoErro?: string;
+      corpoGemini?: unknown;
+      /** O que o agente produziu. Ver `LinhaDeLog.respostaAgente`. */
+      saida?: unknown;
+    } = {},
   ): Promise<Response> => {
     const tokens = extrairUsoDeTokens(extras.corpoGemini);
     await registrar({
@@ -348,6 +353,7 @@ async function handleAgente(
       tokensEntrada: tokens.entrada,
       tokensSaida: tokens.saida,
       latenciaMs: Date.now() - inicio,
+      respostaAgente: extras.saida ?? null,
     });
     return resposta;
   };
@@ -522,7 +528,10 @@ PORTUGUÊS CORRETO:
 
     if (!esperaJson) {
       console.log(`[${action}]`, JSON.stringify(generatedText));
-      return await responder(json({ result: generatedText }), "ok", { corpoGemini: data });
+      return await responder(json({ result: generatedText }), "ok", {
+        corpoGemini: data,
+        saida: generatedText,
+      });
     }
 
     try {
@@ -545,7 +554,14 @@ PORTUGUÊS CORRETO:
         ? "inviavel"
         : "ok";
 
-      return await responder(json({ result: finalResponse }), statusLog, { corpoGemini: data });
+      // ⭐ `saida` guarda o veredito do Z ou o Query Plan do A. Para o plano
+      // isto não é redundante com o `plum_chat.plan_query`: lá só chega o plano
+      // **cacheável**, e plano com data é descartado (D-024) — justamente o
+      // mais provável de estar errado.
+      return await responder(json({ result: finalResponse }), statusLog, {
+        corpoGemini: data,
+        saida: finalResponse,
+      });
     } catch {
       textoInvalido = generatedText;
       console.error(
@@ -555,10 +571,14 @@ PORTUGUÊS CORRETO:
     }
   }
 
+  // ⭐ Aqui a saída importa MAIS que nas outras: é o texto que não parseou, e
+  // sem ele o log diria só "json_invalido" — que não permite corrigir prompt
+  // nenhum. Este é o caso em que o `plum_chat` fica com a pergunta e sem
+  // resposta, então o log é o único lugar onde a tentativa sobrevive.
   return await responder(
     json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502),
     "erro",
-    { codigoErro: "json_invalido" },
+    { codigoErro: "json_invalido", saida: textoInvalido },
   );
 }
 
@@ -600,6 +620,10 @@ Deno.serve(async (req: Request) => {
         } catch { /* corpo não-JSON: o código HTTP já diz o suficiente */ }
       }
 
+      // ⚠️ Sem `respostaAgente` de propósito. O executor não é agente: a saída
+      // dele é dado de negócio agregado do cliente, e gravá-la aqui criaria uma
+      // segunda cópia dos números do cliente numa tabela com outra retenção.
+      // Ver o cabeçalho de `20260818120000_plum_logs_resposta.sql`.
       await registrar({
         etapa: "execute_plan",
         status: resposta.ok ? "ok" : resposta.status === 403 ? "negado" : "erro",
