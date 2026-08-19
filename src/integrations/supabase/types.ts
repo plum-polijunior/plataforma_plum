@@ -20,6 +20,10 @@ export type Database = {
           name: string
           join_code: string | null
           join_mode: "codigo" | "dominio"
+          // Liga o caminho `ad_hoc` do remake para esta organização.
+          // Conveniência de desenvolvimento, NÃO controle de segurança —
+          // ver migration 20260818100000.
+          remake_habilitado: boolean
           created_at: string
         }
         Insert: {
@@ -27,6 +31,7 @@ export type Database = {
           name: string
           join_code?: string | null
           join_mode?: "codigo" | "dominio"
+          remake_habilitado?: boolean
           created_at?: string
         }
         Update: {
@@ -34,9 +39,89 @@ export type Database = {
           name?: string
           join_code?: string | null
           join_mode?: "codigo" | "dominio"
+          remake_habilitado?: boolean
           created_at?: string
         }
         Relationships: []
+      }
+      plum_logs: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          dataset_id: string | null
+          sessao_id: string
+          turno_id: string
+          caminho: "legado" | "ad_hoc"
+          etapa:
+            | "guard" | "plan_query" | "execute_plan" | "synthesize_answer"
+            | "porteiro" | "reconhecedor" | "planejador" | "resolvedor"
+            | "autorizador" | "executor" | "interprete"
+          status: "ok" | "bloqueado" | "negado" | "inviavel" | "desambiguacao" | "erro"
+          codigo_erro: string | null
+          modelo: string | null
+          provedor: string | null
+          tokens_entrada: number | null
+          tokens_saida: number | null
+          latencia_ms: number | null
+          pedidos_qtd: number | null
+          tipos_pedido: string[] | null
+          linhas_origem: number | null
+          linhas_brutas_entregues: number | null
+          presuncoes_qtd: number | null
+          rodada_extra: boolean | null
+          cache_hit_a2: boolean | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          // ⭐ Opcionais no Insert de propósito: o banco preenche a partir do
+          // JWT (`current_org_id()` / `auth.uid()`). Mandar do cliente seria
+          // reintroduzir identificador vindo do cliente (§4 regra 1).
+          organization_id?: string
+          user_id?: string
+          dataset_id?: string | null
+          sessao_id: string
+          turno_id: string
+          caminho: "legado" | "ad_hoc"
+          etapa:
+            | "guard" | "plan_query" | "execute_plan" | "synthesize_answer"
+            | "porteiro" | "reconhecedor" | "planejador" | "resolvedor"
+            | "autorizador" | "executor" | "interprete"
+          status: "ok" | "bloqueado" | "negado" | "inviavel" | "desambiguacao" | "erro"
+          codigo_erro?: string | null
+          modelo?: string | null
+          provedor?: string | null
+          tokens_entrada?: number | null
+          tokens_saida?: number | null
+          latencia_ms?: number | null
+          pedidos_qtd?: number | null
+          tipos_pedido?: string[] | null
+          linhas_origem?: number | null
+          linhas_brutas_entregues?: number | null
+          presuncoes_qtd?: number | null
+          rodada_extra?: boolean | null
+          cache_hit_a2?: boolean | null
+          created_at?: string
+        }
+        // Sem Update: a tabela é append-only, e não há policy de UPDATE.
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: "plum_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plum_logs_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       roles: {
         Row: {

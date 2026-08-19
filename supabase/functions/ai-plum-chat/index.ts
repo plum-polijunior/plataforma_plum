@@ -37,6 +37,12 @@ import {
   type QueryPlan,
 } from "../_shared/query_plan.ts";
 import { parseGeminiJson } from "../_shared/gemini_parsing.ts";
+import {
+  criarRegistrador,
+  extrairUsoDeTokens,
+  type DadosDoTurno,
+  type StatusLog,
+} from "../_shared/log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -314,9 +320,44 @@ async function handleAgente(
   prompt: string,
   schemaMetadata: unknown,
   executorResult: unknown,
+  authHeader: string | null,
+  turno: Partial<DadosDoTurno>,
 ): Promise<Response> {
+  // Instrumentação da linha de base (Etapa 0 do remake). O registrador nunca
+  // lança e nunca bloqueia a resposta — ver `_shared/log.ts`.
+  const registrar = criarRegistrador(authHeader, turno, "legado");
+  const inicio = Date.now();
+
+  /**
+   * Grava a linha de log e devolve a resposta. Existe porque `handleAgente` tem
+   * QUATRO saídas (erro da API, texto puro, JSON parseado, tentativas
+   * esgotadas) e uma delas sem log seria um buraco invisível na medição.
+   */
+  const responder = async (
+    resposta: Response,
+    status: StatusLog,
+    extras: { codigoErro?: string; corpoGemini?: unknown } = {},
+  ): Promise<Response> => {
+    const tokens = extrairUsoDeTokens(extras.corpoGemini);
+    await registrar({
+      etapa: action,
+      status,
+      codigoErro: extras.codigoErro ?? null,
+      modelo: "gemini-3.5-flash",
+      provedor: "google",
+      tokensEntrada: tokens.entrada,
+      tokensSaida: tokens.saida,
+      latenciaMs: Date.now() - inicio,
+    });
+    return resposta;
+  };
+
   if (!GEMINI_API_KEY) {
-    return json({ error: "GEMINI_API_KEY is not configured" }, 400);
+    return await responder(
+      json({ error: "GEMINI_API_KEY is not configured" }, 400),
+      "erro",
+      { codigoErro: "sem_api_key" },
+    );
   }
 
   let systemInstruction = "";
@@ -468,7 +509,11 @@ PORTUGUÊS CORRETO:
         continue;
       }
       console.error("ERRO DA API DO GEMINI (ai-plum-chat):", JSON.stringify(data, null, 2));
-      return json({ error: data.error?.message || "Erro na API do Google Gemini" }, 400);
+      return await responder(
+        json({ error: data.error?.message || "Erro na API do Google Gemini" }, 400),
+        "erro",
+        { codigoErro: `gemini_${res.status}`, corpoGemini: data },
+      );
     }
 
     // Resposta sem candidato (bloqueio de safety, corte de token) não pode
@@ -477,7 +522,7 @@ PORTUGUÊS CORRETO:
 
     if (!esperaJson) {
       console.log(`[${action}]`, JSON.stringify(generatedText));
-      return json({ result: generatedText });
+      return await responder(json({ result: generatedText }), "ok", { corpoGemini: data });
     }
 
     try {
@@ -486,7 +531,21 @@ PORTUGUÊS CORRETO:
         console.log(`[${action}] recuperado na tentativa ${tentativa}.`);
       }
       console.log(`[${action}]`, JSON.stringify(finalResponse));
-      return json({ result: finalResponse });
+
+      // ⭐ O veredito do Agente Z vira status do log. É o que permite medir com
+      // que frequência o guardião barra — e, depois, comparar essa taxa com a
+      // do porteiro do remake. Sem este mapeamento o log diria só "ok" para uma
+      // pergunta que foi recusada.
+      const veredito = (finalResponse as { status?: string } | null)?.status;
+      const statusLog: StatusLog = action !== "guard"
+        ? "ok"
+        : veredito === "BLOQUEADO"
+        ? "bloqueado"
+        : veredito === "INVIAVEL"
+        ? "inviavel"
+        : "ok";
+
+      return await responder(json({ result: finalResponse }), statusLog, { corpoGemini: data });
     } catch {
       textoInvalido = generatedText;
       console.error(
@@ -496,7 +555,11 @@ PORTUGUÊS CORRETO:
     }
   }
 
-  return json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502);
+  return await responder(
+    json({ error: "Resposta do Gemini nao pode ser interpretada." }, 502),
+    "erro",
+    { codigoErro: "json_invalido" },
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -505,13 +568,51 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { action, prompt, schemaMetadata, executorResult, datasetId, plan } = await req.json();
+    const {
+      action, prompt, schemaMetadata, executorResult, datasetId, plan,
+      // Identificam a conversa e a pergunta, para o log costurar as etapas.
+      // Gerados no cliente — ver `20260818110000_plum_logs.sql`. Opcionais de
+      // propósito: front antigo continua funcionando, só sem registro.
+      sessaoId, turnoId,
+    } = await req.json();
+
+    const turno = { sessaoId, turnoId, datasetId };
+    const authHeader = req.headers.get("Authorization");
 
     if (action === "execute_plan") {
-      return await handleExecutePlan(req, datasetId, plan);
+      // ⭐ Envolvido em vez de instrumentado por dentro. `handleExecutePlan` tem
+      // treze saídas (segredo ausente, sem credencial, perfil inativo, sem
+      // cargo, base não encontrada, executor 4xx/5xx, sucesso…); espalhar log
+      // por todas elas encheria a função de ruído e ainda assim alguém
+      // esqueceria uma. Aqui o status sai do código HTTP, que é justamente o
+      // que cada uma daquelas saídas já decide.
+      const inicio = Date.now();
+      const resposta = await handleExecutePlan(req, datasetId, plan);
+      const registrar = criarRegistrador(authHeader, turno, "legado");
+
+      let codigoErro: string | null = null;
+      if (!resposta.ok) {
+        // Clonar porque o corpo só pode ser lido uma vez, e quem chamou ainda
+        // precisa dele. A mensagem é nossa, não texto do usuário (D-022).
+        try {
+          const corpo = await resposta.clone().json();
+          codigoErro = typeof corpo?.error === "string" ? corpo.error.slice(0, 120) : null;
+        } catch { /* corpo não-JSON: o código HTTP já diz o suficiente */ }
+      }
+
+      await registrar({
+        etapa: "execute_plan",
+        status: resposta.ok ? "ok" : resposta.status === 403 ? "negado" : "erro",
+        codigoErro,
+        latenciaMs: Date.now() - inicio,
+      });
+
+      return resposta;
     }
     if (action === "guard" || action === "plan_query" || action === "synthesize_answer") {
-      return await handleAgente(action, prompt, schemaMetadata, executorResult);
+      return await handleAgente(
+        action, prompt, schemaMetadata, executorResult, authHeader, turno,
+      );
     }
     return json({ error: "Ação inválida para ai-plum-chat." }, 400);
   } catch (error) {

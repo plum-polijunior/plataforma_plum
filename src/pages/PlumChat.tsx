@@ -33,6 +33,25 @@ export default function PlumChat() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Identificador desta conversa, para o `plum_logs` agrupar as etapas.
+   *
+   * `useRef` e não `useState`: ele nunca é renderizado, e trocá-lo não deve
+   * causar re-render. Renovado a cada carga da página (o ref nasce com o
+   * componente) e a cada troca de dataset — perguntar sobre outra base é outra
+   * conversa.
+   *
+   * ⚠️ **Isto NÃO é a janela do orçamento de linhas** (bloco 10 do remake).
+   * Aquele é `usuário × dataset × janela de tempo`, resolvido no servidor.
+   * Amarrar o orçamento a este uuid daria cota nova a cada F5. Dois conceitos,
+   * o mesmo nome — ver `20260818110000_plum_logs.sql`.
+   */
+  const sessaoIdRef = useRef<string>(crypto.randomUUID());
+
+  useEffect(() => {
+    sessaoIdRef.current = crypto.randomUUID();
+  }, [selectedDatasetId]);
+
   useEffect(() => {
     if (session && organizationId && roleId) {
       fetchDatasets();
@@ -148,6 +167,13 @@ export default function PlumChat() {
 
     const dataset = datasets.find(d => d.id === selectedDatasetId);
 
+    // Um turno = uma pergunta. É o que costura as 4 linhas que esta pergunta
+    // vai gerar em `plum_logs` (guard, plan_query, execute_plan,
+    // synthesize_answer) e o que permite perguntar "quanto custou esta
+    // pergunta" em vez de "quanto custou o dia".
+    const sessaoId = sessaoIdRef.current;
+    const turnoId = crypto.randomUUID();
+
     try {
       // 1. Insert user message in DB immediately for optimistic UI
       const { data: userMsgData, error: insertErr } = await supabase
@@ -175,7 +201,7 @@ export default function PlumChat() {
       // pular por causa de um plano guardado deixaria passar o que ele existe
       // para segurar.
       const guardRes = await supabase.functions.invoke('ai-plum-chat', {
-        body: { action: 'guard', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata }
+        body: { action: 'guard', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, sessaoId, turnoId }
       });
 
       if (guardRes.error) throw guardRes.error;
@@ -195,7 +221,7 @@ export default function PlumChat() {
         console.log('[plano] reuso — Agente A pulado');
       } else {
         const planRes = await supabase.functions.invoke('ai-plum-chat', {
-          body: { action: 'plan_query', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata }
+          body: { action: 'plan_query', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, sessaoId, turnoId }
         });
         if (planRes.error) throw planRes.error;
         plan = planRes.data.result;
@@ -221,7 +247,7 @@ export default function PlumChat() {
       // allowed_columns do cargo do usuário, assina (HMAC + SigV4) e chama o
       // mesmo executor que o dashboard usa — nenhum número inventado aqui.
       const execRes = await supabase.functions.invoke('ai-plum-chat', {
-        body: { action: 'execute_plan', datasetId: selectedDatasetId, plan }
+        body: { action: 'execute_plan', datasetId: selectedDatasetId, plan, sessaoId, turnoId }
       });
       if (execRes.error) throw execRes.error;
       const executorResult = execRes.data.result;
@@ -243,7 +269,7 @@ export default function PlumChat() {
 
       // 5. Chama Agente C (Sintetizador)
       const synthRes = await supabase.functions.invoke('ai-plum-chat', {
-        body: { action: 'synthesize_answer', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, executorResult }
+        body: { action: 'synthesize_answer', prompt: userMsgContent, schemaMetadata: dataset.schema_metadata, executorResult, sessaoId, turnoId }
       });
       if (synthRes.error) throw synthRes.error;
       const synthMsg = synthRes.data.result;

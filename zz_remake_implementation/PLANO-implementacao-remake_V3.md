@@ -293,8 +293,22 @@ para substituir o `functions deploy` conferido.
 
 ## 0.5. Critério de pronto
 
-Uma pergunta roda Z→A→C com a chave ligada e com a chave desligada, e o `plum_logs` registra as
-duas — mostrando por qual caminho cada uma passou.
+⚠️ **Corrigido em 2026-08-18, na execução.** A primeira redação pedia *"uma pergunta roda com a
+chave ligada e com a desligada, e o log mostra por qual caminho cada uma passou"* — **impossível na
+Etapa 0**: com uma cadeia só, toda pergunta é `legado`, com a chave ligada ou não. O critério
+pressupunha o `ad_hoc`, que é a Etapa 1.
+
+O que a Etapa 0 realmente prova:
+
+1. Uma pergunta gera **4 linhas em `plum_logs` com o mesmo `turno_id`** (3 quando o plano vem do
+   cache de reuso — comportamento certo, não falha).
+2. `tokens_entrada`/`tokens_saida` **não são nulos**. Se forem, "custo por pergunta" não existe, e
+   ela é a métrica principal (§0-ter).
+3. Uma pergunta fora de escopo grava `status = 'bloqueado'`, não `'ok'`.
+4. ⭐ **Revogar o INSERT do log não derruba o chat.** É o único teste que prova a regra "o log nunca
+   derruba a pergunta"; o passo está no `MANUAL.md` do B00.
+
+O critério dos dois caminhos migra para o **primeiro bloco que introduzir o `ad_hoc`**.
 
 ---
 
