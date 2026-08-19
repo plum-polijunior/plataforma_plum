@@ -62,6 +62,17 @@ class PlanRequest(BaseModel):
     plan: Dict[str, Any]
     # Colunas já extraídas pela Edge Function. Único parser do sistema.
     resolved_columns: List[str] = Field(default_factory=list)
+    # Que tipo de pedido é este: `agregado` (o único que existia), `serie`,
+    # `metadados`, `vocabulario`, `registro`, `amostra`. Enum aberto de
+    # propósito — o executor só reage aos que sabe tratar, e um tipo que ele
+    # não conhece cai no caminho de plano normal em vez de virar erro.
+    #
+    # ⚠️ Nasce com default porque o Lambda é publicado a todo push
+    # (`query-engine.yml`) e a Edge Function é publicada à mão (I-03): por
+    # algumas horas o executor novo recebe payload da função velha, que não
+    # manda este campo. Campo obrigatório aqui derrubaria o dashboard nesse
+    # intervalo.
+    tipo: str = "agregado"
 
 
 class ExecutionPayload(BaseModel):
@@ -83,6 +94,13 @@ class ExecutionPayload(BaseModel):
     tab_gid: Optional[int] = None
     plans: List[PlanRequest]
     allowed_columns: List[str]
+    # `legado` (dashboard e chat atual) ou `ad_hoc` (o remake). Fica no payload
+    # e não no pedido porque um lote inteiro vem de um caminho só.
+    #
+    # ⭐ É o que liga o teto de cardinalidade do B02. No `legado` a regra roda
+    # em modo observação: mede e registra, não recusa — ver
+    # `pandas_executor._conferir_cardinalidade`.
+    caminho: str = "legado"
     # {coluna: {"type": <enum fechado>, "params": {...}}} — vem do Agente 3/3.1
     # via schema_metadata. O executor deriva column_roles disto mesmo
     # (roles_from_formatting_rules), não recebe role prontos da Edge Function.

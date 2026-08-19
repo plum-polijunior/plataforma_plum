@@ -31,6 +31,7 @@ from pydantic import ValidationError
 
 from query_engine import config, sheets
 from query_engine.pandas_executor import (
+    CardinalidadeExcedida,
     ExecutorError,
     MissingColumnError,
     RawRowsBlocked,
@@ -173,6 +174,11 @@ async def execute(
                 tabelas,
                 column_roles=column_roles,
                 max_rows=None,  # já barrado em sheets.load_columns
+                # ⭐ O teto de cardinalidade só recusa no caminho novo. No
+                # legado ele mede e registra (`[adhoc-observacao]` no
+                # CloudWatch), para sabermos por dado — e não por palpite — se
+                # dá para ligá-lo no dashboard mais adiante.
+                aplicar_regras_adhoc=(payload.caminho == "ad_hoc"),
             )
             resultados.append(
                 {
@@ -182,6 +188,11 @@ async def execute(
                     "rows": saida.get("rows", []),
                     "row_count": saida.get("row_count", 0),
                     "suppressed_groups": saida.get("suppressed_groups", 0),
+                    # B02 — quanto literal da base este resultado carrega.
+                    # Quem vai debitar disso e o orcamento do B10; ate la e
+                    # medicao. Aditivo: nenhum consumidor atual le estas chaves.
+                    "grupos_de_texto": saida.get("grupos_de_texto", {}),
+                    "selecoes_literais": saida.get("selecoes_literais", []),
                 }
             )
         except MissingColumnError as exc:
@@ -204,6 +215,20 @@ async def execute(
                     "card_id": pedido.card_id,
                     "status": "error",
                     "error": "Este card precisa de uma agregacao para poder ser exibido.",
+                }
+            )
+        except CardinalidadeExcedida as exc:
+            # Mesma familia do P1.3, e a mensagem vai crua para o agente de
+            # proposito: aqui quem le e o A3, que precisa saber POR QUE o
+            # pedido caiu para poder reformular agregando. "Erro ao executar"
+            # o faria repetir o mesmo plano.
+            logger.warning("Pedido %s barrado por cardinalidade: %s",
+                           pedido.card_id, exc)
+            resultados.append(
+                {
+                    "card_id": pedido.card_id,
+                    "status": "error",
+                    "error": str(exc),
                 }
             )
         except RowLimitExceeded as exc:

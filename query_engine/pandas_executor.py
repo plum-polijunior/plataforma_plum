@@ -57,8 +57,163 @@ class RowLimitExceeded(ExecutorError):
     """A base carregada passou do teto de linhas da organização."""
 
 
+class CardinalidadeExcedida(ExecutorError):
+    """
+    O agrupamento devolveria valores literais demais de uma coluna de texto.
+
+    Mesma família do `RawRowsBlocked`, e existe porque o P1.3 tinha um furo de
+    forma: ele verifica que **existe** agregação, não que o resultado agrega.
+    `group_by [cliente] + count` passa pelo P1.3 e devolve a carteira inteira,
+    um nome por linha — que é exatamente a linha bruta que o P1.3 recusa,
+    entregue por outra porta.
+    """
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Redutora × seletora — classificação por comportamento
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ Não é whitelist (`contexto/30-decisoes.md`, V6 decisão 4). O `agg` continua
+# indo direto para o pandas; esta tabela só diz o que cada função FAZ com os
+# valores, para o motor saber quando um resultado carrega literal da base.
+#
+#   Redutora   devolve um número novo, calculado. Nenhum valor da base sai.
+#   Seletora   devolve um valor que EXISTE numa linha. Sobre coluna de texto,
+#              isso é um literal da base (nome de cliente, CPF, endereço).
+#
+# ⚠️ Hoje, no caminho agrupado, `min`/`max` sobre texto NÃO devolvem o literal:
+# `_coerce_numeric_for_agg` converte a coluna e o resultado sai `0`. Isso não é
+# proteção, é resposta errada em silêncio — está registrado como pendência
+# separada, e consertar aquilo sem esta tabela existir só aumentaria o
+# vazamento. A classificação é escrita para o comportamento correto, não para o
+# atual.
+AGREGACOES_REDUTORAS: frozenset = frozenset(
+    {"sum", "avg", "mean", "count", "std", "median", "var", "quantile"}
+)
+
+AGREGACOES_SELETORAS: frozenset = frozenset(
+    {"min", "max", "first", "last", "nunique"}
+)
+
+# ⭐ Um teto, dois consumidores. É o mesmo número que o pedido `vocabulario`
+# (B04) usa como limite de cardinalidade: acima disto a coluna é identificador,
+# não categoria, e listá-la é entregar a base. Mudar aqui muda os dois de uma
+# vez, que é o ponto.
+TETO_DE_CARDINALIDADE = 200
+
+# ⚠️ O `limit` do plano nunca teve teto: o código era `plan.get("limit", 200)`
+# seguido de `head(limit)`, e a gramática documentada (`1..500`) não era
+# aplicada em lugar nenhum. `limit: 50000` sobre um `group_by` de texto entrega
+# a base inteira sem violar regra nenhuma.
+LIMIT_PADRAO = 200
+LIMIT_MAXIMO = 500
+
+# Prefixo estável dos avisos do modo observação, para dar `grep` no CloudWatch.
+_AVISO = "[adhoc-observacao]"
+
+
 def _roles(column_roles: Optional[Dict[str, str]]) -> Dict[str, str]:
     return {k: str(v).lower() for k, v in (column_roles or {}).items()}
+
+
+def classificar_agregacao(func: str) -> str:
+    """`'redutora'`, `'seletora'` ou `'desconhecida'`."""
+    f = str(func).lower()
+    if f in AGREGACOES_REDUTORAS:
+        return "redutora"
+    if f in AGREGACOES_SELETORAS:
+        return "seletora"
+    return "desconhecida"
+
+
+def _seletoras_de_texto(aggs: list, roles: Dict[str, str]) -> list:
+    """Aliases cuja agregação é seletora sobre coluna de papel `text`."""
+    return sorted(
+        alias
+        for alias, func, col in aggs
+        if classificar_agregacao(func) == "seletora" and _is_text(col, roles)
+    )
+
+
+def _conferir_cardinalidade(
+    df_out: pd.DataFrame,
+    colunas_grupo: list,
+    roles: Dict[str, str],
+    *,
+    aplicar: bool,
+) -> Dict[str, int]:
+    """
+    Conta os literais de texto que o agrupamento entregaria, e decide.
+
+    `colunas_grupo` são pares `(nome_na_saida, nome_de_origem)`: o papel vem do
+    nome de origem, a contagem vem da coluna que de fato saiu — `_grouped_agg`
+    renomeia coluna direta que tenha alias, e olhar só um dos dois nomes deixa
+    metade dos casos passar.
+
+    ⚠️ **A conta é feita ANTES do `limit`.** Cortar em 500 não é proteção: 500
+    nomes de cliente continuam sendo 500 nomes de cliente. O que interessa é
+    quantos valores distintos o recorte alcança, não quantos couberam.
+
+    ⭐ **O teto é por coluna, não sobre `len(df_out)`.** Agrupar cidade (150) por
+    mês (12) dá 1.800 linhas e ainda assim expõe 150 literais — o volume é
+    problema do `limit`, a exposição é problema deste teto. Misturar os dois
+    recusaria consulta legítima e deixaria o vazamento de pé.
+
+    Devolve `{coluna: distintos}` das colunas de texto agrupadas: é o que o
+    orçamento do B10 vai debitar. Só levanta quando `aplicar`; no caminho legado
+    apenas registra — ver o modo observação no `DIARIO.md` do B02.
+    """
+    de_texto = {
+        saida: int(df_out[saida].nunique())
+        for saida, origem in colunas_grupo
+        if saida in df_out.columns and _is_text(origem, roles)
+    }
+    if not de_texto:
+        return {}
+
+    estourou = [c for c, n in de_texto.items() if n > TETO_DE_CARDINALIDADE]
+    if not estourou:
+        return de_texto
+
+    detalhe = ", ".join(f"'{c}' ({de_texto[c]} valores)" for c in estourou)
+
+    if not aplicar:
+        logger.warning(
+            "%s agrupamento por %s seria recusado no caminho ad_hoc.",
+            _AVISO, detalhe,
+        )
+        return de_texto
+
+    raise CardinalidadeExcedida(
+        f"Agrupar por {detalhe} devolveria os valores da coluna um a um, que e "
+        f"a linha bruta que o executor nao entrega. O teto e "
+        f"{TETO_DE_CARDINALIDADE} valores distintos por coluna de texto — "
+        f"acima disso a coluna e identificador, nao categoria."
+    )
+
+
+def _limite_de_saida(plan: Dict[str, Any]) -> int:
+    """
+    O `limit` do plano, preso entre 1 e `LIMIT_MAXIMO`.
+
+    Vale para os dois caminhos, e é o único item do B02 que vale: `limit` acima
+    de 500 não é comportamento de card nenhum que exista, e a gramática já
+    documentava `1..500` sem que nada aplicasse.
+    """
+    try:
+        pedido = int(plan.get("limit", LIMIT_PADRAO))
+    except (TypeError, ValueError):
+        logger.warning(
+            "limit '%r' nao e inteiro; usando %d.",
+            plan.get("limit"), LIMIT_PADRAO,
+        )
+        return LIMIT_PADRAO
+
+    preso = max(1, min(pedido, LIMIT_MAXIMO))
+    if preso != pedido:
+        logger.warning("limit %d fora de 1..%d; usando %d.",
+                       pedido, LIMIT_MAXIMO, preso)
+    return preso
 
 
 def _is_percent(col: str, roles: Dict[str, str]) -> bool:
@@ -437,6 +592,7 @@ def execute_plan(
     *,
     column_roles: Optional[Dict[str, str]] = None,
     max_rows: Optional[int] = None,
+    aplicar_regras_adhoc: bool = False,
 ) -> Dict[str, Any]:
     """
     Executa um Query Plan e devolve um vetor agregado.
@@ -445,6 +601,9 @@ def execute_plan(
         schema_metadata do tenant. Substitui as antigas constantes globais.
     max_rows: teto de linhas da base carregada. Verificado ANTES de qualquer
         processamento, porque o `limit` do plano corta a saída e não a entrada.
+    aplicar_regras_adhoc: liga o teto de cardinalidade (B02). Falso por padrão
+        — o dashboard e o chat legado continuam exatamente como estavam, e a
+        regra só registra o que teria recusado. Ver `_conferir_cardinalidade`.
     """
     roles = _roles(column_roles)
 
@@ -619,10 +778,19 @@ def execute_plan(
     # Agora é um caminho só: _grouped_agg.
     implicit_gb = [col for _, col in direct_cols if col in df.columns]
     agregado_unico = False
+    # Pares (nome na saída, nome de origem) — ver `_conferir_cardinalidade`.
+    colunas_grupo: list = []
 
     if gb_cols:
+        colunas_grupo = [(c, c) for c in gb_cols]
         df_out = _grouped_agg(df, gb_cols, aggs, direct_cols, roles)
     elif direct_cols and implicit_gb:
+        # ⚠️ Coluna solta no `select` vira group_by implícito, e é por esta
+        # porta que `select: ["cliente", count(...)]` entrega a carteira toda
+        # sem nunca escrever `group_by`. Precisa da mesma conferência.
+        colunas_grupo = [
+            (alias, col) for alias, col in direct_cols if col in df.columns
+        ]
         df_out = _grouped_agg(df, implicit_gb, aggs, direct_cols, roles)
     else:
         # ── AGREGADO ÚNICO sobre a base filtrada ──────────────────────────
@@ -632,6 +800,19 @@ def execute_plan(
         for alias, func, col in aggs:
             row[alias] = _scalar_agg(df, func, col, roles)
         df_out = pd.DataFrame([row])
+
+    # ── B02: quantos literais de texto este resultado carrega ────────────────
+    # Feito aqui, antes de order_by e limit, porque o que interessa é o alcance
+    # do recorte e não quantas linhas sobraram depois do corte.
+    grupos_de_texto = _conferir_cardinalidade(
+        df_out, colunas_grupo, roles, aplicar=aplicar_regras_adhoc
+    )
+    seletoras = _seletoras_de_texto(aggs, roles)
+    if seletoras:
+        # Reportado, não recusado: seletora sobre texto devolve UM literal por
+        # grupo, e a decisão de cobrá-la do orçamento é do autorizador, no B10.
+        # O executor é Motorista Cego — ele conta, quem decide é a Edge Function.
+        logger.info("Selecao literal de texto em: %s", ", ".join(seletoras))
 
     # ── ORDER BY ─────────────────────────────────────────────────────────────
     # `df_out` já é o resultado agregado, então as colunas dele são os aliases —
@@ -690,8 +871,7 @@ def execute_plan(
         df_out = df_out.sort_values(by=alvo, ascending=asc, na_position="last")
 
     # ── LIMIT ────────────────────────────────────────────────────────────────
-    limit = plan.get("limit", 200)
-    df_out = df_out.head(limit)
+    df_out = df_out.head(_limite_de_saida(plan))
 
     # ── SERIALIZAÇÃO ─────────────────────────────────────────────────────────
     df_out = _serialize_df(df_out)
@@ -704,6 +884,11 @@ def execute_plan(
         # modulo). O campo fica no retorno por compatibilidade com quem
         # consome a resposta (Agente C, cards do dashboard).
         "suppressed_groups": 0,
+        # B02 — o que este resultado carrega de literal da base. Quem lê é o
+        # orçamento do B10; até lá é só medição. Aditivo: nenhum consumidor
+        # atual olha para estas chaves.
+        "grupos_de_texto": grupos_de_texto,
+        "selecoes_literais": seletoras,
     }
 
 
@@ -1297,6 +1482,7 @@ def execute_plan_with_formatting(
     *,
     column_roles: Optional[Dict[str, str]] = None,
     max_rows: Optional[int] = None,
+    aplicar_regras_adhoc: bool = False,
 ) -> Dict[str, Any]:
     """
     Pré-processa as tabelas aplicando as regras de formatação (formattingRules)
@@ -1311,7 +1497,8 @@ def execute_plan_with_formatting(
 
     if not formatting_rules:
         return execute_plan(
-            plan, tables, column_roles=roles, max_rows=max_rows
+            plan, tables, column_roles=roles, max_rows=max_rows,
+            aplicar_regras_adhoc=aplicar_regras_adhoc,
         )
 
     formatted_tables: Dict[str, pd.DataFrame] = {}
@@ -1319,6 +1506,7 @@ def execute_plan_with_formatting(
         formatted_tables[table_name] = apply_formatting_rules(df, formatting_rules)
 
     return execute_plan(
-        plan, formatted_tables, column_roles=roles, max_rows=max_rows
+        plan, formatted_tables, column_roles=roles, max_rows=max_rows,
+        aplicar_regras_adhoc=aplicar_regras_adhoc,
     )
 

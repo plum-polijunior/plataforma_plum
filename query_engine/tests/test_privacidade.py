@@ -24,9 +24,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from query_engine.pandas_executor import (  # noqa: E402
+    CardinalidadeExcedida,
     MissingColumnError,
     RawRowsBlocked,
     RowLimitExceeded,
+    classificar_agregacao,
     execute_plan,
     roles_from_formatting_rules,
 )
@@ -271,3 +273,261 @@ def test_dentro_do_teto_executa_normal():
     }
     r = execute_plan(plano, tabelas, max_rows=500)
     assert r["rows"][0]["t"] == pytest.approx(4950.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B02 — o furo de FORMA do P1.3: agregação que não agrega
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# O P1.3 verifica que EXISTE agregação, não que o resultado agrega. Um
+# `group_by [cliente] + count` passa por ele e devolve a carteira inteira, um
+# nome por linha — a mesma linha bruta que o P1.3 recusa, entregue por outra
+# porta.
+#
+# ⚠️ A regra recusa **só no caminho `ad_hoc`** (`aplicar_regras_adhoc=True`). No
+# legado ela mede e registra: o dashboard e o chat atual não podem mudar de
+# resultado por causa de um bloco que ainda não tem consumidor.
+
+
+@pytest.fixture
+def carteira():
+    """300 clientes distintos — acima do teto de 200."""
+    return {
+        "producao": pd.DataFrame(
+            {
+                "cliente": [f"CLIENTE {i:03d}" for i in range(300)],
+                "regiao": ["Sul", "Norte", "Centro"] * 100,
+                "faturamento": [100.0] * 300,
+            }
+        )
+    }
+
+
+PAPEIS = {"cliente": "text", "regiao": "text", "faturamento": "number"}
+
+
+@pytest.mark.invariante
+def test_group_by_de_texto_acima_do_teto_e_recusado_no_adhoc(carteira):
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "faturamento"}, "as": "n"}],
+        "group_by": ["cliente"],
+    }
+    with pytest.raises(CardinalidadeExcedida) as exc:
+        execute_plan(
+            plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+        )
+    # A mensagem vai crua para o A3, que precisa saber o que reformular.
+    assert "cliente" in str(exc.value) and "300" in str(exc.value)
+
+
+@pytest.mark.invariante
+def test_coluna_solta_no_select_tambem_e_conferida(carteira):
+    """
+    `select: ["cliente", count(...)]` nunca escreve `group_by` e mesmo assim
+    agrupa — `direct_cols` vira agrupamento implícito. Era a porta larga.
+    """
+    plano = {
+        "from": "producao",
+        "select": [
+            {"expr": "cliente"},
+            {"expr": {"agg": "count", "col": "faturamento"}, "as": "n"},
+        ],
+    }
+    with pytest.raises(CardinalidadeExcedida):
+        execute_plan(
+            plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+        )
+
+
+@pytest.mark.invariante
+def test_alias_na_coluna_solta_nao_escapa_da_conferencia(carteira):
+    """
+    Com `as`, a coluna sai renomeada e o nome de origem some do resultado.
+    Conferir só um dos dois nomes deixaria este caso passar.
+    """
+    plano = {
+        "from": "producao",
+        "select": [
+            {"expr": "cliente", "as": "quem"},
+            {"expr": {"agg": "count", "col": "faturamento"}, "as": "n"},
+        ],
+    }
+    with pytest.raises(CardinalidadeExcedida):
+        execute_plan(
+            plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+        )
+
+
+def test_limit_alto_nao_salva_o_plano(carteira):
+    """
+    Cortar em 500 não é proteção: 500 nomes continuam sendo 500 nomes. A conta
+    é feita antes do limit, sobre o alcance do recorte.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "faturamento"}, "as": "n"}],
+        "group_by": ["cliente"],
+        "limit": 10,
+    }
+    with pytest.raises(CardinalidadeExcedida):
+        execute_plan(
+            plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+        )
+
+
+def test_group_by_dentro_do_teto_passa(carteira):
+    """Três regiões. A regra não pode atrapalhar pergunta legítima."""
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"}],
+        "group_by": ["regiao"],
+    }
+    r = execute_plan(
+        plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+    )
+    assert len(r["rows"]) == 3
+    assert r["grupos_de_texto"] == {"regiao": 3}
+
+
+def test_caminho_legado_mede_mas_nao_recusa(carteira, caplog):
+    """
+    ⭐ O modo observação. O dashboard não pode mudar de comportamento por causa
+    de um bloco cujo consumidor só nasce no B06 — mas queremos o dado antes de
+    decidir se a regra pode valer lá.
+    """
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "faturamento"}, "as": "n"}],
+        "group_by": ["cliente"],
+    }
+    with caplog.at_level("WARNING"):
+        r = execute_plan(plano, carteira, column_roles=PAPEIS)
+
+    assert r["row_count"] == 200  # limit padrão, comportamento de sempre
+    assert r["grupos_de_texto"] == {"cliente": 300}
+    assert "[adhoc-observacao]" in caplog.text
+
+
+def test_coluna_numerica_nao_dispara_a_regra():
+    """
+    ⚠️ `TYPE_TO_ROLE` manda tudo que não foi classificado para `text`, então a
+    regra precisa olhar o papel e não só o dtype. Aqui o papel é `number`: 300
+    valores distintos não são 300 literais de identidade.
+    """
+    tabelas = {
+        "producao": pd.DataFrame(
+            {"pedido_id": range(300), "valor": [1.0] * 300}
+        )
+    }
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "sum", "col": "valor"}, "as": "t"}],
+        "group_by": ["pedido_id"],
+    }
+    r = execute_plan(
+        plano, tabelas,
+        column_roles={"pedido_id": "number", "valor": "number"},
+        aplicar_regras_adhoc=True,
+    )
+    assert r["grupos_de_texto"] == {}
+
+
+def test_data_agrupada_nao_dispara_a_regra():
+    """Série temporal longa é pergunta legítima, e `date` não é `text`."""
+    tabelas = {
+        "producao": pd.DataFrame(
+            {
+                "dia": pd.date_range("2020-01-01", periods=300, freq="D"),
+                "valor": [1.0] * 300,
+            }
+        )
+    }
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "sum", "col": "valor"}, "as": "t"}],
+        "group_by": ["dia"],
+    }
+    r = execute_plan(
+        plano, tabelas,
+        column_roles={"dia": "date", "valor": "number"},
+        aplicar_regras_adhoc=True,
+    )
+    assert r["grupos_de_texto"] == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B02 — redutora × seletora
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_classificacao_por_comportamento():
+    assert classificar_agregacao("sum") == "redutora"
+    assert classificar_agregacao("MEDIAN") == "redutora"
+    assert classificar_agregacao("min") == "seletora"
+    assert classificar_agregacao("nunique") == "seletora"
+    # ⚠️ Não é whitelist (V6 decisão 4): o que não está na tabela continua indo
+    # para o pandas, e é reportado como desconhecido em vez de recusado.
+    assert classificar_agregacao("skew") == "desconhecida"
+
+
+def test_selecao_literal_e_reportada_nao_recusada(carteira):
+    """
+    Seletora sobre texto devolve UM literal por grupo. Quem decide se isso
+    custa orçamento é o autorizador (B10) — o executor é Motorista Cego: conta
+    e devolve a contagem.
+    """
+    plano = {
+        "from": "producao",
+        "select": [
+            {"expr": {"agg": "min", "col": "cliente"}, "as": "primeiro"},
+            {"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"},
+        ],
+        "group_by": ["regiao"],
+    }
+    r = execute_plan(
+        plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+    )
+    assert r["selecoes_literais"] == ["primeiro"]
+
+
+def test_redutora_sobre_texto_nao_e_selecao_literal(carteira):
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": "cliente"}, "as": "n"}],
+        "group_by": ["regiao"],
+    }
+    r = execute_plan(
+        plano, carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True
+    )
+    assert r["selecoes_literais"] == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B02 — o `limit` passa a ter teto
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A gramática documentava `1..500` e nada aplicava: era `plan.get("limit", 200)`
+# seguido de `head(limit)`. Combinado com a isenção de orçamento que `agregado`
+# tem, `limit: 50000` entregava a base inteira sem violar regra nenhuma.
+
+
+@pytest.mark.parametrize(
+    "pedido,esperado",
+    [(50000, 500), (0, 1), (-3, 1), (None, 200), ("abc", 200), (37, 37)],
+)
+def test_limit_e_preso_entre_1_e_500(pedido, esperado):
+    tabelas = {
+        "producao": pd.DataFrame(
+            {"g": [f"g{i}" for i in range(600)], "v": [1.0] * 600}
+        )
+    }
+    plano = {
+        "from": "producao",
+        "select": [{"expr": {"agg": "sum", "col": "v"}, "as": "t"}],
+        "group_by": ["g"],
+    }
+    if pedido is not None:
+        plano["limit"] = pedido
+    # Papel `number` no grupo: aqui o alvo é o limit, não a cardinalidade.
+    r = execute_plan(plano, tabelas, column_roles={"g": "number", "v": "number"})
+    assert r["row_count"] == esperado

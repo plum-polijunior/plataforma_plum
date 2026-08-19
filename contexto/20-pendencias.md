@@ -33,8 +33,8 @@ atualizado_em: 2026-08-14
 
 | # | O quê | Por que importa |
 |---|---|---|
-| C1 | ⭐ **Log estruturado no Supabase** (`12-visao-tecnologica.md` §9) | Não existe **nenhuma** métrica de uso hoje. É pré-requisito para decidir qualquer prioridade |
-| C2 | ⭐ **Abstração de provedor de LLM** | Hoje a URL do Gemini está em **4 lugares** em 3 funções. Com 4 call sites é meio dia; com 20 é refatoração |
+| ~~C1~~ | ~~⭐ **Log estruturado no Supabase**~~ | ✅ **Resolvido na Etapa 0 do remake** (2026-08-18): `plum_logs` grava as 4 etapas do chat com token, latência e saída do agente |
+| C2 | ⭐ **Abstração de provedor de LLM** | Hoje a URL do Gemini está em **4 lugares** em 3 funções. Com 4 call sites é meio dia; com 20 é refatoração. ⚠️ É o B05 da Etapa 1 — e só o `ai-plum-chat` vai adotar, porque `dashboard-agent` e `ai-agents` estão fora do escopo do remake |
 | C3 | Renomear a rota `/dashboard` (que é "Minha Organização") | Já custou tempo de leitura mais de uma vez. Vários lugares mudam juntos |
 | C4 | Passo de verificação no fim do onboarding — ler a planilha de verdade | Pega aba errada, base não compartilhada, cabeçalho divergente e coluna sem título **de uma vez**, com a pessoa olhando a tela (I-08) |
 | C5 | Testes E2E (Playwright) dos 6 fluxos que cruzam camadas | Revogação de coluna surtindo efeito e POST direto no executor retornando 401 só se provam ponta a ponta |
@@ -42,6 +42,8 @@ atualizado_em: 2026-08-14
 | C7 | Escala do percentual: 0–1 nativo vs 0–100 em texto | Aberto desde 2026-08-11. A mesma coluna sai em duas escalas conforme a origem da célula |
 | C8 | Fechar a policy `ALL / true` da tabela `Leads` | Dívida D-13 aceita conscientemente. **Fechar antes do primeiro usuário de cliente real** |
 | C9 | Adoção de membros órfãos (conta criada antes da verificação de domínio) | Perfis com `organization_id` NULL não casam em nenhuma policy de SELECT — o admin não consegue nem contá-los |
+| C10 | ⚠️ **`min`/`max` sobre coluna de texto agrupada devolvem `0`** | `_coerce_numeric_for_agg` converte a coluna antes de agregar, então "primeiro cliente por região" sai `0` em vez do nome. Não é proteção, é resposta errada em silêncio. ⚠️ **Não consertar antes do orçamento do B10**: destravar a coerção passa a devolver o literal de verdade, e hoje não há o que cobre isso |
+| C11 | ⚠️ **Dois cabeçalhos que normalizam igual se sobrescrevem em silêncio** | `DatabasePipeline.tsx` monta `normMap[h] = normalizeString(h)` num objeto simples; `Data Venda` e `DATA_VENDA` viram a mesma chave e uma coluna some sem erro nenhum |
 
 ## 🟠 Projeto
 
