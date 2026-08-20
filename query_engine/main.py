@@ -133,6 +133,20 @@ async def execute(
     if not aprovados:
         return {"results": resultados}
 
+    # ⭐ Tolerar coluna ausente SO quando o lote inteiro e `metadados`.
+    #
+    # O `metadados` pede todas as colunas do cargo, e ate 2026-08-20 uma unica
+    # entrada obsoleta na matriz de permissoes derrubava o caminho `ad_hoc`
+    # inteiro — enquanto uma pergunta normal, que pede duas ou tres colunas, nem
+    # percebia. Descrever uma base e onde "esta coluna nao existe mais" e uma
+    # resposta util: o `metadados.descrever` ja devolve `{"existe": false}`.
+    #
+    # ⚠️ A condicao `all(...)` nao e decoracao. Num lote misto, tolerar faria um
+    # pedido COM PLANO rodar sem uma coluna do `where`, devolvendo a conta sobre
+    # a tabela inteira com o rotulo do recorte pedido. Na pratica coleta e
+    # execucao ja vem em lotes separados; isto garante em vez de torcer.
+    so_metadados = all(p.tipo == "metadados" for p in aprovados)
+
     # ── Uma leitura para todos os cards aprovados ────────────────────────────
     try:
         df = sheets.load_columns(
@@ -141,6 +155,7 @@ async def execute(
             payload.tab,
             colunas_a_carregar,
             max_rows=max_rows,
+            tolerar_ausentes=so_metadados,
             # Qual aba, pelo identificador estável. Quando presente tem
             # precedência sobre `payload.tab` — ver `sheets.resolver_aba`.
             tab_gid=payload.tab_gid,

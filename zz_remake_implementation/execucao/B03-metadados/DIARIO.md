@@ -51,6 +51,16 @@ entregaria outra.
 há erro de **nome** — mesma razão pela qual o executor levanta `MissingColumnError` em vez de ignorar
 um filtro.
 
+⚠️ **Correção de 2026-08-20: isto nasceu inalcançável, e só apareceu no B06.** O
+`sheets.load_columns` levanta `SheetError` quando **qualquer** coluna pedida falta no cabeçalho — ou
+seja, `descrever()` nunca chegava a ver uma coluna ausente. A defesa estava escrita no lugar certo e
+o caminho até ela, fechado.
+
+⭐ Custou caro justamente porque o `metadados` pede **todas** as colunas do cargo: uma única entrada
+obsoleta na matriz de permissões derrubava o caminho `ad_hoc` inteiro, enquanto o chat legado — que
+pede duas ou três colunas — respondia normalmente. O conserto é `tolerar_ausentes`, ligado **só**
+quando o lote inteiro é `metadados`.
+
 ### 4. O caminho entra antes do executor, não dentro dele
 
 `metadados` não tem Query Plan, e um plano sem `select` viola o P1.3 — com razão. O desvio fica no

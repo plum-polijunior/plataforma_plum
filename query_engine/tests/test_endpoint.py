@@ -56,11 +56,20 @@ def ambiente(monkeypatch):
         }
     )
 
-    chamadas = {"n": 0, "colunas": None, "tab": None, "tab_gid": None}
+    chamadas = {
+        "n": 0, "colunas": None, "tab": None, "tab_gid": None, "tolerante": None,
+    }
 
-    def fake_load(service, sheet_id, tab, columns, max_rows=None, tab_gid=None):
+    def fake_load(
+        service, sheet_id, tab, columns, max_rows=None, tab_gid=None,
+        tolerar_ausentes=False,
+    ):
         chamadas["n"] += 1
         chamadas["colunas"] = set(columns)
+        # ⭐ Guardado para um teste poder afirmar QUE o lote foi tolerante. A
+        # condicao (`so_metadados`) e o que impede o afrouxamento de alcancar um
+        # pedido com plano, entao ela precisa ser verificavel.
+        chamadas["tolerante"] = tolerar_ausentes
         # Guardados para que um teste possa afirmar QUAL aba foi pedida — a
         # resolução por gid vive em sheets.resolver_aba (test_sheets.py), mas
         # quem repassa o tab_gid do payload é o main.py, e isso se verifica aqui.
@@ -68,7 +77,14 @@ def ambiente(monkeypatch):
         chamadas["tab_gid"] = tab_gid
         # Devolve SÓ as colunas pedidas. É isso que faz a quinta barreira
         # funcionar: o que não foi autorizado nem existe no DataFrame.
-        return base[[c for c in base.columns if c in columns]].copy()
+        achadas = [c for c in base.columns if c in columns]
+        if not achadas:
+            # Espelha o `_fetch_columns_uncached`: nenhuma coluna encontrada
+            # devolve frame VAZIO, não um frame com 13 linhas e zero colunas.
+            # Sem isto o dublê contaria linhas que não existem, e o teste
+            # passaria a verificar uma ficção em vez do contrato real.
+            return pd.DataFrame()
+        return base[achadas].copy()
 
     monkeypatch.setattr(sheets, "load_columns", fake_load)
     monkeypatch.setattr(main, "_google_service", lambda: object())
@@ -431,3 +447,115 @@ def test_pedido_sem_tipo_continua_sendo_plano_normal(client):
     """
     card = _post(client, _corpo()).json()["results"][0]
     assert card["status"] == "ok" and card["row_count"] == 3
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# `metadados` tolera coluna ausente — e SÓ ele
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⭐ O caso real de 2026-08-20. O `metadados` pede TODAS as colunas do cargo,
+# enquanto uma pergunta pede duas ou tres — entao uma unica entrada obsoleta na
+# matriz de permissoes derrubava o caminho `ad_hoc` inteiro, para sempre,
+# enquanto o chat legado respondia normalmente.
+#
+# ⚠️ O `metadados.descrever` ja devolvia `{"existe": false}` desde o B03, e ate
+# aqui era INALCANCAVEL: o `sheets.load_columns` levantava antes. A defesa certa
+# estava escrita no lugar errado.
+
+
+def test_metadados_descreve_o_que_existe_e_reporta_o_que_sumiu(client):
+    """
+    `margem_lucro` esta no `allowed_columns` e NAO existe na planilha (o dublê
+    so devolve as colunas que a base tem). O pedido tem de sobreviver.
+    """
+    corpo = _corpo(
+        plans=[{
+            "card_id": "desc",
+            "tipo": "metadados",
+            "plan": {},
+            "resolved_columns": ["regiao", "faturamento", "coluna_que_sumiu"],
+        }],
+        allowed_columns=["regiao", "faturamento", "coluna_que_sumiu"],
+    )
+    card = _post(client, corpo).json()["results"][0]
+
+    assert card["status"] == "ok"
+    assert card["colunas"]["regiao"]["existe"] is True
+    # ⭐ O A2 precisa VER que perguntou por algo que nao esta la, senao presume
+    # ausencia de dado onde ha erro de nome.
+    assert card["colunas"]["coluna_que_sumiu"] == {"existe": False}
+
+
+@pytest.mark.invariante
+def test_pedido_com_plano_continua_falhando_com_coluna_ausente(client):
+    """
+    ⚠️ O contraponto: tolerar aqui faria o `where` rodar sem uma das colunas e
+    devolver a conta sobre a tabela inteira com o rotulo do recorte pedido —
+    numero errado com cara de certo.
+
+    ⚠️ Nota honesta sobre o que este teste alcanca: o dublê do Sheets nao sabe
+    levantar `SheetError`, entao quem barra aqui e a QUINTA barreira (o
+    `MissingColumnError` do executor), nao a leitura. O invariante verificado e
+    "plano com coluna ausente falha", que e o que importa; que ele falhe em duas
+    camadas independentes e defesa em profundidade, nao redundancia. A condicao
+    da tolerancia em si esta em `test_lote_misto_nao_e_tolerante`.
+    """
+    corpo = _corpo(
+        plans=[{
+            "card_id": "soma",
+            "plan": {
+                "select": [{"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"}],
+                "where": {"left": "coluna_que_sumiu", "op": "=", "right": "x"},
+            },
+            "resolved_columns": ["faturamento", "coluna_que_sumiu"],
+        }],
+        allowed_columns=["faturamento", "coluna_que_sumiu"],
+    )
+    card = _post(client, corpo).json()["results"][0]
+
+    assert card["status"] == "error"
+
+
+@pytest.mark.invariante
+def test_lote_misto_nao_e_tolerante(client, ambiente):
+    """
+    ⭐ A condicao `all(tipo == "metadados")` do main.py, exercida. Um `metadados`
+    ao lado de um pedido com plano NAO pode ligar a tolerancia para os dois: o
+    lote e uma leitura so, e o plano precisa dela estrita.
+    """
+    corpo = _corpo(
+        plans=[
+            {"card_id": "desc", "tipo": "metadados", "plan": {},
+             "resolved_columns": ["regiao"]},
+            {"card_id": "soma",
+             "plan": {"select": [{"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"}],
+                      "group_by": ["regiao"]},
+             "resolved_columns": ["faturamento", "regiao"]},
+        ],
+        allowed_columns=["faturamento", "regiao"],
+    )
+    _post(client, corpo)
+
+    assert ambiente["tolerante"] is False
+
+
+def test_lote_so_de_metadados_e_tolerante(client, ambiente):
+    _post(client, _pedido_metadados(["regiao"]))
+    assert ambiente["tolerante"] is True
+
+
+def test_todas_as_colunas_sumidas_nao_estoura(client):
+    """
+    Frame vazio em vez de excecao. `existe: false` para todas e a verdade; um
+    500 aqui faria o modo sombra do B06 parecer falha do chat.
+    """
+    corpo = _corpo(
+        plans=[{"card_id": "desc", "tipo": "metadados", "plan": {},
+                "resolved_columns": ["fantasma_a", "fantasma_b"]}],
+        allowed_columns=["fantasma_a", "fantasma_b"],
+    )
+    card = _post(client, corpo).json()["results"][0]
+
+    assert card["status"] == "ok"
+    assert card["n_linhas"] == 0
+    assert card["colunas"]["fantasma_a"] == {"existe": False}

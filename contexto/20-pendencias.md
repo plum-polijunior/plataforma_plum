@@ -45,6 +45,7 @@ atualizado_em: 2026-08-14
 | C9 | Adoção de membros órfãos (conta criada antes da verificação de domínio) | Perfis com `organization_id` NULL não casam em nenhuma policy de SELECT — o admin não consegue nem contá-los |
 | C10 | ⚠️ **`min`/`max` sobre coluna de texto agrupada devolvem `0`** | `_coerce_numeric_for_agg` converte a coluna antes de agregar, então "primeiro cliente por região" sai `0` em vez do nome. Não é proteção, é resposta errada em silêncio. ⚠️ **Não consertar antes do orçamento do B10**: destravar a coerção passa a devolver o literal de verdade, e hoje não há o que cobre isso |
 | C11 | ⚠️ **Dois cabeçalhos que normalizam igual: uma coluna some na IMPORTAÇÃO** | ⭐ Investigado em 2026-08-20, e é mais estreito do que parecia. O **executor já recusa**, deliberadamente e com mensagem boa (`sheets.py`: *"não dá para saber qual usar… renomeie uma delas"*). O furo silencioso é só no `DatabasePipeline.tsx`, que monta `obj[normMap[h]] = row[i]` — a segunda coluna some do `schema_metadata`, e por tabela do `allowed_columns`. ⚠️ **Consertar só o `sheets.py` piora**: geraria uma coluna carregável e não autorizável, falhando com "coluna fora da permissão do cargo", que aponta para o lugar errado. O conserto nasce no **Agente 3** (onboarding), que já vê a amostra e nomeia conceitos — ele propõe dois nomes distintos e a pessoa confirma uma vez por base; casa com o C4. ⛔ Sufixo por ordem de coluna (`_2`) foi **recusado**: reordenar a planilha trocaria o sufixo de dono e o `allowed_columns` apontaria para a coluna errada — mesma classe de falha que o `google_sheet_gid` evita |
+| C12 | ⚠️ **`allowed_columns` nunca é revalidado contra o cabeçalho da planilha** | Achado em 2026-08-20 pelo caminho `ad_hoc`. A matriz de permissões é curada à mão e **não** é refeita ao recadastrar a base — então ela envelhece em silêncio até alguém pedir a coluna que sumiu. Uma pergunta normal pede 2–3 colunas e não percebe; o pedido `metadados` pede **todas** e percebia derrubando tudo (consertado). ⭐ O `metadados` é justamente a peça que tornaria a verificação barata: desde o conserto ele devolve `{"existe": false}` por coluna, ou seja, **já sabe dizer quais colunas permitidas sumiram da planilha**. Casa com o C4 |
 
 ## 🟠 Projeto
 
@@ -94,7 +95,9 @@ regressão.
 | `plum_chat.assunto` vestigial | Mantida de propósito: é o registro de que a ideia existe e continua boa (D-026) |
 | Migrations aplicadas à mão | Decisão consciente (D-005) |
 | ⚠️ **Existem funções publicadas que não estão no repositório** | Medido em 2026-08-20: a Management API lista **seis** funções e o repositório tem **cinco**. A sexta (`plum-chat`, da primeira PRD) está em T7. ⭐ A lição fica mesmo depois de apagá-la: **`ls supabase/functions/` não é a lista do que está no ar** — a lista real vem da API. Já tinha acontecido com o `dashboard-agent` em 2026-08-11 (I-03) |
-
+ao cadastrar uma planilha, e mudar uma coluna dela, tem que recadastrá-la
+ao clicar em refinar semântica, ele refina a semântica de TODOS os itens, até mesmo os que já estavam certos. mudar pra refinar a semântica somente dos que sofreram alterações
+ao cadastrar uma planilha (concluir as 5 etaps), clicar em "conectar nova planilha" e recadastrá-la, o banco de dados não armazena os dados da nova planilha. deveria aparecer "planilha já cadastrada" ou "já existe um rascunho dessa planilha"
 ---
 
 ## Já resolvido — não reabrir

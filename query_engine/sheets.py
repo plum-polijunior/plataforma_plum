@@ -371,9 +371,25 @@ def get_meta(service, sheet_id: str, tab: str) -> SheetMeta:
     return meta
 
 
-def _ranges_for(headers: Sequence[str], wanted: Set[str], tab: str):
+def _ranges_for(
+    headers: Sequence[str], wanted: Set[str], tab: str, tolerar_ausentes: bool = False
+):
     """
     Mapeia nome de coluna para faixa A1. Devolve (ranges, nomes_na_ordem).
+
+    ⭐ `tolerar_ausentes` existe para o pedido `metadados`, e SÓ para ele. Ele
+    pede TODAS as colunas do cargo, enquanto uma pergunta pede duas ou três —
+    então uma unica entrada obsoleta na matriz de permissoes derrubava o caminho
+    `ad_hoc` inteiro, para sempre, enquanto o chat legado nem percebia.
+    Descrever uma base e justamente onde "esta coluna nao existe mais" e uma
+    RESPOSTA util, nao uma falha. Ver `metadados.descrever`, que ja devolve
+    `{"existe": false}` — e que ate 2026-08-20 era inalcancavel, porque a
+    excecao abaixo disparava antes.
+
+    ⚠️ Falso por padrao, e o chamador so liga quando o lote inteiro e
+    `metadados`. Tolerar num pedido COM PLANO faria o `where` rodar sem uma das
+    colunas, devolvendo a conta sobre a tabela inteira com o rotulo do recorte
+    pedido — numero errado com cara de certo.
 
     A comparação é feita no nome NORMALIZADO do cabeçalho (`normalizar_coluna`),
     do mesmo jeito que a importação normaliza ao montar o `schema_metadata`.
@@ -444,16 +460,30 @@ def _ranges_for(headers: Sequence[str], wanted: Set[str], tab: str):
                 f" Atencao: {vazios} coluna(s) da aba estao SEM cabecalho na "
                 "primeira linha; preencha o titulo delas para poderem ser usadas."
             )
-        raise SheetError(recado)
+        if not tolerar_ausentes:
+            raise SheetError(recado)
+        # O warning acima ja saiu: a ausencia continua visivel no CloudWatch,
+        # so nao derruba a descricao das colunas que existem.
+        logger.info("Ausentes toleradas (pedido de metadados): %s", sorted(faltando))
 
     return ranges, nomes
 
 
 def _fetch_columns_uncached(
-    service, sheet_id: str, tab: str, columns: Set[str], headers: List[str]
+    service,
+    sheet_id: str,
+    tab: str,
+    columns: Set[str],
+    headers: List[str],
+    tolerar_ausentes: bool = False,
 ) -> pd.DataFrame:
     """A leitura de rede em si — só roda em cache miss. Ver `load_columns`."""
-    ranges, nomes = _ranges_for(headers, columns, tab)
+    ranges, nomes = _ranges_for(headers, columns, tab, tolerar_ausentes)
+    if not ranges:
+        # Todas as colunas pedidas sumiram da planilha. Frame vazio com as
+        # colunas certas seria mentira; frame sem coluna nenhuma faz o
+        # `descrever` reportar `existe: false` para todas, que e a verdade.
+        return pd.DataFrame()
 
     try:
         resp = (
@@ -496,6 +526,7 @@ def load_columns(
     columns: Set[str],
     max_rows: Optional[int] = None,
     tab_gid: Optional[int] = None,
+    tolerar_ausentes: bool = False,
 ) -> pd.DataFrame:
     """
     Carrega só as colunas pedidas, numa requisição (ou do cache, ver abaixo).
@@ -532,7 +563,16 @@ def load_columns(
             f"quem administra a conta.".replace(",", ".")
         )
 
-    chave = cache.make_cache_key(f"{sheet_id}::{tab}", list(columns))
+    # ⚠️ A tolerancia entra na chave do cache. Sem isso, um pedido `metadados`
+    # tolerante gravaria um frame SEM a coluna ausente, e uma pergunta normal
+    # com o mesmo conjunto de colunas leria esse frame do cache em vez de
+    # falhar — o afrouxamento vazaria para o caminho que precisa ser estrito.
+    chave = cache.make_cache_key(
+        f"{sheet_id}::{tab}" + ("::tolerante" if tolerar_ausentes else ""), list(columns)
+    )
     return cache.get_or_fetch(
-        chave, lambda: _fetch_columns_uncached(service, sheet_id, tab, columns, meta.headers)
+        chave,
+        lambda: _fetch_columns_uncached(
+            service, sheet_id, tab, columns, meta.headers, tolerar_ausentes
+        ),
     )

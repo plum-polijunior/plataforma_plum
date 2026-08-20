@@ -713,16 +713,23 @@ async function handleAdHocPlanejar(
     colunas !== null &&
     Object.keys(colunas).length > 0;
 
+  // ⚠️ Um código por CAUSA, não um código para "deu ruim". A primeira coisa que
+  // alguém faz ao investigar é `group by codigo_erro`; com um código só, isso
+  // não separa "o executor recusou" de "veio ok e vazio", e a diferença entre
+  // as duas é a diferença entre mexer na planilha e mexer no código.
+  const codigoDoErro = () => {
+    if (!resposta.ok) return `metadados_http_${resposta.status}`;
+    if (descricao?.status !== "ok") return "metadados_executor";
+    return "metadados_vazio";
+  };
+
   await registrar({
     etapa: "reconhecedor",
     status: descricaoValida ? "ok" : "erro",
-    codigoErro: descricaoValida
-      ? null
-      : !resposta.ok
-      ? `metadados_http_${resposta.status}`
-      : "metadados_sem_colunas",
+    codigoErro: descricaoValida ? null : codigoDoErro(),
     latenciaMs: Date.now() - t1,
-    // O erro do executor vai para cá, que é onde ele sempre deveria ter ido.
+    // O erro do executor vai para cá, que é onde ele sempre deveria ter ido —
+    // e não para dentro do reconhecimento, onde parecia opinião do modelo.
     respostaAgente: descricaoValida ? null : descricao ?? null,
   });
 
