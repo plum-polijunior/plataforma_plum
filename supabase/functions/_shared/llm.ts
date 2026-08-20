@@ -13,6 +13,7 @@ import { falha, type PedidoLLM, type RespostaLLM, resolver } from "./llm_core.ts
 
 export {
   MODELO_POR_PAPEL,
+  MODELOS,
   type Papel,
   type PedidoLLM,
   type Provedor,

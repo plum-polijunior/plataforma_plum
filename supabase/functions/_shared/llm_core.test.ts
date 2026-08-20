@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MODELO_POR_PAPEL,
+  MODELOS,
   type Papel,
   resolver,
   tokensDaAnthropic,
@@ -101,15 +102,28 @@ describe("resolução de papel", () => {
     }
   });
 
-  it("as três ações do caminho atual não mudaram de modelo", () => {
-    // ⚠️ O B05 não pode alterar o comportamento do chat legado: ele é o que
-    // responde as perguntas hoje, e a linha de base do remake foi medida com
-    // este modelo.
-    for (const papel of ["guard", "plan_query", "synthesize_answer"] as Papel[]) {
-      expect(resolver(papel, true)).toMatchObject({
+  it("⭐ as duas cadeias usam exatamente o mesmo Flash", () => {
+    // A Etapa 1 compara o `ad_hoc` com o `legado`. Se as duas cadeias rodassem
+    // em modelos diferentes, a comparação ficaria contaminada: não daria para
+    // saber se o remake ficou melhor ou se só ganhou um modelo mais novo.
+    const legado: Papel[] = ["guard", "plan_query", "synthesize_answer"];
+    const novo: Papel[] = ["porteiro", "reconhecedor"];
+
+    for (const papel of [...legado, ...novo]) {
+      expect(resolver(papel, true), papel).toMatchObject({
         provedor: "google",
-        modelo: "gemini-3.5-flash",
+        modelo: MODELOS.FLASH,
       });
+    }
+  });
+
+  it("nenhum identificador de modelo aparece solto na tabela", () => {
+    // ⚠️ O literal `gemini-3.5-flash` aparecia cinco vezes aqui, e subir de
+    // versão era cinco edições com quatro chances de esquecer uma. Este teste
+    // é o que impede a repetição de voltar.
+    const conhecidos: string[] = Object.values(MODELOS);
+    for (const [papel, destino] of Object.entries(MODELO_POR_PAPEL)) {
+      expect(conhecidos, papel).toContain(destino.modelo);
     }
   });
 });

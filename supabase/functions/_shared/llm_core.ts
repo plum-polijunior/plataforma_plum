@@ -43,23 +43,56 @@ export interface Destino {
 }
 
 /**
+ * ⭐ Os identificadores de modelo, cada um escrito **uma vez**.
+ *
+ * Subir de versão é editar aqui, e vale para todos os papéis que usam aquele
+ * modelo de uma vez só. Antes o literal `gemini-3.5-flash` aparecia cinco vezes
+ * na tabela abaixo, e subir de versão era cinco edições com quatro chances de
+ * esquecer uma — o tipo de divergência que ninguém percebe até comparar custo
+ * entre duas etapas e achar a diferença estranha.
+ *
+ * ⚠️ **De propósito NÃO são variáveis de ambiente.** Ler o modelo de um secret
+ * permitiria trocar sem republicar, e é tentador — mas: um erro de digitação
+ * derruba todas as perguntas daquele papel, nenhum teste alcança o valor, e o
+ * que está rodando deixa de estar no repositório. Esta última é literalmente a
+ * lição do I-03 (*"o código no repositório não é o que está rodando"*), que já
+ * custou caro aqui. Constante em código é versionada, revisável e testável; o
+ * preço é um `functions deploy`, que este projeto exige de qualquer forma.
+ *
+ * ⚠️ E há um segundo motivo, específico: trocar um secret **incrementa o
+ * `version`** da função sem código novo. Seria criar, de propósito, mais casos
+ * do sinal falso que o I-03 manda ignorar.
+ */
+export const MODELOS = {
+  /** Rápido e barato. Classificação e reconhecimento, que rodam em toda pergunta. */
+  FLASH: "gemini-3.7-flash",
+  /** O caro. Query Plan e prosa — onde errar custa mais que a chamada. */
+  OPUS: "claude-opus-5",
+} as const;
+
+/**
  * ⭐ A tabela que é o ponto do bloco. Trocar de modelo é editar uma linha.
  *
  * Porteiro e reconhecedor são classificação sobre entrada curta: Flash resolve,
  * e são os dois que rodam em toda pergunta. Planejador e intérprete carregam a
  * dificuldade — o Query Plan e a prosa que não pode fazer conta (R-13) — e vão
  * para o modelo caro.
+ *
+ * ⭐ **As duas cadeias usam o MESMO Flash de propósito.** A Etapa 1 compara o
+ * caminho `ad_hoc` com o `legado`, e diferença de modelo entre eles
+ * contaminaria a comparação: não daria para saber se o remake ficou melhor ou
+ * se só ganhou um modelo mais novo.
  */
 export const MODELO_POR_PAPEL: Readonly<Record<Papel, Destino>> = {
-  guard: { provedor: "google", modelo: "gemini-3.5-flash" },
-  plan_query: { provedor: "google", modelo: "gemini-3.5-flash" },
-  synthesize_answer: { provedor: "google", modelo: "gemini-3.5-flash" },
+  guard: { provedor: "google", modelo: MODELOS.FLASH },
+  plan_query: { provedor: "google", modelo: MODELOS.FLASH },
+  synthesize_answer: { provedor: "google", modelo: MODELOS.FLASH },
 
-  porteiro: { provedor: "google", modelo: "gemini-3.5-flash" },
-  reconhecedor: { provedor: "google", modelo: "gemini-3.5-flash" },
+  porteiro: { provedor: "google", modelo: MODELOS.FLASH },
+  reconhecedor: { provedor: "google", modelo: MODELOS.FLASH },
 
-  planejador: { provedor: "anthropic", modelo: "claude-opus-5" },
-  interprete: { provedor: "anthropic", modelo: "claude-opus-5" },
+  planejador: { provedor: "anthropic", modelo: MODELOS.OPUS },
+  interprete: { provedor: "anthropic", modelo: MODELOS.OPUS },
 };
 
 export interface PedidoLLM {

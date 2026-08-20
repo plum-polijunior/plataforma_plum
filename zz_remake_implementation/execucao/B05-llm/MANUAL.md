@@ -36,26 +36,30 @@ order by created_at desc
 limit 10;
 ```
 
-Esperado: `modelo = 'gemini-3.5-flash'`, `provedor = 'google'`, e **tokens não nulos**.
+Esperado: `modelo = 'gemini-3.7-flash'`, `provedor = 'google'`, e **tokens não nulos**.
 
 ⚠️ **Se `tokens_entrada` vier nulo, pare.** Foi exatamente o que o B05 mexeu: a leitura de token saiu
 do log e foi para dentro de cada adaptador. Nulo aqui significa que a mudança quebrou "custo por
 pergunta", que é a métrica principal do log.
 
 ⭐ A diferença em relação a ontem: essas duas colunas eram **constantes cravadas no código**. Agora
-vêm do adaptador — então quando um papel mudar de modelo, o log conta a verdade em vez de repetir
-`gemini-3.5-flash`.
+vêm do adaptador — então quando um papel mudar de modelo, o log conta a verdade.
+
+⚠️ **O Flash subiu de 3.5 para 3.7 neste bloco**, a seu pedido. As linhas antigas do `plum_logs`
+continuam com `gemini-3.5-flash`, e isso é bom: a coluna `modelo` separa as duas fases, então dá
+para comparar custo e latência antes e depois sem confundir as medições.
 
 **3. Faça uma pergunta fora de escopo** e confira que o `guard` ainda grava `status = 'bloqueado'`.
 
 **4. Procure `[llm]` no log da função.** Não deve aparecer nada. Esse prefixo só sai quando um papel
 que deveria ir para a Anthropic cai no Gemini — e hoje nenhum papel da cadeia atual vai para lá.
 
-## ⭐ O que muda quando você criar a `ANTHROPIC_API_KEY`
+## ⭐ A `ANTHROPIC_API_KEY` já está criada
 
-Nada de código. `supabase secrets set ANTHROPIC_API_KEY=...` e republicar.
+Você salvou o secret em 2026-08-20. Nada mais a fazer: o código lê por `Deno.env.get` dentro do
+runtime, e a chave **não precisa passar por mim** em momento nenhum.
 
-A partir daí, os papéis `planejador` e `interprete` — que nascem no **B07** — passam a rodar em
+A partir do próximo deploy, os papéis `planejador` e `interprete` — que nascem no **B07** — passam a rodar em
 `claude-opus-5`. Sem a chave eles caem no Gemini, e cada chamada emite um aviso `[llm]` no console e
 grava `provedor = 'google'` no log. **A degradação é visível de propósito:** um planejador rodando em
 Flash é uma cadeia mais fraca que a projetada, e isso não pode virar uma suspeita seis semanas

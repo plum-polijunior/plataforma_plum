@@ -21,7 +21,7 @@ O usuário conecta um Google Sheets, a IA gera um dicionário semântico da base
 conversa com os dados em português. **A IA nunca calcula: ela planeja, o Python executa.**
 
 Stack: React 18 + Vite 5 + TypeScript + Tailwind + shadcn/ui · Supabase (Postgres + RLS +
-Edge Functions Deno) · Google Gemini (`gemini-3.5-flash`) · Pandas (executor determinístico,
+Edge Functions Deno) · Google Gemini (`gemini-3.7-flash`) e Anthropic (`claude-opus-5`) · Pandas (executor determinístico,
 hoje rodando como **AWS Lambda** — ver §5). Projeto Supabase: `rjwidarrsykufuifzunu`.
 Deploy do front: Vercel (SPA rewrite em `vercel.json`). Deploy do executor: GitHub Actions →
 ECR → Lambda, via OIDC (`infra/aws/`).
