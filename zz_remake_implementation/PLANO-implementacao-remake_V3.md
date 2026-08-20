@@ -393,9 +393,13 @@ existindo, porque um card que muda sem ninguém notar é um card que mente na pr
 3. 👤 publicar **os três** consumidores de `query_plan.ts`, conferindo `ezbr_sha256` — `version` sobe
    em mudança de secret e **não serve de prova**
 
-⚠️ **Resolver a exceção D-028 aqui.** `ai-plum-chat` está com cópia **antiga** de `query_plan.ts`, de
-propósito (a Fase 5b não a publicou). Publicar o B02 nos três fecha a divergência — registre o
-`ezbr_sha256` dos três **antes**, como marco zero.
+✅ **A exceção D-028 já não existe** — atualizado em 2026-08-20. `ai-plum-chat` rodava com cópia
+antiga de `query_plan.ts` desde a Fase 5b; o deploy da Etapa 0 a republicou, e a medição pela
+Management API mostra os três consumidores na mesma versão. O B02 não herda essa dívida.
+
+⭐ **O que fica da história:** divergência de `_shared/` é **invisível** até alguém emitir a forma
+nova — nada quebra, nenhum teste pega, porque os dois lados ficam internamente coerentes. Oito dias
+assim, sem sintoma. É por isso que a regra é publicar os três juntos.
 
 ## 1.3. Os demais blocos, em uma linha cada
 

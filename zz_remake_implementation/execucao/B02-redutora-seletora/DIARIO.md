@@ -66,8 +66,13 @@ constante sem consumidor é o mesmo código especulativo que a Etapa 0 recusou a
 chave. Ela nasce no B04, onde é lida.
 
 ⭐ **Consequência boa: o B02 não precisa de deploy de Edge Function nenhum.** Não toca em
-`query_plan.ts`, então o portão dos três consumidores (D-028, I-03) também não se aplica. É um
-`git push` e o Lambda sobe sozinho.
+`query_plan.ts`, então o portão dos três consumidores (I-03) também não se aplica. É um `git push` e
+o Lambda sobe sozinho.
+
+⚠️ **Atualização de 2026-08-20:** o manual deste bloco tinha um passo 1 pedindo o registro do
+`ezbr_sha256` como marco zero da etapa. Ele saiu — a D-028, que era a última justificativa dele, foi
+encerrada quando a Etapa 0 republicou o `ai-plum-chat`. Medido pela Management API: os três
+consumidores estão na mesma versão.
 
 ---
 

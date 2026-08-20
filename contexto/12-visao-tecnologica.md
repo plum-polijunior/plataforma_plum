@@ -228,10 +228,10 @@ autorizado sem ninguém olhar. Ver `31-incidentes-e-licoes.md` I-05.
 | análise declarada | ⭐ **não precisa** — o RBAC roda sobre os planos **compilados**. Outra vantagem do §2.2 |
 | `amostra` | as colunas pedidas + checagem de sensibilidade + orçamento |
 
-⚠️ **E a armadilha de deploy:** `ai-plum-chat` está com cópia antiga de `query_plan.ts` de propósito
-(D-028). **Publique os três consumidores ANTES de o prompt emitir forma nova**, conferindo
-`ezbr_sha256`. Na ordem inversa, a coluna não entra em `resolved_columns` e a pergunta morre em
-`MissingColumnError`, longe da causa.
+⚠️ **E a armadilha de deploy:** **publique os três consumidores de `query_plan.ts` ANTES de o
+prompt emitir forma nova**, conferindo `ezbr_sha256`. Na ordem inversa, a coluna não entra em
+`resolved_columns` e a pergunta morre em `MissingColumnError`, longe da causa. ⭐ E a divergência não
+avisa enquanto isso: ela só aparece quando a forma nova chega (D-028).
 
 ---
 

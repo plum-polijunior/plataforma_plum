@@ -256,7 +256,15 @@ chat nunca gera a forma nova, então a cópia antiga nunca a encontra.
 ⚠️ **Quem ligar agrupamento por período no chat tem de publicar `ai-plum-chat` ANTES de mudar o
 prompt.** Na ordem inversa, a coluna de data não entra em `resolved_columns` e a pergunta morre em
 `MissingColumnError` — falha fechada, mas confusa de diagnosticar.
-**Status:** vigente. Ver `supabase/functions/CLAUDE.md`.
+**Status:** ✅ **RESOLVIDA em 2026-08-20.** A Etapa 0 do remake republicou `ai-plum-chat` (versão 59,
+`updated_at` 12:40 UTC) e o `query_plan.ts` não muda em código desde esta própria decisão. Medido
+pela Management API: os três consumidores estão com a mesma versão do interpretador. A exceção durou
+oito dias.
+
+⭐ **A lição que sobrevive à decisão, e é maior que ela:** cópia divergente de `_shared/` é
+**invisível até alguém emitir a forma nova**. Nada quebra, nada avisa, nenhum teste pega — porque os
+dois lados estão internamente coerentes. Vale igual para `gemini_parsing.ts`, que tem três
+consumidores próprios. É por isso que a regra é publicar todos juntos, e não "publicar quem mudou".
 
 ---
 

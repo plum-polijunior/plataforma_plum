@@ -23,11 +23,12 @@ atualizado_em: 2026-08-14
 | # | O quê | Nota |
 |---|---|---|
 | T1 | ⚠️ **Aplicar a migration `20260812140000_plum_chat_plan_query.sql`** no SQL Editor | Sem ela o insert do chat falha — `dataset_id` e `plan_query` não existem. Par indivisível com a Edge Function |
-| T2 | ⚠️ **Republicar `ai-plum-chat`** (o Agente Z mudou: saiu o `assunto`) | Confirmar por `ezbr_sha256`, não por `version` |
+| T2 | ~~Republicar `ai-plum-chat`~~ — ✅ **feito em 2026-08-20**, no deploy da Etapa 0 do remake (versão 59) |
 | T3 | ~~Corrigir o passo-a-passo de migration~~ — **resolvido por remoção**: o arquivo foi apagado e o procedimento ficou em `supabase/migrations/CLAUDE.md` |
 | T4 | `query_engine/.pytest_cache/` no `.gitignore` | Arquivo gerado versionado |
 | T5 | ~~Marcar o PRD do query engine como superado no ponto do cache~~ — **resolvido por remoção** (arquivo apagado em 2026-08-14) |
 | T6 | Dividir `12-visao-tecnologica.md` (429 linhas) em `12a-arquiteto` / `12b-contrato` / `12c-dados` | Estourou o teto de 400 da regra 4 do `contexto/CLAUDE.md`. `30-decisoes` e `31-incidentes` têm exceção declarada; este não |
+| T7 | ⚠️ **Apagar a Edge Function órfã `plum-chat`** | ⭐ Ver a linha nova em "Dívidas conhecidas". `ACTIVE`, sem código no repositório, `verify_jwt: false`. O comando é `DELETE /v1/projects/{ref}/functions/plum-chat` |
 
 ## 🔵 Claro — sabe-se o que fazer
 
@@ -92,7 +93,7 @@ regressão.
 | `organizations.dashboard_k_min` vestigial | Migration não destrutiva (D-005). Registro histórico de D-012 |
 | `plum_chat.assunto` vestigial | Mantida de propósito: é o registro de que a ideia existe e continua boa (D-026) |
 | Migrations aplicadas à mão | Decisão consciente (D-005) |
-| `ai-plum-chat` com cópia antiga de `query_plan.ts` | Exceção deliberada (D-028). ⚠️ Ler antes de publicar qualquer coisa |
+| ⚠️ **Existem funções publicadas que não estão no repositório** | Medido em 2026-08-20: a Management API lista **seis** funções e o repositório tem **cinco**. A sexta (`plum-chat`, da primeira PRD) está em T7. ⭐ A lição fica mesmo depois de apagá-la: **`ls supabase/functions/` não é a lista do que está no ar** — a lista real vem da API. Já tinha acontecido com o `dashboard-agent` em 2026-08-11 (I-03) |
 
 ---
 
@@ -113,3 +114,5 @@ Registrado para que ninguém "conserte" de novo:
 | Persistência de tema + vazamento para a landing | 2026-08-12 | RPC `definir_tema()` + limpeza do efeito (I-06) |
 | Aba "Entrada & Domínios" em Minha Organização | 2026-08-12 | feito; ficou de fora a adoção de órfãos (C9) |
 | Privacidade diferencial contra ataque de diferenciação | 2026-08-08 | **moot** — caiu junto com o k-anonimato |
+| `ai-plum-chat` com cópia antiga de `query_plan.ts` | 2026-08-20 | exceção deliberada da Fase 5b, encerrada pelo deploy da Etapa 0 (D-028). Durou 8 dias |
+| Log estruturado no Supabase | 2026-08-18 | `plum_logs` — era o C1 desta lista |

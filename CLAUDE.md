@@ -697,22 +697,11 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
       em 2026-08-11 o `dashboard-agent` estava no ar sem estar em commit nenhum, e teria
       ficado para trás com a versão antiga do `query_plan.ts` empacotada.
 
-      🚨 **EXCEÇÃO DELIBERADA, vigente desde a Fase 5b (2026-08-12): `ai-plum-chat` está
-      com uma cópia ANTIGA de `query_plan.ts` em produção, de propósito.** A Fase 5b
-      ensinou o `extractColumns` a ler `group_by: [{col, trunc}]`, publicou
-      `dashboard-execute` e `dashboard-agent`, e **não** publicou o chat — decisão de
-      produto (D7 do plano da fase), para não subir o repositório por cima de alteração
-      não versionada nessa função, que é o risco descrito no §1 acima.
-
-      É seguro **enquanto** o prompt do Agente A não emitir a forma nova: o chat nunca
-      gera `{col, trunc}`, então a cópia antiga nunca a encontra.
-
-      **Quem for ligar agrupamento por período no CHAT tem que publicar `ai-plum-chat`
-      ANTES de mudar o prompt do Agente A.** Na ordem inversa, o chat emite
-      `{col, trunc}`, a cópia antiga não extrai a coluna de data, ela não entra em
-      `resolved_columns`, o executor não a carrega e a pergunta morre em
-      `MissingColumnError`. Falha fechada e barulhenta, não vazamento (ver §2 do plano da
-      Fase 5b) — mas confusa de diagnosticar, porque o erro aparece longe da causa.
+      ⭐ **Divergência não avisa.** Ela é invisível até alguém emitir a forma nova: nada
+      quebra, nenhum teste pega, porque os dois lados estão internamente coerentes. Foi
+      assim que `ai-plum-chat` passou oito dias com uma cópia antiga de `query_plan.ts`
+      sem nenhum sintoma — a exceção deliberada da Fase 5b, encerrada em 2026-08-20
+      (D-028). É o motivo de a regra ser "publique todos", e não "publique quem mudou".
 - [ ] Mexeu na gramática do Query Plan? São **dois** prompts que a emitem, com textos
       independentes: o Agente A (`ai-plum-chat`, ação `plan_query`) e o Agente Tarsila do
       Amaral (`dashboard-agent`, `INSTRUCAO_CARD`). E **três** lugares que a interpretam:

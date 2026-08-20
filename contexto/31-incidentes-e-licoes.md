@@ -102,7 +102,14 @@ sabe o critério de seleção dele.
 comportamento de Edge Function, confirme a versão implantada — senão você analisa linhas que
 produção nunca executou.
 
-**Consequência viva hoje:** a exceção deliberada de `ai-plum-chat` — `30-decisoes.md` D-028.
+**Consequência que durou oito dias:** a exceção deliberada de `ai-plum-chat` — `30-decisoes.md`
+D-028, encerrada em 2026-08-20.
+
+⚠️ **Um número deste relato não bate com a medição de 2026-08-20.** Acima está registrado que as
+funções ficaram com `updated_at` `18:38:22Z`; a Management API diz `2026-08-12 15:51:31.617 UTC`, e
+`updated_at` só anda para a frente. O **fenômeno** está confirmado — cinco funções com o mesmo
+carimbo até o milissegundo, o que nenhum deploy manual produz —, mas o relógio anotado veio de outra
+fonte que não a API. Quem revisitar isto, corrija a partir da medição, não daqui.
 
 ---
 

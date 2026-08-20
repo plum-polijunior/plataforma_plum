@@ -62,7 +62,7 @@ atualizado_em: 2026-08-18
 | O Z-dash bloqueia por segurança | É **fail-open de propósito** — é economia de custo. Quem protege dado é o RBAC | `30-decisoes.md` D-023 |
 | ⚠️ Push publica a Edge Function | Publica com **cobertura desconhecida**. Publique à mão e confira `ezbr_sha256` | `31-incidentes-e-licoes.md` I-03 |
 | `_shared/` é compartilhado em runtime | É empacotado **por função**. Publicar um consumidor só deixa cópias divergentes do RBAC | `supabase/functions/CLAUDE.md` |
-| Todas as funções estão na versão do repo | ⚠️ `ai-plum-chat` está com cópia **antiga** de `query_plan.ts`, **de propósito** | `30-decisoes.md` D-028 |
+| Divergência de `_shared/` avisa de algum jeito | ⚠️ **Não avisa.** É invisível até alguém emitir a forma nova — os dois lados ficam internamente coerentes e nenhum teste pega | `30-decisoes.md` D-028 |
 | `version` provando que o deploy subiu | `version` sobe em mudança de secret, sem código novo. Só `ezbr_sha256` prova | `31-incidentes-e-licoes.md` I-03 |
 
 ## Sobre front e segurança

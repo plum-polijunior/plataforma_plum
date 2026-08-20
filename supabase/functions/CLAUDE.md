@@ -31,16 +31,11 @@ Mexeu em `_shared/`? Publique **todos** os consumidores, ou ficam cópias diverg
 Confira a lista real com `mcp__supabase__list_edge_functions` antes de assumir — em 2026-08-11 o
 `dashboard-agent` estava no ar sem estar em commit nenhum.
 
-## 🚨 3. EXCEÇÃO DELIBERADA: `ai-plum-chat` está com `query_plan.ts` ANTIGO
+⭐ **Divergência não avisa.** Ela é invisível até alguém emitir a forma nova: nada quebra, nenhum
+teste pega, porque os dois lados estão internamente coerentes. Foi assim que `ai-plum-chat` passou
+oito dias com uma cópia antiga sem nenhum sintoma (D-028, encerrada em 2026-08-20).
 
-De propósito, desde a Fase 5b (2026-08-12). É seguro **enquanto** o prompt do Agente A não emitir
-`group_by: [{col, trunc}]` — o chat nunca gera a forma nova, então a cópia antiga nunca a encontra.
-
-⚠️ **Quem for ligar forma nova no chat publica `ai-plum-chat` ANTES de mudar o prompt.** Na ordem
-inversa a coluna não entra em `resolved_columns` e a pergunta morre em `MissingColumnError`, longe da
-causa. Ver `contexto/30-decisoes.md` D-028.
-
-## 4. `query_plan.ts` é o ÚNICO interpretador de Query Plan
+## 3. `query_plan.ts` é o ÚNICO interpretador de Query Plan
 
 Ele extrai as colunas para o RBAC. ⚠️ **Toda forma nova na gramática é um lugar onde uma coluna pode
 se esconder do RBAC:** `addCol` descarta o que não é string, e foi assim que `walkArithmetic`
@@ -48,12 +43,12 @@ autorizou plano sem olhar os operandos. `extractColumns` tem de andar recursivam
 estrutura nova. Ver `contexto/31-incidentes-e-licoes.md` I-05. Testes: `query_plan.test.ts`
 (`npm test`).
 
-## 5. Fail-open é decisão, não descuido
+## 4. Fail-open é decisão, não descuido
 
 O Z-dash (`dashboard-agent`) é fail-**open** de propósito — é economia de custo, não controle de
 segurança. Não "conserte" isso. Ver `contexto/30-decisoes.md` D-023.
 
-## 6. Nada de decisão de autorização a partir de dado do cliente
+## 5. Nada de decisão de autorização a partir de dado do cliente
 
 Toda a autorização vive aqui (JWT + RLS + RBAC de coluna) e é resolvida **antes** de chamar o
 Lambda. O executor nunca consulta o Supabase.

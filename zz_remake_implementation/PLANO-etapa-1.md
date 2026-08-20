@@ -423,14 +423,15 @@ reescrito a cada bloco novo. **Não bloqueia começar o B02.**
 2. Bloco que toque `query_plan.ts` ou o executor: rodar os cards de teste **antes e depois**,
    comparando número a número.
 3. ⚠️ Bloco que toque `_shared/query_plan.ts`: publicar **os três** consumidores conferindo
-   `ezbr_sha256` — `version` sobe em troca de secret e **não serve de prova** (I-03). Registrar o
-   `ezbr_sha256` dos três **antes** do B02, como marco zero, e fechar a divergência da D-028
-   (`ai-plum-chat` está com cópia antiga de propósito).
+   `ezbr_sha256` — `version` sobe em troca de secret e **não serve de prova** (I-03). **Como ler o
+   número está em `supabase/functions/README.md`**, seção Deploy.
 
-   ⭐ **O marco zero é insumo do B09**, o primeiro bloco que toca aquele arquivo — não uma cerimônia
-   de abertura da etapa. Ele é tirado no B02 só porque é a última foto tranquila antes de qualquer
-   publicação. **Como ler o número está em `supabase/functions/README.md`** (nenhum documento dizia
-   isso até 2026-08-19, o que tornava a regra inexecutável).
+   ⭐ **A divergência não avisa:** ela é invisível até alguém emitir a forma nova, porque os dois
+   lados ficam internamente coerentes e nenhum teste pega. Foi assim que a D-028 passou oito dias
+   despercebida. É o motivo de a regra ser "publique todos", e não "publique quem mudou".
+
+   ✅ **A D-028 foi encerrada em 2026-08-20** — a Etapa 0 republicou o `ai-plum-chat` e os três
+   consumidores estão na mesma versão, medido pela API. O B09 **não** herda dívida nenhuma daqui.
 4. Migrations continuam manuais, com bloco de verificação autoexecutável (D-005).
 5. Antes de publicar algo compartilhado: saber se há demo marcada na semana. É o único risco real
    que a V3 reconhece.
