@@ -30,41 +30,8 @@ As duas regras que sobreviveram àquela medição:
 
 1. Publique à mão a função que você mexeu (comando abaixo).
 2. **Confirme que subiu:** o `ezbr_sha256` tem de mudar. O `version` sobe sozinho em troca de
-   secret, sem código novo — **não serve de prova**.
-
-### ⭐ Como ler o `ezbr_sha256`
-
-⚠️ **Até 2026-08-19 nenhum documento deste repositório dizia isto** — onze lugares mandavam
-"conferir o `ezbr_sha256`" e nenhum explicava onde ele aparece, o que tornava a regra 2 acima
-literalmente inexecutável para quem não estivesse presente na medição do I-03.
-
-Ele **não aparece no painel**. Vem da Management API, e exige um token pessoal
-(*supabase.com/dashboard/account/tokens* → "Generate new token"):
-
-```powershell
-$env:SUPABASE_ACCESS_TOKEN = "<token>"
-Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions" `
-  -Headers @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" } |
-  Select-Object slug, version, ezbr_sha256, updated_at | Format-Table
-```
-
-```bash
-curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions"
-```
-
-**Plano B, se o campo não vier na resposta.** Comparar o corpo publicado, que é o método
-efetivamente usado em 2026-08-12 (`CLAUDE.md` §1) — o `functions download` não serve porque exige
-Docker:
-
-```bash
-curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions/<nome>/body" \
-  | grep -a -c "walkArithmetic"
-```
-
-Contagens iguais nos três consumidores de `query_plan.ts` significam interpretador de RBAC igual nos
-três. É comparação de conteúdo, não de hash — resolve "os três batem?", não "esta subiu agora?".
+   secret, sem código novo — **não serve de prova**. ⭐ Como obter esse número está no fim desta
+   seção.
 
 ⚠️ Vale o inverso também: uma função que você **não** mexeu pode ter sido republicada pelo push de
 outra pessoa. Como `_shared/` é empacotado **por função** e não compartilhado em runtime, isso deixa
@@ -86,6 +53,69 @@ npx supabase functions deploy send-auth-email --project-ref rjwidarrsykufuifzunu
 `dashboard-execute` e `dashboard-agent`. Publicar um só deixa cópias divergentes do interpretador de
 RBAC no ar. O `dashboard-agent` faltava nesta lista até 2026-08-18, o que tornava esse erro o
 resultado natural de seguir o README.
+
+### ⭐ Como ler o `ezbr_sha256`
+
+⚠️ **Até 2026-08-19 nenhum documento deste repositório dizia isto** — onze lugares mandavam
+"conferir o `ezbr_sha256`" e nenhum explicava onde ele aparece, o que tornava a regra 2 acima
+literalmente inexecutável para quem não estivesse presente na medição do I-03.
+
+Ele **não aparece no painel**. Vem da Management API, e exige um token pessoal
+(*supabase.com/dashboard/account/tokens* → "Generate new token").
+
+**1. Guarde o token sem escrevê-lo na linha de comando.**
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = Read-Host "token"
+```
+
+⚠️ **Não faça `$env:SUPABASE_ACCESS_TOKEN = "eyJ…"`.** O PSReadLine grava toda linha digitada em
+`%APPDATA%\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt`, em texto puro — e um
+*personal access token* do Supabase alcança a **conta inteira**, não só este projeto. O `Read-Host`
+não entra no histórico. A variável vale só naquela janela do PowerShell, que é o desejado.
+
+**2. Olhe os campos antes de filtrar.**
+
+```powershell
+Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions" `
+  -Headers @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" } | ConvertTo-Json -Depth 3
+```
+
+⭐ **Não pule este passo.** A listagem pode devolver um objeto mais magro que o endpoint por função
+(`…/functions/<slug>`), e o `Select-Object` do passo 3 **não reclama de propriedade inexistente**:
+mostra a coluna vazia. Você leria "o hash está vazio" quando o certo é "o campo tem outro nome" — e
+o plano B abaixo nunca seria acionado, porque nada indicou falha.
+
+**3. Aí sim, a tabela.**
+
+```powershell
+Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions" `
+  -Headers @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" } |
+  Select-Object slug, version, ezbr_sha256, updated_at | Format-Table
+```
+
+⚠️ A crase no fim da primeira linha é continuação de linha e precisa ser o **último** caractere —
+um espaço depois dela quebra o comando. É o erro de colagem mais comum aqui.
+
+No Git Bash, o equivalente do passo 2:
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions"
+```
+
+**Plano B, se o campo não vier em resposta nenhuma.** Comparar o corpo publicado, que é o método
+efetivamente usado em 2026-08-12 (`CLAUDE.md` §1) — o `functions download` não serve porque exige
+Docker:
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions/<nome>/body" \
+  | grep -a -c "walkArithmetic"
+```
+
+Contagens iguais nos três consumidores de `query_plan.ts` significam interpretador de RBAC igual nos
+três. É comparação de conteúdo, não de hash — resolve "os três batem?", não "esta subiu agora?".
 
 ## Segredos
 
