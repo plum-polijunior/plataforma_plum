@@ -10,7 +10,10 @@ O histórico está nos `DIARIO.md` de cada bloco.
 
 ## 👤 O que só você pode fazer, em ordem
 
-### 1. Apagar a Edge Function órfã `plum-chat`
+### 1. Apagar a Edge Function órfã `plum-chat` — pelo painel
+
+⚠️ Combinado em 2026-08-20: você faz pelo front do Supabase. O que segue é a alternativa por API.
+
 
 Achada na medição de 2026-08-20: `ACTIVE`, versão 38, criada em 14/07, **sem código no repositório**,
 sem nenhuma chamada em `src/` ou `supabase/`, e com ⚠️ **`verify_jwt: false`** — invocável sem token.
@@ -26,23 +29,23 @@ Invoke-RestMethod -Method Delete `
 `plum-chat` enxergava `GEMINI_API_KEY` como qualquer outra, e esteve aberta desde 14/07. Vale olhar
 o consumo do Gemini no período. Sem sinal de abuso, mas não dá para descartar.
 
-### 2. Os dois passos "antes" do B02
+### 2. Conferir o dashboard depois do push do B03
 
-Em `execucao/B02-redutora-seletora/MANUAL.md`. Na prática é só o passo 2: conferir se algum card tem
-`limit > 500`, **antes do push** — porque o push publica o Lambda sozinho. (O passo 1 foi removido:
-a D-028 que o justificava está encerrada.)
+O B02 já subiu (nenhum card tinha `limit > 500`). O **B03** está commitado e vai no próximo push.
+Nenhum dos dois pede migration, secret ou deploy de Edge Function.
 
-### 3. `git push`
-
-Commits locais não pushados — confira com `git log --oneline origin/plataforma..plataforma`. O push
-dispara `query-engine.yml`, que substitui o executor no mesmo minuto.
+Depois que a Action `query-engine` terminar: abrir um dashboard e confirmar que os números não
+mudaram. Deve ser trivial — o B03 não alterou caminho existente nenhum.
 
 ---
 
 ## 🤖 O que fica engatilhado para mim
 
-**B03 (`metadados`) ou B05 (`_shared/llm.ts`)** — independentes entre si e do B02. Detalhe em
+**B05 (`_shared/llm.ts`)** — o próximo. Independente do B02 e do B03. Detalhe em
 `PLANO-etapa-1.md` §C.
+
+⭐ Depois dele vem o **B04** (`vocabulario` + resolvedor de entidade), que é o primeiro bloco a
+depender de dois anteriores (B02 e B03) e o primeiro a mexer em Edge Function.
 
 ⚠️ **O B05 tem um pré-requisito seu:** criar o secret `ANTHROPIC_API_KEY`
 (*supabase.com/dashboard/account/tokens* é outro token — este é da Anthropic). Não bloqueia: sem ele
@@ -54,8 +57,8 @@ a tabela papel→modelo cai para Gemini e o adaptador Claude nasce inerte.
 
 - **Etapa 0:** ✅ fechada. As três migrations aplicadas, `ai-plum-chat` publicada em 2026-08-20
   (versão 59), `plum_logs` gravando com token, latência e saída dos agentes.
-- **Etapa 1:** plano em `PLANO-etapa-1.md`. **B02 implementado e commitado.** 285 testes Python,
-  199 TypeScript, todos verdes.
+- **Etapa 1:** plano em `PLANO-etapa-1.md`. **B02 pushado; B03 (`metadados`) implementado e
+  commitado.** 304 testes Python, 199 TypeScript, todos verdes.
 - **D-028:** ✅ encerrada em 2026-08-20 — os três consumidores de `query_plan.ts` estão na mesma
   versão, medido pela Management API.
 - **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem

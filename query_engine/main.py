@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import ValidationError
 
-from query_engine import config, sheets
+from query_engine import config, metadados as metadados_mod, sheets
 from query_engine.pandas_executor import (
     CardinalidadeExcedida,
     ExecutorError,
@@ -165,6 +165,26 @@ async def execute(
     tabelas = {"producao": df}
 
     for pedido in aprovados:
+        # ── Pedido `metadados`: descrição, não consulta ──────────────────────
+        # Não tem Query Plan — não há o que planejar. Devolve a forma da base
+        # (papel, distintos, vazios, extremos onde é seguro) para o A2 escolher
+        # colunas sem que nenhuma linha saia. Ver `query_engine/metadados.py`.
+        #
+        # Fica ANTES do caminho normal porque `execute_plan` recusaria: um plano
+        # sem `select` viola o P1.3, e com razão — só que aqui não há plano.
+        if pedido.tipo == "metadados":
+            resultados.append(
+                {
+                    "card_id": pedido.card_id,
+                    "status": "ok",
+                    "tipo": "metadados",
+                    **metadados_mod.descrever(
+                        df, pedido.resolved_columns, column_roles
+                    ),
+                }
+            )
+            continue
+
         # `from` do plano pode nomear a tabela; aqui só existe uma.
         plano = dict(pedido.plan)
         plano["from"] = "producao"

@@ -326,3 +326,108 @@ def test_quinta_barreira_plano_que_escapa_do_conjunto_falha(client):
     card = r.json()["results"][0]
     assert card["status"] == "error"
     assert "margem" not in json.dumps(card), "nenhum dado da coluna pode vazar"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B03 — o pedido `metadados`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# O que precisa ser provado aqui, e não em test_metadados.py: que o tipo novo
+# atravessa as MESMAS barreiras que um plano normal. O modulo em si nao sabe
+# nada de permissao — quem gateia e o main.py, e e isso que se verifica.
+
+
+def _pedido_metadados(colunas, permitidas=None):
+    return _corpo(
+        plans=[
+            {
+                "card_id": "desc",
+                "tipo": "metadados",
+                # Sem Query Plan: nao ha o que planejar.
+                "plan": {},
+                "resolved_columns": colunas,
+            }
+        ],
+        allowed_columns=permitidas if permitidas is not None else colunas,
+    )
+
+
+def test_metadados_descreve_sem_devolver_linha(client):
+    r = _post(client, _pedido_metadados(["faturamento", "regiao"]))
+    assert r.status_code == 200
+
+    card = r.json()["results"][0]
+    assert card["status"] == "ok" and card["tipo"] == "metadados"
+    assert card["n_linhas"] == 13
+    # ⭐ A resposta nao tem `rows`. Um plano sem `select` cairia em
+    # RawRowsBlocked; este caminho nem chega no executor.
+    assert "rows" not in card
+
+    assert card["colunas"]["regiao"]["distintos"] == 3
+    assert card["colunas"]["faturamento"]["max"] == 100.0
+
+
+@pytest.mark.invariante
+def test_metadados_nao_expoe_valor_de_coluna_de_texto(client):
+    """`regiao` e texto: distintos sim, os nomes das regioes nao."""
+    r = _post(client, _pedido_metadados(["regiao"]))
+    card = r.json()["results"][0]
+
+    assert card["colunas"]["regiao"]["min"] is None
+    for regiao in ("Sul", "Norte", "Ilha"):
+        assert regiao not in json.dumps(card)
+
+
+@pytest.mark.invariante
+def test_metadados_respeita_o_cargo(client):
+    """
+    ⭐ A barreira 4 nao pode ter buraco por tipo de pedido. Descrever uma coluna
+    proibida ja e informacao sobre ela — quantos valores distintos, que faixa.
+    """
+    corpo = _pedido_metadados(["faturamento", "margem_lucro"], permitidas=["faturamento"])
+    card = _post(client, corpo).json()["results"][0]
+
+    assert card["status"] == "forbidden"
+
+
+def test_metadados_convive_com_plano_normal_no_mesmo_lote(client, ambiente):
+    """
+    O A2 pede a descricao e o A3 pede o agregado; o lote e um so. Se o tipo novo
+    tivesse quebrado o laco, o segundo card nao voltaria.
+    """
+    corpo = _corpo(
+        plans=[
+            {
+                "card_id": "desc",
+                "tipo": "metadados",
+                "plan": {},
+                "resolved_columns": ["regiao"],
+            },
+            {
+                "card_id": "soma",
+                "plan": {
+                    "select": [{"expr": {"agg": "sum", "col": "faturamento"}, "as": "t"}],
+                    "group_by": ["regiao"],
+                },
+                "resolved_columns": ["faturamento", "regiao"],
+            },
+        ],
+        allowed_columns=["faturamento", "regiao"],
+    )
+    r = _post(client, corpo)
+    cards = {c["card_id"]: c for c in r.json()["results"]}
+
+    assert cards["desc"]["tipo"] == "metadados"
+    assert cards["soma"]["row_count"] == 3
+    # Uma leitura para o lote inteiro — a razao de o formato ser em lote.
+    assert ambiente["n"] == 1
+
+
+def test_pedido_sem_tipo_continua_sendo_plano_normal(client):
+    """
+    ⚠️ O campo nasceu com default porque o Lambda sobe a todo push e a Edge
+    Function e publicada a mao: por algumas horas o executor novo recebe payload
+    da funcao velha, que nao manda `tipo`.
+    """
+    card = _post(client, _corpo()).json()["results"][0]
+    assert card["status"] == "ok" and card["row_count"] == 3
