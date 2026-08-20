@@ -531,3 +531,139 @@ def test_limit_e_preso_entre_1_e_500(pedido, esperado):
     # Papel `number` no grupo: aqui o alvo é o limit, não a cardinalidade.
     r = execute_plan(plano, tabelas, column_roles={"g": "number", "v": "number"})
     assert r["row_count"] == esperado
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B04 — o pedido `vocabulario` atravessa o executor sem mudança nenhuma
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⭐ É o que prova a afirmação central do bloco: `vocabulario` não é um caminho
+# de execução novo, é um Query Plan comum. Se estes testes exigirem uma linha de
+# código no executor, o desenho está errado — um segundo caminho é um segundo
+# lugar onde uma coluna pode escapar do RBAC.
+#
+# ⚠️ O plano abaixo é REPLICADO de `planoDeVocabulario` em
+# `supabase/functions/_shared/vocabulario.ts`. Mudou lá, mude aqui.
+
+
+def _plano_de_vocabulario(coluna: str, limite: int = 200):
+    return {
+        "from": "producao",
+        "select": [{"expr": {"agg": "count", "col": coluna}, "as": "linhas"}],
+        "group_by": [coluna],
+        "order_by": [{"col": "linhas", "dir": "desc"}],
+        "limit": limite,
+    }
+
+
+def test_vocabulario_devolve_valores_com_contagem(carteira):
+    """O caminho feliz: 3 regiões, com quantas linhas cada uma tem."""
+    r = execute_plan(
+        _plano_de_vocabulario("regiao"), carteira,
+        column_roles=PAPEIS, aplicar_regras_adhoc=True,
+    )
+
+    assert {linha["regiao"] for linha in r["rows"]} == {"Sul", "Norte", "Centro"}
+    assert all(linha["linhas"] == 100 for linha in r["rows"])
+
+
+def test_vocabulario_vem_ordenado_pelos_mais_frequentes():
+    """Se o teto cortar, o que sobra tem de ser o que mais aparece na base."""
+    tabelas = {
+        "producao": pd.DataFrame(
+            {"marca": ["A"] * 50 + ["B"] * 10 + ["C"] * 3, "v": [1.0] * 63}
+        )
+    }
+    r = execute_plan(
+        _plano_de_vocabulario("marca"), tabelas,
+        column_roles={"marca": "text", "v": "number"}, aplicar_regras_adhoc=True,
+    )
+
+    assert [linha["marca"] for linha in r["rows"]] == ["A", "B", "C"]
+
+
+@pytest.mark.invariante
+def test_vocabulario_de_coluna_identificadora_e_recusado(carteira):
+    """
+    ⭐ A terceira trava do `vocabulario`, e a única que o executor pode aplicar:
+    acima de 200 valores distintos a coluna é IDENTIFICADOR, não categoria, e
+    listá-la é entregar a base.
+
+    Não é uma falha a contornar — é a resposta certa. E é o mesmo teto do B02,
+    exercido por outra porta: uma constante, dois consumidores.
+    """
+    with pytest.raises(CardinalidadeExcedida):
+        execute_plan(
+            _plano_de_vocabulario("cliente"), carteira,
+            column_roles=PAPEIS, aplicar_regras_adhoc=True,
+        )
+
+
+def test_o_limite_do_plano_nao_substitui_o_teto(carteira):
+    """
+    ⚠️ Cortar em 200 não protege: 200 nomes de cliente continuam sendo 200 nomes.
+    O teto olha o ALCANCE do recorte, não quantas linhas sobraram — então um
+    plano de vocabulário com limite baixo sobre coluna identificadora continua
+    sendo recusado.
+    """
+    with pytest.raises(CardinalidadeExcedida):
+        execute_plan(
+            _plano_de_vocabulario("cliente", limite=5), carteira,
+            column_roles=PAPEIS, aplicar_regras_adhoc=True,
+        )
+
+
+def test_vocabulario_no_caminho_legado_apenas_registra(carteira, caplog):
+    """
+    O modo observação também vale aqui. Nada emite este plano no legado hoje,
+    mas a regra é do caminho, não do tipo de pedido.
+    """
+    with caplog.at_level("WARNING"):
+        r = execute_plan(
+            _plano_de_vocabulario("cliente"), carteira, column_roles=PAPEIS
+        )
+
+    assert r["row_count"] == 200
+    assert "[adhoc-observacao]" in caplog.text
+
+
+def test_o_literal_devolvido_casa_com_o_where_depois(carteira):
+    """
+    ⭐ O laço que fecha o bloco: o resolvedor escolhe um literal desta lista, e o
+    executor depois filtra por ele. Este teste prova a ida e a volta no mesmo
+    lugar — se a normalização do `where` divergisse da lista, aqui daria zero.
+    """
+    lista = execute_plan(
+        _plano_de_vocabulario("regiao"), carteira,
+        column_roles=PAPEIS, aplicar_regras_adhoc=True,
+    )
+    literal = lista["rows"][0]["regiao"]
+
+    filtrado = execute_plan(
+        {
+            "from": "producao",
+            "select": [{"expr": {"agg": "count", "col": "faturamento"}, "as": "n"}],
+            "where": {"left": "regiao", "op": "=", "right": literal},
+        },
+        carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True,
+    )
+
+    assert filtrado["rows"][0]["n"] == 100
+
+
+def test_o_where_casa_o_literal_escrito_de_outro_jeito(carteira):
+    """
+    A contrapartida: o executor normaliza os dois lados de `=`, então o
+    resolvedor NÃO precisa acertar caixa nem acento. É o que permite a ele se
+    ocupar só da distância de edição.
+    """
+    r = execute_plan(
+        {
+            "from": "producao",
+            "select": [{"expr": {"agg": "count", "col": "faturamento"}, "as": "n"}],
+            "where": {"left": "regiao", "op": "=", "right": "  sul  "},
+        },
+        carteira, column_roles=PAPEIS, aplicar_regras_adhoc=True,
+    )
+
+    assert r["rows"][0]["n"] == 100

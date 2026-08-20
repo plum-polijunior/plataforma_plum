@@ -178,6 +178,11 @@ export type Database = {
           schema_metadata: Json | null
           sketch: Json | null
           status: string | null
+          // ⭐ Permite ao pedido `vocabulario` listar valores distintos de
+          // colunas de TEXTO desta base. Segunda de tres travas:
+          // allowed_columns (cargo), esta, e o teto de 200 distintos no
+          // executor. Default false -- ver 20260820120000_vocabulario_exposto.sql.
+          vocabulario_exposto: boolean
           created_at: string
         }
         Insert: {
@@ -191,6 +196,7 @@ export type Database = {
           schema_metadata?: Json | null
           sketch?: Json | null
           status?: string | null
+          vocabulario_exposto?: boolean
           created_at?: string
         }
         Update: {
@@ -204,6 +210,7 @@ export type Database = {
           schema_metadata?: Json | null
           sketch?: Json | null
           status?: string | null
+          vocabulario_exposto?: boolean
           created_at?: string
         }
         Relationships: [
