@@ -194,6 +194,33 @@ export default function PlumChat() {
 
       setMessages(prev => [...prev, userMsgData as ChatMessage]);
 
+      // 1-bis. ⭐ MODO SOMBRA do caminho `ad_hoc` (B06 do remake).
+      //
+      // Roda A1 (porteiro) → metadados → A2 (reconhecedor) EM PARALELO com a
+      // cadeia que responde de verdade, e joga fora o resultado. O que fica é a
+      // linha em `plum_logs` com `caminho = 'ad_hoc'`.
+      //
+      // Por que existir antes de o `ad_hoc` responder qualquer coisa: o A3 só
+      // nasce no B07, e sem isto o A1 e o A2 passariam mais duas semanas sem
+      // nenhum sinal de realidade. Aqui eles rodam sobre pergunta de verdade,
+      // sobre base de verdade, e o custo aparece no log ao lado do custo da
+      // cadeia atual — que é a comparação que a Etapa 1 precisa fazer.
+      //
+      // ⚠️ Três coisas que o tornam seguro, e nenhuma é opcional:
+      //   • `void` + `.catch()`: não é aguardado e não pode rejeitar. Falha aqui
+      //     não pode atrasar nem derrubar a resposta.
+      //   • A Edge Function devolve `{habilitado: false}` na hora quando
+      //     `remake_habilitado` está desligado — que é o caso de toda
+      //     organização hoje. Uma chamada barata, sem LLM nenhum.
+      //   • Mesmo `turnoId`: é o que costura a linha `ad_hoc` às linhas
+      //     `legado` da MESMA pergunta no log. Sem isso, comparar as duas
+      //     cadeias viraria estatística agregada em vez de par a par.
+      void supabase.functions
+        .invoke('ai-plum-chat', {
+          body: { action: 'ad_hoc_planejar', prompt: userMsgContent, datasetId: selectedDatasetId, sessaoId, turnoId }
+        })
+        .catch((e) => console.debug('[sombra] ad_hoc_planejar falhou, ignorado:', e));
+
       // 2. Chama Agente Z (Guardião)
       //
       // ⚠️ O guardião roda SEMPRE, inclusive quando o plano vem do cache. Ele

@@ -29,7 +29,26 @@ Invoke-RestMethod -Method Delete `
 `plum-chat` enxergava `GEMINI_API_KEY` como qualquer outra, e esteve aberta desde 14/07. Vale olhar
 o consumo do Gemini no período. Sem sinal de abuso, mas não dá para descartar.
 
-### 2. Colar a migration do B04
+### 2. Colar as DUAS migrations, na ordem
+
+`20260820120000_vocabulario_exposto.sql` (B04) e depois
+`20260820130000_plum_reconhecimento.sql` (B06). A ordem numérica é a de aplicação.
+
+### 2-bis. Publicar o `ai-plum-chat` (B06)
+
+```bash
+npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
+```
+
+⭐ **E aí siga o `execucao/B06-porteiro-reconhecedor/MANUAL.md` inteiro** — é o bloco em que o
+caminho `ad_hoc` passa a existir, e o manual leva você pelos dois critérios que a etapa devia:
+o §0.5 do V3 (os dois caminhos no mesmo `turno_id`) e o do V7 §8 item 4 (`cache_hit_a2 = true` na
+2ª pergunta).
+
+⚠️ O passo 7 do manual é o único do remake até aqui que **não tem teste automatizado**: ler o que o
+A2 entendeu da base. Se ele estiver lendo mal, o A3 vai planejar mal e nenhum ajuste no B07 conserta.
+
+### 2-ter. A migration do B04, em detalhe
 
 `supabase/migrations/20260820120000_vocabulario_exposto.sql` no SQL Editor. Quatro linhas de
 verificação, e a terceira é a que importa — *"NENHUMA base nasceu com vocabulario exposto"*.
@@ -57,16 +76,17 @@ Depois: `execucao/B05-llm/MANUAL.md`, passo 2 — ⭐ conferir que `tokens_entra
 
 ## 🤖 O que fica engatilhado para mim
 
-**B06 (A1 + A2 + cache de A2 + a chave `remake_habilitado`)** — o próximo, e a virada da etapa:
-é onde o caminho `ad_hoc` **passa a existir**. Detalhe em `PLANO-etapa-1.md` §C.
+**B07 (A3 + A4 + presunções)** — o próximo, e o mais caro da etapa. É onde o `ad_hoc` passa a
+**responder**, em vez de só reconhecer. Detalhe em `PLANO-etapa-1.md` §C.
 
-⭐ Três coisas convergem nele: a chave `remake_habilitado` ganha o primeiro consumidor (adiada desde
-a Etapa 0 por não haver o que gatear), o critério §0.5 do V3 vira exigível (uma pergunta com a chave
-ligada e outra desligada, e o log mostrando `ad_hoc` × `legado`), e as peças de B02/B03/B04 deixam de
-ser código sem consumidor.
+⭐ Ele consome tudo que os cinco blocos anteriores deixaram pronto: o reconhecimento do A2, o
+`vocabulario` e o resolvedor do B04, o teto do B02, e o adaptador Claude do B05.
 
-⚠️ E é o primeiro bloco que **exige decisão de front**: o `ad_hoc` roda em duas invocações
-(`ad_hoc_planejar` / `ad_hoc_executar`, §B1 do plano), então o `PlumChat.tsx` muda.
+⚠️ **E é a primeira vez que o `_shared/llm/claude.ts` roda.** Escrito no B05, nunca executado —
+qualquer surpresa, suspeite dele antes de suspeitar do prompt.
+
+⚠️ O prompt do A3 é **o artefato mais importante da etapa** (V7 §9) e o único sem responsável
+nomeado. O texto da V7 §5.3 é ponto de partida, não entrega.
 
 ---
 
@@ -74,9 +94,9 @@ ser código sem consumidor.
 
 - **Etapa 0:** ✅ fechada. As três migrations aplicadas, `ai-plum-chat` publicada em 2026-08-20
   (versão 59), `plum_logs` gravando com token, latência e saída dos agentes.
-- **Etapa 1:** plano em `PLANO-etapa-1.md`. **B02, B03 e B05 no ar e validados.** B04
-  (`vocabulario` + resolvedor) commitado, esperando só a migration. 334 testes Python, 243
-  TypeScript, todos verdes.
+- **Etapa 1:** plano em `PLANO-etapa-1.md`. **B02, B03 e B05 no ar e validados.** B04 e B06
+  commitados, esperando duas migrations e um deploy. ⭐ Com o B06, o caminho `ad_hoc` existe — em
+  modo sombra, ao lado do legado. 334 testes Python, 256 TypeScript, todos verdes.
 - **D-028:** ✅ encerrada em 2026-08-20 — os três consumidores de `query_plan.ts` estão na mesma
   versão, medido pela Management API.
 - **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem

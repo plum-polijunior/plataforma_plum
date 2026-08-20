@@ -25,11 +25,17 @@
  *
  * ── POR QUE UM INSERT POR INVOCAÇÃO, E NÃO UM BUFFER ─────────────────────
  *
- * Parece que uma pergunta deveria gerar um insert com 4 linhas de uma vez. Não
- * é o caso: o `PlumChat.tsx` chama a Edge Function **uma vez por ação**
- * (`guard`, depois `plan_query`, depois `execute_plan`, depois
- * `synthesize_answer`). Cada invocação é um processo próprio e enxerga só a
- * própria etapa. O que costura as quatro é o `turno_id`, gerado no cliente.
+ * Parece que uma pergunta deveria gerar um insert com todas as linhas de uma
+ * vez. Não é o caso: o `PlumChat.tsx` chama a Edge Function **uma vez por
+ * ação**, e cada invocação é um processo próprio que enxerga só a sua parte.
+ * O que costura todas é o `turno_id`, gerado no cliente.
+ *
+ * ⚠️ **A lista de ações cresceu no B06** e não é mais só `guard` →
+ * `plan_query` → `execute_plan` → `synthesize_answer`: entrou o
+ * `ad_hoc_planejar`, que roda em modo sombra ao lado da cadeia atual e grava
+ * com `caminho = 'ad_hoc'`. Uma pergunta pode portanto gerar linhas dos DOIS
+ * caminhos, com o mesmo `turno_id` — e é assim de propósito, porque é o que
+ * permite comparar as duas cadeias par a par em vez de em agregado.
  *
  * ── IDENTIDADE ───────────────────────────────────────────────────────────
  *

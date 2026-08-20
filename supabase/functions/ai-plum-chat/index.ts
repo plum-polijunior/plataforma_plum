@@ -49,6 +49,12 @@ import {
   type StatusLog,
 } from "../_shared/log.ts";
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
+import {
+  colunasComVocabularioUtil,
+  type Reconhecimento,
+} from "../_shared/reconhecimento.ts";
+import { passarPeloPorteiro } from "./adhoc/porteiro.ts";
+import { reconhecer } from "./adhoc/reconhecedor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,10 +95,23 @@ function json(body: unknown, status = 200): Response {
 // execute_plan — RBAC de coluna + chamada assinada ao executor Lambda
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Opções do caminho `ad_hoc`. Ausentes, o comportamento é exatamente o de
+ * antes do B06 — que é o que mantém o `execute_plan` do chat atual intocado.
+ */
+interface OpcoesDeExecucao {
+  /** `metadados` dispensa Query Plan: não há o que planejar nem o que autorizar
+   *  por plano. As colunas pedidas passam a ser TODAS as que o cargo já pode
+   *  ver, e a barreira 4 do Lambda continua conferindo isso. */
+  tipo?: "metadados";
+  caminho?: "legado" | "ad_hoc";
+}
+
 async function handleExecutePlan(
   req: Request,
   datasetId: unknown,
   plan: unknown,
+  opcoes: OpcoesDeExecucao = {},
 ): Promise<Response> {
   if (!EXECUTOR_URL || !EXECUTOR_HMAC_SECRET || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
     console.error("execute_plan: segredos do executor nao configurados nesta funcao.");
@@ -180,9 +199,15 @@ async function handleExecutePlan(
     });
   }
 
-  // Recusa em vez de filtrar em silêncio — mesma regra de dashboard-execute:
-  // tirar uma coluna do plano mudaria o significado do número sem ninguém notar.
-  const veredito = authorizePlan(plan as QueryPlan, allowedColumns);
+  // ⭐ `metadados` não tem plano, então não há o que autorizar por plano: as
+  // colunas pedidas são as que o cargo já pode ver, e o RBAC continua sendo o
+  // `allowed_columns`. Fingir um veredito aqui, em vez de desviar, faria
+  // `authorizePlan` receber `{}` e devolver "nenhuma coluna" — o A2 descreveria
+  // uma base vazia e ninguém saberia por quê.
+  const veredito = opcoes.tipo === "metadados"
+    ? { allowed: true, required: allowedColumns, forbidden: [] as string[] }
+    : authorizePlan(plan as QueryPlan, allowedColumns);
+
   if (!veredito.allowed) {
     // Era o único branch de execute_plan sem log nenhum: a mensagem para o
     // usuário não diz qual coluna faltou nem em qual base, então toda
@@ -243,8 +268,16 @@ async function handleExecutePlan(
     tab_gid: dataset.google_sheet_gid ?? null,
     // "chat" no lugar de um id de card real: não existe card salvo aqui, e o
     // Lambda trata cada item de `plans` de forma independente de qualquer forma.
-    plans: [{ card_id: "chat", plan, resolved_columns: veredito.required }],
+    plans: [{
+      card_id: "chat",
+      plan,
+      resolved_columns: veredito.required,
+      ...(opcoes.tipo ? { tipo: opcoes.tipo } : {}),
+    }],
     allowed_columns: allowedColumns,
+    // ⭐ Liga o teto de cardinalidade do B02 no executor. `legado` mantém o modo
+    // observação, que é o comportamento de sempre.
+    caminho: opcoes.caminho ?? "legado",
     formatting_rules: formattingRulesFromSchema(dataset.schema_metadata, new Set(veredito.required)),
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
@@ -578,6 +611,148 @@ PORTUGUÊS CORRETO:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ad_hoc_planejar — A1 → metadados → A2. O caminho novo começa aqui.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ⭐ **Este é o primeiro consumidor da chave `remake_habilitado`** — a coluna
+ * criada na Etapa 0 e deliberadamente deixada sem leitor, porque não havia o que
+ * gatear. Agora há.
+ *
+ * ⚠️ **O bloco NÃO responde perguntas ainda.** Ele vai até o reconhecimento e
+ * para: quem transforma reconhecimento em pedidos é o A3, que nasce no B07. Por
+ * isso o front chama isto em **modo sombra** — roda ao lado do caminho legado,
+ * alimenta o log, e a resposta continua vindo de onde sempre veio.
+ *
+ * É o mesmo formato do modo observação do B02, e pela mesma razão: sem ele, A1 e
+ * A2 ficariam mais duas semanas sem nenhum sinal de realidade.
+ */
+async function handleAdHocPlanejar(
+  req: Request,
+  pergunta: unknown,
+  datasetId: unknown,
+  turno: Partial<DadosDoTurno>,
+): Promise<Response> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return json({ error: "sem credencial" }, 401);
+  if (typeof pergunta !== "string" || !pergunta.trim()) {
+    return json({ error: "prompt obrigatorio" }, 400);
+  }
+  if (typeof datasetId !== "string" || !datasetId) {
+    return json({ error: "datasetId obrigatorio" }, 400);
+  }
+
+  const registrar = criarRegistrador(authHeader, turno, "ad_hoc");
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+
+  // ── A chave ──────────────────────────────────────────────────────────────
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) return json({ error: "sessao invalida" }, 401);
+
+  const { data: profile } = await supabase
+    .from("profiles").select("organization_id").eq("id", auth.user.id).single();
+  if (!profile?.organization_id) return json({ error: "perfil sem organizacao" }, 403);
+
+  const { data: org } = await supabase
+    .from("organizations").select("remake_habilitado")
+    .eq("id", profile.organization_id).maybeSingle();
+
+  // ⚠️ Sem log quando a chave está desligada. A ausência de linha `ad_hoc` no
+  // `plum_logs` É o sinal de que a organização não está no caminho novo —
+  // gravar aqui poluiria a comparação entre as duas cadeias com turnos que
+  // nunca foram tentados.
+  if (!org?.remake_habilitado) return json({ habilitado: false });
+
+  // ── A1 · Porteiro ────────────────────────────────────────────────────────
+  const t0 = Date.now();
+  const porteiro = await passarPeloPorteiro(pergunta);
+  await registrar({
+    etapa: "porteiro",
+    status: porteiro.permitido ? "ok" : "bloqueado",
+    codigoErro: porteiro.llm.erro?.codigo ?? null,
+    modelo: porteiro.llm.modelo,
+    provedor: porteiro.llm.provedor,
+    tokensEntrada: porteiro.llm.tokens.entrada,
+    tokensSaida: porteiro.llm.tokens.saida,
+    latenciaMs: Date.now() - t0,
+    respostaAgente: { permitido: porteiro.permitido, mensagem: porteiro.mensagem },
+  });
+
+  if (!porteiro.permitido) {
+    return json({ habilitado: true, status: "bloqueado", mensagem: porteiro.mensagem });
+  }
+
+  // ── metadados (B03) ──────────────────────────────────────────────────────
+  const t1 = Date.now();
+  const resposta = await handleExecutePlan(req, datasetId, {}, {
+    tipo: "metadados",
+    caminho: "ad_hoc",
+  });
+  const corpo = await resposta.json().catch(() => null);
+  const descricao = (corpo as { result?: unknown } | null)?.result;
+
+  await registrar({
+    etapa: "reconhecedor",
+    status: resposta.ok && descricao ? "ok" : "erro",
+    codigoErro: resposta.ok ? null : `metadados_${resposta.status}`,
+    latenciaMs: Date.now() - t1,
+  });
+
+  if (!resposta.ok || !descricao) {
+    // ⚠️ Devolve 200 com `erro`, não um código de falha: em modo sombra, um erro
+    // aqui não é um erro da PERGUNTA — ela vai ser respondida pelo caminho
+    // legado de qualquer jeito. Status HTTP de erro faria o front tratar como
+    // falha do chat.
+    return json({ habilitado: true, status: "erro", etapa: "metadados" });
+  }
+
+  // ── A2 · Reconhecedor (com cache) ────────────────────────────────────────
+  const { data: dataset } = await supabase
+    .from("datasets").select("schema_metadata").eq("id", datasetId).maybeSingle();
+
+  const colunasReais = Object.keys(
+    (descricao as { colunas?: Record<string, unknown> })?.colunas ?? {},
+  );
+
+  const t2 = Date.now();
+  const r = await reconhecer(
+    supabase as never,
+    datasetId,
+    dataset?.schema_metadata ?? null,
+    descricao,
+    colunasReais,
+  );
+
+  await registrar({
+    etapa: "reconhecedor",
+    status: Object.keys(r.reconhecimento.colunas).length ? "ok" : "erro",
+    codigoErro: r.llm?.erro?.codigo ?? null,
+    modelo: r.llm?.modelo ?? null,
+    provedor: r.llm?.provedor ?? null,
+    tokensEntrada: r.llm?.tokens.entrada ?? null,
+    tokensSaida: r.llm?.tokens.saida ?? null,
+    latenciaMs: Date.now() - t2,
+    // ⭐ O critério de pronto do V7 §8 item 4 sai desta coluna: a 2ª pergunta na
+    // mesma base tem de vir `true`.
+    cacheHitA2: r.cacheHit,
+    respostaAgente: r.reconhecimento,
+  });
+
+  return json({
+    habilitado: true,
+    status: "ok",
+    cacheHit: r.cacheHit,
+    reconhecimento: r.reconhecimento satisfies Reconhecimento,
+    // O que o B04 vai buscar vocabulário quando o A3 existir (B07).
+    vocabularios: colunasComVocabularioUtil(r.reconhecimento),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -627,6 +802,9 @@ Deno.serve(async (req: Request) => {
       });
 
       return resposta;
+    }
+    if (action === "ad_hoc_planejar") {
+      return await handleAdHocPlanejar(req, prompt, datasetId, turno);
     }
     if (action === "guard" || action === "plan_query" || action === "synthesize_answer") {
       return await handleAgente(
