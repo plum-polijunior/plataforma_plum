@@ -23,8 +23,14 @@
  *     Falha aqui vira uma mensagem de erro amigável para o usuário, não um
  *     número desatualizado.
  *
- * DEPLOY: automático, via integração GitHub↔Supabase (branch `plataforma`) —
- * ver `supabase/functions/README.md`.
+ * ⚠️ DEPLOY É MANUAL. Este cabeçalho dizia "automático, via integração
+ * GitHub↔Supabase" até 2026-08-20 — foi medido e é falso (I-03), e a integração
+ * foi desconectada. Publique à mão e confirme pelo `ezbr_sha256`; a receita está
+ * em `supabase/functions/README.md`.
+ *
+ * ⭐ TODA CHAMADA DE LLM DESTA FUNÇÃO PASSA POR `_shared/llm.ts` (B05). A URL do
+ * provedor não aparece mais aqui, e qual modelo atende cada papel é uma linha da
+ * tabela em `_shared/llm_core.ts`.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
@@ -39,10 +45,10 @@ import {
 import { parseGeminiJson } from "../_shared/gemini_parsing.ts";
 import {
   criarRegistrador,
-  extrairUsoDeTokens,
   type DadosDoTurno,
   type StatusLog,
 } from "../_shared/log.ts";
+import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -328,6 +334,12 @@ async function handleAgente(
   const registrar = criarRegistrador(authHeader, turno, "legado");
   const inicio = Date.now();
 
+  // Preenchidos pela chamada ao LLM. Ficam fora do laço porque as saídas de
+  // erro que acontecem ANTES da chamada também precisam registrar algo.
+  let ultimosTokens: UsoDeTokens = { entrada: null, saida: null };
+  let ultimoModelo = "";
+  let ultimoProvedor = "";
+
   /**
    * Grava a linha de log e devolve a resposta. Existe porque `handleAgente` tem
    * QUATRO saídas (erro da API, texto puro, JSON parseado, tentativas
@@ -338,26 +350,30 @@ async function handleAgente(
     status: StatusLog,
     extras: {
       codigoErro?: string;
-      corpoGemini?: unknown;
       /** O que o agente produziu. Ver `LinhaDeLog.respostaAgente`. */
       saida?: unknown;
     } = {},
   ): Promise<Response> => {
-    const tokens = extrairUsoDeTokens(extras.corpoGemini);
+    // ⭐ Modelo, provedor e tokens vêm do adaptador, não são constantes daqui.
+    // Era `modelo: "gemini-3.5-flash"` cravado — o que passaria a mentir no dia
+    // em que a tabela papel→modelo mandasse a ação para outro lugar, e mentir
+    // justamente na coluna que serve para comparar custo entre modelos.
     await registrar({
       etapa: action,
       status,
       codigoErro: extras.codigoErro ?? null,
-      modelo: "gemini-3.5-flash",
-      provedor: "google",
-      tokensEntrada: tokens.entrada,
-      tokensSaida: tokens.saida,
+      modelo: ultimoModelo,
+      provedor: ultimoProvedor,
+      tokensEntrada: ultimosTokens.entrada,
+      tokensSaida: ultimosTokens.saida,
       latenciaMs: Date.now() - inicio,
       respostaAgente: extras.saida ?? null,
     });
     return resposta;
   };
 
+  // O adaptador também recusa sem chave, mas conferir aqui evita montar um
+  // prompt de dez mil caracteres para descobrir isso depois.
   if (!GEMINI_API_KEY) {
     return await responder(
       json({ error: "GEMINI_API_KEY is not configured" }, 400),
@@ -460,28 +476,16 @@ PORTUGUÊS CORRETO:
     userPrompt = `Pergunta Original do Usuário: "${prompt}"\nResultado do Executor Python (Vetor de Dados): ${JSON.stringify(executorResult || {})}\nSchema Metadata: ${JSON.stringify(schemaMetadata || {})}`;
   }
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`;
-
   const esperaJson = action === "guard" || action === "plan_query";
-
-  // Só o guard usa schema. O Query Plan tem união de tipos em "select" e
-  // recursão em "where"; prender ele num response_schema distorceria o plano,
-  // o que é pior do que uma falha de sintaxe — ali a rede é a retentativa.
-  let usarSchema = action === "guard";
-
-  const corpo = (correcao?: string) => ({
-    system_instruction: { parts: [{ text: systemInstruction }] },
-    contents: [{ parts: [{ text: correcao ? `${userPrompt}\n\n${correcao}` : userPrompt }] }],
-    generationConfig: {
-      temperature: action === "plan_query" ? 0.0 : 0.2,
-      response_mime_type: esperaJson ? "application/json" : "text/plain",
-      ...(usarSchema ? { response_schema: SCHEMA_GUARD } : {}),
-    },
-  });
 
   // Duas tentativas quando a resposta precisa ser JSON. Perder a pergunta
   // inteira porque o modelo emitiu um caractere a mais é caro demais, e a
   // retentativa não relaxa nenhuma checagem — só pede a mesma resposta de novo.
+  //
+  // ⚠️ A queda do `response_schema` NÃO está mais aqui. Ela virou detalhe do
+  // adaptador do Gemini (`_shared/llm/gemini.ts`), que é de quem ela sempre
+  // foi: `response_schema` é peculiaridade daquela API, e o laço aqui tinha um
+  // `tentativa--` só para não contá-la como retentativa. A semântica é a mesma.
   const maxTentativas = esperaJson ? 2 : 1;
   let textoInvalido = "";
 
@@ -493,43 +497,35 @@ PORTUGUÊS CORRETO:
       "sem texto fora do objeto, sem aspas ou vírgulas sobrando.",
     ].join("\n");
 
-    const res = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpo(correcao)),
+    const resposta = await chamar({
+      papel: action,
+      sistema: systemInstruction,
+      prompt: correcao ? `${userPrompt}\n\n${correcao}` : userPrompt,
+      json: esperaJson,
+      temperatura: action === "plan_query" ? 0.0 : 0.2,
+      // Só o guard usa schema. O Query Plan tem união de tipos em "select" e
+      // recursão em "where"; prendê-lo num response_schema distorceria o plano,
+      // o que é pior do que uma falha de sintaxe — ali a rede é a retentativa.
+      schema: action === "guard" ? SCHEMA_GUARD : undefined,
     });
 
-    const data = await res.json();
+    ultimosTokens = resposta.tokens;
+    ultimoModelo = resposta.modelo;
+    ultimoProvedor = resposta.provedor;
 
-    if (!res.ok) {
-      // O response_schema é endurecimento, não pode ser o que derruba o guard:
-      // se esta versão da API recusar o campo, desliga e repete sem ele — o
-      // comportamento volta a ser exatamente o de antes desta mudança.
-      if (usarSchema && res.status === 400) {
-        console.error(
-          "Gemini recusou o response_schema; repetindo sem ele:",
-          JSON.stringify(data),
-        );
-        usarSchema = false;
-        tentativa--; // o pedido nem chegou a ser avaliado; não gasta tentativa
-        continue;
-      }
-      console.error("ERRO DA API DO GEMINI (ai-plum-chat):", JSON.stringify(data, null, 2));
+    if (!resposta.ok) {
       return await responder(
-        json({ error: data.error?.message || "Erro na API do Google Gemini" }, 400),
+        json({ error: resposta.erro?.mensagem ?? "Erro no provedor de LLM" }, 400),
         "erro",
-        { codigoErro: `gemini_${res.status}`, corpoGemini: data },
+        { codigoErro: resposta.erro?.codigo },
       );
     }
 
-    // Resposta sem candidato (bloqueio de safety, corte de token) não pode
-    // virar TypeError — vira texto vazio e cai no mesmo caminho de falha.
-    const generatedText: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const generatedText: string = resposta.texto;
 
     if (!esperaJson) {
       console.log(`[${action}]`, JSON.stringify(generatedText));
       return await responder(json({ result: generatedText }), "ok", {
-        corpoGemini: data,
         saida: generatedText,
       });
     }
@@ -559,13 +555,12 @@ PORTUGUÊS CORRETO:
       // **cacheável**, e plano com data é descartado (D-024) — justamente o
       // mais provável de estar errado.
       return await responder(json({ result: finalResponse }), statusLog, {
-        corpoGemini: data,
         saida: finalResponse,
       });
     } catch {
       textoInvalido = generatedText;
       console.error(
-        `Falha ao parsear JSON retornado pelo Gemini [${action}, tentativa ${tentativa}/${maxTentativas}]:`,
+        `Falha ao parsear JSON retornado pelo modelo [${action}, tentativa ${tentativa}/${maxTentativas}]:`,
         generatedText,
       );
     }

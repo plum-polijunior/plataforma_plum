@@ -29,27 +29,32 @@ Invoke-RestMethod -Method Delete `
 `plum-chat` enxergava `GEMINI_API_KEY` como qualquer outra, e esteve aberta desde 14/07. Vale olhar
 o consumo do Gemini no período. Sem sinal de abuso, mas não dá para descartar.
 
-### 2. Conferir o dashboard depois do push do B03
+### 2. Publicar o B03 e o B05
 
-O B02 já subiu (nenhum card tinha `limit > 500`). O **B03** está commitado e vai no próximo push.
-Nenhum dos dois pede migration, secret ou deploy de Edge Function.
+Os dois estão commitados e vão juntos no próximo push. O **B03** é só executor — sobe sozinho na
+Action. O **B05** é o primeiro bloco da Etapa 1 que exige deploy de Edge Function:
 
-Depois que a Action `query-engine` terminar: abrir um dashboard e confirmar que os números não
-mudaram. Deve ser trivial — o B03 não alterou caminho existente nenhum.
+```bash
+npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
+```
+
+⚠️ Só essa função, e confirme pelo `ezbr_sha256`. Se o deploy não subir, o chat responde com o código
+antigo e todos os testes passam sem provar nada.
+
+Depois: `execucao/B05-llm/MANUAL.md`, passo 2 — ⭐ conferir que `tokens_entrada` **não** está nulo no
+`plum_logs`. Foi exatamente o que o B05 mexeu.
 
 ---
 
 ## 🤖 O que fica engatilhado para mim
 
-**B05 (`_shared/llm.ts`)** — o próximo. Independente do B02 e do B03. Detalhe em
-`PLANO-etapa-1.md` §C.
+**B04 (`vocabulario` + resolvedor de entidade)** — o próximo. Primeiro bloco a depender de dois
+anteriores (B02 e B03). Detalhe em `PLANO-etapa-1.md` §C.
 
-⭐ Depois dele vem o **B04** (`vocabulario` + resolvedor de entidade), que é o primeiro bloco a
-depender de dois anteriores (B02 e B03) e o primeiro a mexer em Edge Function.
-
-⚠️ **O B05 tem um pré-requisito seu:** criar o secret `ANTHROPIC_API_KEY`
-(*supabase.com/dashboard/account/tokens* é outro token — este é da Anthropic). Não bloqueia: sem ele
-a tabela papel→modelo cai para Gemini e o adaptador Claude nasce inerte.
+⭐ A armadilha que decide o B04 já está mapeada: a normalização do resolvedor em TypeScript precisa
+ser **a mesma** do `_strip_accents` do executor (trim + maiúsculas + sem acento). Divergir faz o
+resolvedor escolher um literal que o `where` depois não casa — e a pergunta volta com zero, que é
+exatamente o sintoma que o bloco existe para matar.
 
 ---
 
@@ -57,8 +62,8 @@ a tabela papel→modelo cai para Gemini e o adaptador Claude nasce inerte.
 
 - **Etapa 0:** ✅ fechada. As três migrations aplicadas, `ai-plum-chat` publicada em 2026-08-20
   (versão 59), `plum_logs` gravando com token, latência e saída dos agentes.
-- **Etapa 1:** plano em `PLANO-etapa-1.md`. **B02 pushado; B03 (`metadados`) implementado e
-  commitado.** 304 testes Python, 199 TypeScript, todos verdes.
+- **Etapa 1:** plano em `PLANO-etapa-1.md`. **B02 pushado; B03 (`metadados`) e B05 (`llm.ts`)
+  commitados**, aguardando push. 304 testes Python, 207 TypeScript, todos verdes.
 - **D-028:** ✅ encerrada em 2026-08-20 — os três consumidores de `query_plan.ts` estão na mesma
   versão, medido pela Management API.
 - **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem
@@ -66,6 +71,12 @@ a tabela papel→modelo cai para Gemini e o adaptador Claude nasce inerte.
   semanas, não tarefa de uma. **Não bloqueia nenhum bloco individual.**
 
 ## Pontas soltas
+
+- ⚠️ **O adaptador da Anthropic (`_shared/llm/claude.ts`) nunca foi executado.** Foi escrito sem a
+  `ANTHROPIC_API_KEY`, a seu pedido. Quando você criar o secret, os papéis `planejador` e
+  `interprete` (que nascem no B07) passam a rodar em `claude-opus-5` — e aí espere ajustes, em
+  especial no tratamento de recusa. Sem a chave eles caem no Gemini com aviso no console e
+  `provedor = 'google'` no log, de propósito.
 
 - ⭐ **`ls supabase/functions/` não é a lista do que está no ar.** A Management API lista seis
   funções; o repositório tem cinco. Já tinha acontecido com o `dashboard-agent` (I-03). Confira pela

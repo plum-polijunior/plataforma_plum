@@ -167,25 +167,13 @@ export function criarRegistradorCom(
 }
 
 /**
- * Extrai a contagem de tokens da resposta do Gemini.
+ * ⭐ `extrairUsoDeTokens` saiu daqui no B05 — agora é `tokensDoGemini` e
+ * `tokensDaAnthropic`, em `llm_core.ts`.
  *
- * ⚠️ **O código descartava isso.** O Gemini devolve `usageMetadata` em toda
- * resposta e nada no `ai-plum-chat` lia — então "custo por pergunta", que é a
- * métrica principal do log, sairia nulo. Conferido em 2026-08-18: não havia
- * nenhuma ocorrência de `usageMetadata` no repositório.
- *
- * Tolerante de propósito: campo ausente vira `null`, não exceção. O formato da
- * resposta é de terceiro e pode mudar sem aviso.
+ * O motivo: ela lia `usageMetadata`, que é formato do **Gemini**. A Anthropic
+ * devolve `usage.input_tokens`/`output_tokens`. Mantida neste arquivo, ela
+ * viraria "a leitura de token", singular, e no dia em que o planejador passasse
+ * a rodar em Claude o "custo por pergunta" — a métrica principal deste log —
+ * sairia nulo sem nada quebrar para avisar. Leitura de token é responsabilidade
+ * de quem conhece o provedor, e quem conhece o provedor é o adaptador.
  */
-export function extrairUsoDeTokens(
-  corpo: unknown,
-): { entrada: number | null; saida: number | null } {
-  const uso = (corpo as { usageMetadata?: Record<string, unknown> } | null)
-    ?.usageMetadata;
-  const numero = (v: unknown) => (typeof v === "number" ? v : null);
-
-  return {
-    entrada: numero(uso?.promptTokenCount),
-    saida: numero(uso?.candidatesTokenCount),
-  };
-}

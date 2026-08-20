@@ -16,6 +16,9 @@
  *
  * O segundo grupo cobre o mapeamento camelCase → snake_case, onde um nome
  * errado não dá erro: vira coluna nula, silenciosamente.
+ *
+ * ⚠️ A leitura de token saiu daqui no B05 e vive em `llm_core.test.ts`: ela é
+ * por provedor, e o Gemini e a Anthropic nomeiam os campos de jeitos diferentes.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,7 +26,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ClienteDeLog,
   criarRegistradorCom,
-  extrairUsoDeTokens,
   type LinhaDeLog,
   montarLinha,
 } from "./log_core.ts";
@@ -161,23 +163,5 @@ describe("montarLinha", () => {
     const chaves = Object.keys(montarLinha(TURNO, "legado", LINHA));
     expect(chaves).not.toContain("pergunta");
     expect(chaves).not.toContain("prompt");
-  });
-});
-
-describe("extrairUsoDeTokens", () => {
-  it("lê o usageMetadata do Gemini", () => {
-    expect(
-      extrairUsoDeTokens({
-        usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 120 },
-      }),
-    ).toEqual({ entrada: 900, saida: 120 });
-  });
-
-  it("devolve null em vez de estourar quando o formato muda", () => {
-    // Formato de terceiro: pode mudar sem aviso, e nenhuma mudança dele pode
-    // derrubar uma resposta que já foi gerada.
-    for (const corpo of [null, undefined, {}, { usageMetadata: {} }, "texto", 42]) {
-      expect(extrairUsoDeTokens(corpo)).toEqual({ entrada: null, saida: null });
-    }
   });
 });

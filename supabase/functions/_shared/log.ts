@@ -29,7 +29,6 @@ export {
   criarRegistradorCom,
   type DadosDoTurno,
   type EtapaLog,
-  extrairUsoDeTokens,
   type LinhaDeLog,
   montarLinha,
   type StatusLog,
