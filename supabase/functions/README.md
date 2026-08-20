@@ -32,6 +32,40 @@ As duas regras que sobreviveram àquela medição:
 2. **Confirme que subiu:** o `ezbr_sha256` tem de mudar. O `version` sobe sozinho em troca de
    secret, sem código novo — **não serve de prova**.
 
+### ⭐ Como ler o `ezbr_sha256`
+
+⚠️ **Até 2026-08-19 nenhum documento deste repositório dizia isto** — onze lugares mandavam
+"conferir o `ezbr_sha256`" e nenhum explicava onde ele aparece, o que tornava a regra 2 acima
+literalmente inexecutável para quem não estivesse presente na medição do I-03.
+
+Ele **não aparece no painel**. Vem da Management API, e exige um token pessoal
+(*supabase.com/dashboard/account/tokens* → "Generate new token"):
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = "<token>"
+Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions" `
+  -Headers @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" } |
+  Select-Object slug, version, ezbr_sha256, updated_at | Format-Table
+```
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions"
+```
+
+**Plano B, se o campo não vier na resposta.** Comparar o corpo publicado, que é o método
+efetivamente usado em 2026-08-12 (`CLAUDE.md` §1) — o `functions download` não serve porque exige
+Docker:
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions/<nome>/body" \
+  | grep -a -c "walkArithmetic"
+```
+
+Contagens iguais nos três consumidores de `query_plan.ts` significam interpretador de RBAC igual nos
+três. É comparação de conteúdo, não de hash — resolve "os três batem?", não "esta subiu agora?".
+
 ⚠️ Vale o inverso também: uma função que você **não** mexeu pode ter sido republicada pelo push de
 outra pessoa. Como `_shared/` é empacotado **por função** e não compartilhado em runtime, isso deixa
 cópias divergentes do interpretador de RBAC no ar sem ninguém ter feito deploy.

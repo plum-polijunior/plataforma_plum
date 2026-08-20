@@ -6,15 +6,68 @@
 sozinho no push (`query-engine.yml` roda `update-function-code` para todo push em `plataforma` que
 toque `query_engine/**`).
 
-**1. Registre o `ezbr_sha256` das três funções — o marco zero da etapa.**
+**1. Registre o `ezbr_sha256` das três funções — a foto de antes.**
 
-Não é para este bloco: é para os próximos. `ai-plum-chat`, `dashboard-execute` e `dashboard-agent`
-compartilham uma cópia de `_shared/query_plan.ts` cada, e a do `ai-plum-chat` está **antiga de
-propósito** (D-028). O primeiro bloco que tocar aquele arquivo precisa fechar a divergência, e sem o
-número de hoje não há como saber se ela fechou.
+### O que é esse número
 
-Anote os três no `CONTEXTO-alteracoes.md`. ⚠️ **`version` não serve** — ele sobe em troca de secret,
-sem código novo (I-03).
+A **impressão digital do código que está de fato rodando** naquela Edge Function. Não é o commit do
+git, e não é o campo `version`: o `version` sobe sozinho quando você troca um secret, sem código
+novo, então ele **não prova deploy nenhum** (I-03).
+
+### Para que serve aqui
+
+⚠️ **É mais fraco do que a primeira redação deste manual sugeria, e vale dizer por quê:**
+
+- O B02 **não toca** `_shared/query_plan.ts` — o portão dos três consumidores não se aplica a este
+  bloco.
+- O valor original de tirar uma foto agora seria detectar republicação que ninguém pediu. **Isso
+  caiu quando você desconectou a integração GitHub↔Supabase na Etapa 0** — era ela que publicava
+  sozinha, com cobertura desconhecida.
+
+⭐ **O que sobra, e é real:** a D-028 registra que `ai-plum-chat` roda com uma cópia **antiga** do
+`query_plan.ts`, de propósito. O primeiro bloco que mexer naquele arquivo — o **B09** — tem de
+publicar os três e provar que subiram. Com o número de hoje anotado, "provar" vira uma subtração;
+sem ele, vira arqueologia.
+
+### Como obter
+
+Ele não aparece no painel. Vem da Management API, e precisa de um **token pessoal**:
+*supabase.com/dashboard/account/tokens* → "Generate new token".
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = "<cole o token aqui>"
+Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions" `
+  -Headers @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" } |
+  Select-Object slug, version, ezbr_sha256, updated_at | Format-Table
+```
+
+No Git Bash, o mesmo:
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions"
+```
+
+⚠️ **Se o campo `ezbr_sha256` não vier nessa resposta**, use o que o `CLAUDE.md` §1 registra como
+tendo funcionado em 2026-08-12 — compara conteúdo em vez de hash, e serve para o mesmo fim:
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  "https://api.supabase.com/v1/projects/rjwidarrsykufuifzunu/functions/<nome>/body" \
+  | grep -a -c "walkArithmetic"
+```
+
+Contagens **iguais** nos três (`ai-plum-chat`, `dashboard-execute`, `dashboard-agent`) significam
+interpretador de RBAC igual nos três.
+
+### O que fazer com o número
+
+Colar **uma linha por função** no `CONTEXTO-alteracoes.md`, com a data. Não resuma em "os três
+batem": o B09 vai comparar valor a valor.
+
+```
+B02 · 2026-08-19 · sha antes do push — ai-plum-chat: <…> · dashboard-execute: <…> · dashboard-agent: <…>
+```
 
 **2. Confira se algum card usa `limit` acima de 500.**
 

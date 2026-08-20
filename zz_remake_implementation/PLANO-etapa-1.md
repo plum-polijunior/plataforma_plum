@@ -426,6 +426,11 @@ reescrito a cada bloco novo. **Não bloqueia começar o B02.**
    `ezbr_sha256` — `version` sobe em troca de secret e **não serve de prova** (I-03). Registrar o
    `ezbr_sha256` dos três **antes** do B02, como marco zero, e fechar a divergência da D-028
    (`ai-plum-chat` está com cópia antiga de propósito).
+
+   ⭐ **O marco zero é insumo do B09**, o primeiro bloco que toca aquele arquivo — não uma cerimônia
+   de abertura da etapa. Ele é tirado no B02 só porque é a última foto tranquila antes de qualquer
+   publicação. **Como ler o número está em `supabase/functions/README.md`** (nenhum documento dizia
+   isso até 2026-08-19, o que tornava a regra inexecutável).
 4. Migrations continuam manuais, com bloco de verificação autoexecutável (D-005).
 5. Antes de publicar algo compartilhado: saber se há demo marcada na semana. É o único risco real
    que a V3 reconhece.
