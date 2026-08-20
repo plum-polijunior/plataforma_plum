@@ -144,6 +144,34 @@ describe("normalização da saída do A2", () => {
     }
   });
 
+  it("⭐ objeto de erro do executor não vira reconhecimento", () => {
+    // O caso REAL de 2026-08-20. O executor devolve falha por card com HTTP 200,
+    // o `ad_hoc_planejar` conferia só o status HTTP, e este objeto chegou ao A2
+    // como "descrição estrutural da base". Ele relatou fielmente o que leu — e o
+    // resultado parecia opinião do modelo sobre a planilha quando era mensagem
+    // do `sheets.py`.
+    //
+    // A causa foi consertada no chamador; este teste guarda a última linha de
+    // defesa: com `colunasReais` vazio, nada do que o A2 disser é aproveitado, e
+    // `colunas: {}` é o que impede a gravação no cache.
+    const doExecutor = {
+      card_id: "chat",
+      status: "error",
+      error: "Duas colunas da planilha viram o mesmo nome depois de normalizar…",
+    };
+
+    const r = normalizarReconhecimento(
+      {
+        grao: "Não foi possível determinar o grão devido a erro estrutural.",
+        colunas: {},
+        observacoes: ["É necessário renomear uma das colunas na planilha."],
+      },
+      Object.keys((doExecutor as { colunas?: object }).colunas ?? {}),
+    );
+
+    expect(r.colunas).toEqual({});
+  });
+
   it("lista as colunas que valem vocabulário, ordenadas", () => {
     const r = normalizarReconhecimento(
       {

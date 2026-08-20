@@ -693,30 +693,57 @@ async function handleAdHocPlanejar(
     caminho: "ad_hoc",
   });
   const corpo = await resposta.json().catch(() => null);
-  const descricao = (corpo as { result?: unknown } | null)?.result;
+  const descricao = (corpo as { result?: Record<string, unknown> } | null)?.result;
+
+  // ⚠️⚠️ **Conferir o STATUS DO CARD, não só o HTTP.** O executor devolve falha
+  // por card com HTTP **200** — é o desenho dele (`main.py`: "um card ruim não
+  // pode derrubar o dashboard inteiro"), e o `handleExecutePlan` repassa isso
+  // como `{ result: { status: "error", error: … } }`, também 200.
+  //
+  // ⭐ Em 2026-08-20 este trecho conferia só `resposta.ok`, e o objeto de erro
+  // chegou ao A2 como se fosse a descrição da base. Ele relatou fielmente o que
+  // leu — "a leitura falhou, renomeie uma coluna" — e o resultado parecia
+  // opinião do modelo sobre a planilha quando era mensagem do `sheets.py`.
+  // Erro de infraestrutura vestido de julgamento de agente é o tipo de coisa
+  // que faz alguém ajustar o prompt errado por uma semana.
+  const colunas = (descricao?.colunas ?? null) as Record<string, unknown> | null;
+  const descricaoValida =
+    resposta.ok &&
+    descricao?.status === "ok" &&
+    colunas !== null &&
+    Object.keys(colunas).length > 0;
 
   await registrar({
     etapa: "reconhecedor",
-    status: resposta.ok && descricao ? "ok" : "erro",
-    codigoErro: resposta.ok ? null : `metadados_${resposta.status}`,
+    status: descricaoValida ? "ok" : "erro",
+    codigoErro: descricaoValida
+      ? null
+      : !resposta.ok
+      ? `metadados_http_${resposta.status}`
+      : "metadados_sem_colunas",
     latenciaMs: Date.now() - t1,
+    // O erro do executor vai para cá, que é onde ele sempre deveria ter ido.
+    respostaAgente: descricaoValida ? null : descricao ?? null,
   });
 
-  if (!resposta.ok || !descricao) {
+  if (!descricaoValida) {
     // ⚠️ Devolve 200 com `erro`, não um código de falha: em modo sombra, um erro
     // aqui não é um erro da PERGUNTA — ela vai ser respondida pelo caminho
     // legado de qualquer jeito. Status HTTP de erro faria o front tratar como
     // falha do chat.
-    return json({ habilitado: true, status: "erro", etapa: "metadados" });
+    return json({
+      habilitado: true,
+      status: "erro",
+      etapa: "metadados",
+      erro: descricao?.error ?? null,
+    });
   }
 
   // ── A2 · Reconhecedor (com cache) ────────────────────────────────────────
   const { data: dataset } = await supabase
     .from("datasets").select("schema_metadata").eq("id", datasetId).maybeSingle();
 
-  const colunasReais = Object.keys(
-    (descricao as { colunas?: Record<string, unknown> })?.colunas ?? {},
-  );
+  const colunasReais = Object.keys(colunas);
 
   const t2 = Date.now();
   const r = await reconhecer(

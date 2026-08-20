@@ -51,6 +51,22 @@ export async function reconhecer(
 ): Promise<ResultadoDoReconhecedor> {
   const digital = await digitalDoDicionario(schemaMetadata);
 
+  // ⚠️ Defesa em profundidade: o chamador já filtra, mas ESTE módulo é o que
+  // grava cache, e aceitar entrada inválida é o caminho para cachear lixo.
+  //
+  // ⭐ Aconteceu em 2026-08-20: o objeto de erro do executor chegou aqui como
+  // "descrição da base" e o A2 o descreveu como se fosse a planilha. Sem
+  // colunas reais não há reconhecimento possível — e chamar o modelo assim
+  // gasta token para produzir texto que só confunde quem for ler depois.
+  if (!colunasReais.length) {
+    console.error("[a2] descricao sem colunas — nao ha o que reconhecer");
+    return {
+      reconhecimento: normalizarReconhecimento(null, colunasReais),
+      digital,
+      cacheHit: false,
+    };
+  }
+
   const guardado = await buscar(cliente, datasetId, digital);
   if (guardado) {
     return {

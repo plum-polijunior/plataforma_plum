@@ -94,6 +94,10 @@ A1 e A2 serem agentes separados.
 select jsonb_pretty(reconhecimento) from plum_reconhecimento order by created_at desc limit 1;
 ```
 
+⚠️ **Se vier `colunas: {}` com observações sobre erro na planilha**, não é o A2 lendo mal — é o
+executor tendo recusado o `metadados` antes. Veja a tabela de sintomas no fim. Escolha uma base sem
+cabeçalho colidente para fazer este passo.
+
 ⚠️ **Aqui é onde o remake começa a poder ser julgado.** Não há teste automatizado que diga se o A2
 entendeu a base direito — só leitura. Vale conferir três coisas: o `grao` está certo? Alguma coluna
 recebeu `conceito` errado? As colunas com `confianca: "baixa"` são de fato as ambíguas?
@@ -117,5 +121,6 @@ Quem consome é o A3.
 |---|---|
 | Chat ficou mais lento com a chave ligada | Esperado até certo ponto: são duas chamadas de LLM extras por pergunta, em paralelo. Se incomodar, `update organizations set remake_habilitado = false;` — imediato, sem deploy |
 | Chat quebrou depois do deploy | Republicar a versão anterior pelo painel. ⚠️ A chamada sombra é `void` + `.catch()` e **não deveria** conseguir derrubar nada — se derrubou, é bug meu e quero saber |
+| O reconhecimento fala de **erro da planilha** em vez de descrever colunas | O executor recusou o `metadados` — tipicamente dois cabeçalhos que viram o mesmo nome depois de normalizar. ⭐ A frase é do `sheets.py`, não do modelo. A mensagem exata está em `plum_logs.resposta_agente` da linha com `codigo_erro = 'metadados_sem_colunas'`. Nada é cacheado nesse caso |
 | `cache_hit_a2` nunca vira `true` | A digital do dicionário está instável. Me avise: é a canonicalização, e tem teste que deveria ter pego |
 | Aparece `ad_hoc` no log de organização com a chave desligada | ⚠️ Grave. `update organizations set remake_habilitado = false;` em tudo e me avise |
