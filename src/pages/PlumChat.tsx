@@ -194,32 +194,69 @@ export default function PlumChat() {
 
       setMessages(prev => [...prev, userMsgData as ChatMessage]);
 
-      // 1-bis. ⭐ MODO SOMBRA do caminho `ad_hoc` (B06 do remake).
+      // 1-bis. ⭐ O CAMINHO `ad_hoc` (B07 do remake).
       //
-      // Roda A1 (porteiro) → metadados → A2 (reconhecedor) EM PARALELO com a
-      // cadeia que responde de verdade, e joga fora o resultado. O que fica é a
-      // linha em `plum_logs` com `caminho = 'ad_hoc'`.
+      // Quando `remake_habilitado` está ligado para a organização, é ELE quem
+      // responde: A1 → metadados → A2 → vocabulário → A3 → resolvedor, e depois
+      // executor → A4. O caminho de baixo (Agente Z/A/C) fica de reserva.
       //
-      // Por que existir antes de o `ad_hoc` responder qualquer coisa: o A3 só
-      // nasce no B07, e sem isto o A1 e o A2 passariam mais duas semanas sem
-      // nenhum sinal de realidade. Aqui eles rodam sobre pergunta de verdade,
-      // sobre base de verdade, e o custo aparece no log ao lado do custo da
-      // cadeia atual — que é a comparação que a Etapa 1 precisa fazer.
+      // ⚠️ **Qualquer falha aqui cai para o legado, em silêncio para o usuário.**
+      // É o que torna seguro deixar o remake responder de verdade: a regra que
+      // organiza a V3 é *não quebrar a demo*, e um A3 com defeito não pode virar
+      // chat quebrado. O defeito aparece em `plum_logs`, não na tela.
       //
-      // ⚠️ Três coisas que o tornam seguro, e nenhuma é opcional:
-      //   • `void` + `.catch()`: não é aguardado e não pode rejeitar. Falha aqui
-      //     não pode atrasar nem derrubar a resposta.
-      //   • A Edge Function devolve `{habilitado: false}` na hora quando
-      //     `remake_habilitado` está desligado — que é o caso de toda
-      //     organização hoje. Uma chamada barata, sem LLM nenhum.
-      //   • Mesmo `turnoId`: é o que costura a linha `ad_hoc` às linhas
-      //     `legado` da MESMA pergunta no log. Sem isso, comparar as duas
-      //     cadeias viraria estatística agregada em vez de par a par.
-      void supabase.functions
-        .invoke('ai-plum-chat', {
+      // Duas invocações, não uma: o turno inteiro numa chamada só encadearia
+      // quatro LLMs e duas idas ao Lambda dentro do teto de parede da Edge
+      // Function, com a pessoa olhando um spinner por um minuto sem sinal.
+      let respondidoPeloAdHoc = false;
+      try {
+        const planRes = await supabase.functions.invoke('ai-plum-chat', {
           body: { action: 'ad_hoc_planejar', prompt: userMsgContent, datasetId: selectedDatasetId, sessaoId, turnoId }
-        })
-        .catch((e) => console.debug('[sombra] ad_hoc_planejar falhou, ignorado:', e));
+        });
+        const p = planRes.data;
+
+        // `habilitado: false` é o caso de toda organização que não está no
+        // remake: volta na hora, sem chamar LLM nenhum.
+        if (!planRes.error && p?.habilitado) {
+          if (p.status === 'bloqueado' || p.status === 'inviavel') {
+            // ⭐ Recusa do porteiro ou do planejador NÃO cai para o legado: são
+            // respostas, não falhas. Cair aqui faria a pergunta ser respondida
+            // por um caminho que já a tinha recusado no outro.
+            await saveAndShowAssistantMsg(p.mensagem || 'Não consegui responder isso.');
+            respondidoPeloAdHoc = true;
+          } else if (p.status === 'desambiguacao') {
+            // ⭐ Dois candidatos plausíveis viram pergunta, nunca escolha.
+            await saveAndShowAssistantMsg(
+              `Encontrei mais de um "${p.termo}" na sua base. Qual deles?\n\n` +
+              (p.opcoes ?? []).map((o: string) => `- ${o}`).join('\n')
+            );
+            respondidoPeloAdHoc = true;
+          } else if (p.status === 'ok' && p.pedidos?.length) {
+            const execRes = await supabase.functions.invoke('ai-plum-chat', {
+              body: {
+                action: 'ad_hoc_executar', prompt: userMsgContent, datasetId: selectedDatasetId,
+                pedidos: p.pedidos, presuncoes: p.presuncoes, sessaoId, turnoId,
+              }
+            });
+            const e = execRes.data;
+            if (!execRes.error && e?.status === 'ok' && e.resposta) {
+              await saveAndShowAssistantMsg(e.resposta);
+              respondidoPeloAdHoc = true;
+            } else if (!execRes.error && e?.status === 'negado' && e.mensagem) {
+              await saveAndShowAssistantMsg(e.mensagem);
+              respondidoPeloAdHoc = true;
+            }
+          }
+        }
+      } catch (e) {
+        // Nem loga como erro: a pergunta vai ser respondida logo abaixo.
+        console.debug('[ad_hoc] falhou, caindo para o legado:', e);
+      }
+
+      if (respondidoPeloAdHoc) {
+        setIsProcessing(false);
+        return;
+      }
 
       // 2. Chama Agente Z (Guardião)
       //

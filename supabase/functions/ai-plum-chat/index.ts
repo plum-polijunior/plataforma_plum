@@ -49,12 +49,18 @@ import {
   type StatusLog,
 } from "../_shared/log.ts";
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
+import { colunasComVocabularioUtil } from "../_shared/reconhecimento.ts";
 import {
-  colunasComVocabularioUtil,
-  type Reconhecimento,
-} from "../_shared/reconhecimento.ts";
+  aplicarLiterais,
+  type Pedido,
+  type Presuncao,
+} from "../_shared/pedidos.ts";
+import { resolverEntidade, type ValorDoVocabulario } from "../_shared/entidade.ts";
+import { lerVocabulario, planoDeVocabulario } from "../_shared/vocabulario.ts";
 import { passarPeloPorteiro } from "./adhoc/porteiro.ts";
 import { reconhecer } from "./adhoc/reconhecedor.ts";
+import { planejar } from "./adhoc/planejador.ts";
+import { interpretar, type ResultadoDePedido } from "./adhoc/interprete.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,6 +111,16 @@ interface OpcoesDeExecucao {
    *  ver, e a barreira 4 do Lambda continua conferindo isso. */
   tipo?: "metadados";
   caminho?: "legado" | "ad_hoc";
+  /**
+   * Lote de pedidos do A3 (B07). Quando presente, `plan` é ignorado e a resposta
+   * sai como `{results, negados}` em vez de `{result}`.
+   *
+   * ⭐ Cada pedido é autorizado SEPARADAMENTE, e um negado não derruba os
+   * outros. É a diferença entre "sua pergunta usa uma coluna que seu cargo não
+   * pode ver" (o caminho atual, que perde a pergunta inteira) e "não incluí a
+   * margem porque seu cargo não tem acesso" (o A4 diz, e o resto responde).
+   */
+  lote?: { id: string; plano: unknown; tipo?: string }[];
 }
 
 async function handleExecutePlan(
@@ -204,8 +220,43 @@ async function handleExecutePlan(
   // `allowed_columns`. Fingir um veredito aqui, em vez de desviar, faria
   // `authorizePlan` receber `{}` e devolver "nenhuma coluna" — o A2 descreveria
   // uma base vazia e ninguém saberia por quê.
+  // ── Lote do A3: autoriza pedido a pedido ─────────────────────────────────
+  const negados: { id: string; motivo: string }[] = [];
+  const plansDoLote: Record<string, unknown>[] = [];
+  const colunasDoLote = new Set<string>();
+
+  if (opcoes.lote) {
+    for (const p of opcoes.lote) {
+      const v = authorizePlan(p.plano as QueryPlan, allowedColumns);
+      if (!v.allowed) {
+        console.warn("[ad_hoc] pedido negado por RBAC", JSON.stringify({
+          id: p.id, negadas: v.forbidden, roleId: profile.role_id,
+        }));
+        negados.push({
+          id: p.id,
+          // Acentuada: esta frase chega ao A4 e vira texto na tela.
+          motivo: "seu cargo não tem acesso a uma das colunas deste recorte",
+        });
+        continue;
+      }
+      plansDoLote.push({
+        card_id: p.id,
+        plan: p.plano,
+        resolved_columns: v.required,
+        ...(p.tipo ? { tipo: p.tipo } : {}),
+      });
+      for (const c of v.required) colunasDoLote.add(c);
+    }
+
+    // ⚠️ Todos negados: nada a executar. Devolve 200 com os negados para o A4
+    // dizer o que faltou — é o formato honesto, e não uma falha do chat.
+    if (!plansDoLote.length) return json({ results: [], negados });
+  }
+
   const veredito = opcoes.tipo === "metadados"
     ? { allowed: true, required: allowedColumns, forbidden: [] as string[] }
+    : opcoes.lote
+    ? { allowed: true, required: [...colunasDoLote], forbidden: [] as string[] }
     : authorizePlan(plan as QueryPlan, allowedColumns);
 
   if (!veredito.allowed) {
@@ -268,7 +319,7 @@ async function handleExecutePlan(
     tab_gid: dataset.google_sheet_gid ?? null,
     // "chat" no lugar de um id de card real: não existe card salvo aqui, e o
     // Lambda trata cada item de `plans` de forma independente de qualquer forma.
-    plans: [{
+    plans: opcoes.lote ? plansDoLote : [{
       card_id: "chat",
       plan,
       resolved_columns: veredito.required,
@@ -308,6 +359,14 @@ async function handleExecutePlan(
     if (!resp.ok) throw new Error(`executor respondeu ${resp.status}`);
 
     const corpo = await resp.json();
+
+    if (opcoes.lote) {
+      // ⭐ Lote devolve TODOS os resultados, cada um com o seu `card_id`. O A4
+      // precisa deles separados: cada pedido responde um recorte diferente, e
+      // juntá-los aqui perderia qual número responde o quê.
+      return json({ results: corpo.results ?? [], negados });
+    }
+
     const resultado: ExecutorResult = (corpo.results ?? [])[0] ?? {
       status: "error",
       error: "Executor não devolveu resultado.", // acentuada em 2026-08-11 (chega à bolha)
@@ -757,7 +816,10 @@ async function handleAdHocPlanejar(
 
   // ── A2 · Reconhecedor (com cache) ────────────────────────────────────────
   const { data: dataset } = await supabase
-    .from("datasets").select("schema_metadata").eq("id", datasetId).maybeSingle();
+    .from("datasets")
+    .select("schema_metadata, vocabulario_exposto")
+    .eq("id", datasetId)
+    .maybeSingle();
 
   const colunasReais = Object.keys(colunas);
 
@@ -791,14 +853,217 @@ async function handleAdHocPlanejar(
       : r.reconhecimento,
   });
 
+  if (!Object.keys(r.reconhecimento.colunas).length) {
+    return json({ habilitado: true, status: "erro", etapa: "reconhecedor" });
+  }
+
+  // ── Coleta determinística: vocabulário (B04) ─────────────────────────────
+  // Sem LLM. As colunas vêm do que o A2 marcou como `vocabulario_util`, e as
+  // três travas do B04 continuam valendo: `allowed_columns` (conferido pedido a
+  // pedido no `handleExecutePlan`), a flag da base, e o teto de cardinalidade
+  // que o executor aplica.
+  const vocabularios: Record<string, ValorDoVocabulario[]> = {};
+  const querVocabulario = colunasComVocabularioUtil(r.reconhecimento);
+
+  if (dataset?.vocabulario_exposto && querVocabulario.length) {
+    const t3 = Date.now();
+    const resp = await handleExecutePlan(req, datasetId, {}, {
+      caminho: "ad_hoc",
+      lote: querVocabulario.slice(0, 4).map((col) => ({
+        id: col,
+        plano: planoDeVocabulario(col),
+        tipo: "vocabulario",
+      })),
+    });
+    const corpoVoc = await resp.json().catch(() => null);
+
+    for (const res of (corpoVoc?.results ?? []) as Record<string, unknown>[]) {
+      // ⚠️ Coluna recusada pelo teto de cardinalidade sai daqui em silêncio, e
+      // é o comportamento certo: acima de 200 distintos ela é identificador, e
+      // o A3 planeja melhor sem uma lista truncada do que com ela.
+      if (res.status !== "ok") continue;
+      vocabularios[String(res.card_id)] = lerVocabulario(String(res.card_id), res.rows);
+    }
+
+    await registrar({
+      etapa: "executor",
+      status: "ok",
+      latenciaMs: Date.now() - t3,
+      respostaAgente: {
+        vocabularios_pedidos: querVocabulario,
+        obtidos: Object.keys(vocabularios),
+      },
+    });
+  }
+
+  // ── A3 · Planejador ──────────────────────────────────────────────────────
+  const t4 = Date.now();
+  const { plano, llm: llmA3 } = await planejar({
+    pergunta,
+    reconhecimento: r.reconhecimento,
+    vocabularios,
+  });
+
+  const registrarA3 = async (status: StatusLog) => {
+    await registrar({
+      etapa: "planejador",
+      status,
+      codigoErro: llmA3.erro?.codigo ?? null,
+      modelo: llmA3.modelo,
+      provedor: llmA3.provedor,
+      tokensEntrada: llmA3.tokens.entrada,
+      tokensSaida: llmA3.tokens.saida,
+      latenciaMs: Date.now() - t4,
+      presuncoesQtd: plano.presuncoes.length,
+      respostaAgente: plano,
+    });
+  };
+
+  // ── Resolvedor de entidade (B04) — código, sem LLM ───────────────────────
+  // ⭐ Dois candidatos plausíveis viram PERGUNTA, nunca escolha: escolher errado
+  // devolve um número certo sobre a pessoa errada.
+  const literais = new Map<string, string>();
+  for (const { termo, coluna } of plano.entidades) {
+    const casado = resolverEntidade(termo, vocabularios[coluna] ?? []);
+
+    if (casado.tipo === "exato") {
+      literais.set(termo, casado.literal);
+    } else if (casado.tipo === "ambiguo") {
+      await registrarA3("desambiguacao");
+      return json({
+        habilitado: true,
+        status: "desambiguacao",
+        termo,
+        opcoes: casado.opcoes,
+      });
+    }
+    // `nenhum`: segue com o termo cru. O `where` do executor normaliza os dois
+    // lados, então ainda pode casar — e devolver zero é mais honesto que trocar
+    // por um valor que o resolvedor não teve confiança para escolher.
+  }
+
+  const pedidos: Pedido[] = plano.pedidos.map((p) => ({
+    ...p,
+    plano: aplicarLiterais(p.plano, literais) as Record<string, unknown>,
+  }));
+
+  await registrarA3(plano.inviavel ? "inviavel" : pedidos.length ? "ok" : "erro");
+
+  if (plano.inviavel) {
+    return json({ habilitado: true, status: "inviavel", mensagem: plano.inviavel });
+  }
+  if (!pedidos.length) {
+    return json({ habilitado: true, status: "erro", etapa: "planejador" });
+  }
+
   return json({
     habilitado: true,
     status: "ok",
     cacheHit: r.cacheHit,
-    reconhecimento: r.reconhecimento satisfies Reconhecimento,
-    // O que o B04 vai buscar vocabulário quando o A3 existir (B07).
-    vocabularios: colunasComVocabularioUtil(r.reconhecimento),
+    pedidos,
+    presuncoes: plano.presuncoes,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ad_hoc_executar — executor → A4. A segunda metade do turno.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ⚠️ **Os `pedidos` vêm do cliente, e isso é seguro pelo mesmo motivo de sempre:
+ * plano é candidato, nunca verdade.** O `authorizePlan` roda aqui no servidor
+ * para cada pedido, e a barreira 4 do Lambda reconfere contra o
+ * `allowed_columns` lido do banco com o JWT de quem perguntou. É exatamente a
+ * postura do `execute_plan` do caminho atual, que também recebe o plano pronto.
+ */
+async function handleAdHocExecutar(
+  req: Request,
+  pergunta: unknown,
+  datasetId: unknown,
+  pedidos: unknown,
+  presuncoes: unknown,
+  turno: Partial<DadosDoTurno>,
+): Promise<Response> {
+  if (typeof pergunta !== "string" || !Array.isArray(pedidos) || !pedidos.length) {
+    return json({ error: "pergunta e pedidos obrigatorios" }, 400);
+  }
+
+  const authHeader = req.headers.get("Authorization");
+  const registrar = criarRegistrador(authHeader, turno, "ad_hoc");
+  const lista = pedidos as Pedido[];
+
+  // ── Executor ─────────────────────────────────────────────────────────────
+  const t0 = Date.now();
+  const resp = await handleExecutePlan(req, datasetId, {}, {
+    caminho: "ad_hoc",
+    lote: lista.map((p) => ({ id: p.id, plano: p.plano, tipo: p.tipo })),
+  });
+  const corpo = await resp.json().catch(() => null);
+  const results = (corpo?.results ?? []) as Record<string, unknown>[];
+  const negadosRbac = (corpo?.negados ?? []) as { id: string; motivo: string }[];
+
+  const porId = new Map(lista.map((p) => [p.id, p]));
+  const resultados: ResultadoDePedido[] = [
+    ...results.map((res) => ({
+      id: String(res.card_id),
+      porque: porId.get(String(res.card_id))?.porque ?? "",
+      status: res.status === "ok" ? ("ok" as const) : ("erro" as const),
+      dados: res.status === "ok" ? { colunas: res.columns, linhas: res.rows } : undefined,
+      motivo: res.status === "ok"
+        ? undefined
+        : String(res.error ?? "não foi possível calcular este recorte"),
+    })),
+    ...negadosRbac.map((n) => ({
+      id: n.id,
+      porque: porId.get(n.id)?.porque ?? "",
+      status: "negado" as const,
+      motivo: n.motivo,
+    })),
+  ];
+
+  const comDados = resultados.filter((x) => x.status === "ok");
+  await registrar({
+    etapa: "executor",
+    status: comDados.length ? "ok" : negadosRbac.length ? "negado" : "erro",
+    latenciaMs: Date.now() - t0,
+    // Agregado não entrega linha bruta. O B10 muda isto quando `registro` e
+    // `amostra` existirem — e é a coluna de que o orçamento vai viver.
+    linhasBrutasEntregues: 0,
+  });
+
+  // ⚠️ Nenhum resultado: nada para o A4 interpretar. Chamar o modelo caro aqui
+  // produziria uma frase educada sobre o nada.
+  if (!comDados.length) {
+    return json({
+      status: negadosRbac.length ? "negado" : "erro",
+      mensagem: negadosRbac.length
+        ? "Seu cargo não tem acesso às colunas necessárias para responder isso."
+        : null,
+    });
+  }
+
+  // ── A4 · Intérprete ──────────────────────────────────────────────────────
+  const t1 = Date.now();
+  const { texto, llm } = await interpretar(
+    pergunta,
+    resultados,
+    (Array.isArray(presuncoes) ? presuncoes : []) as Presuncao[],
+  );
+
+  await registrar({
+    etapa: "interprete",
+    status: texto ? "ok" : "erro",
+    codigoErro: llm.erro?.codigo ?? null,
+    modelo: llm.modelo,
+    provedor: llm.provedor,
+    tokensEntrada: llm.tokens.entrada,
+    tokensSaida: llm.tokens.saida,
+    latenciaMs: Date.now() - t1,
+    respostaAgente: texto,
+  });
+
+  if (!texto) return json({ status: "erro", etapa: "interprete" });
+  return json({ status: "ok", resposta: texto });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -809,6 +1074,11 @@ Deno.serve(async (req: Request) => {
   try {
     const {
       action, prompt, schemaMetadata, executorResult, datasetId, plan,
+      // ⚠️ Vêm do cliente e são plano de consulta — o que é seguro pelo mesmo
+      // motivo que o `plan` acima: o `authorizePlan` roda no servidor para cada
+      // pedido e a barreira 4 do Lambda reconfere. Plano é candidato, nunca
+      // verdade (§4 regra 1).
+      pedidos, presuncoes,
       // Identificam a conversa e a pergunta, para o log costurar as etapas.
       // Gerados no cliente — ver `20260818110000_plum_logs.sql`. Opcionais de
       // propósito: front antigo continua funcionando, só sem registro.
@@ -854,6 +1124,11 @@ Deno.serve(async (req: Request) => {
     }
     if (action === "ad_hoc_planejar") {
       return await handleAdHocPlanejar(req, prompt, datasetId, turno);
+    }
+    if (action === "ad_hoc_executar") {
+      return await handleAdHocExecutar(
+        req, prompt, datasetId, pedidos, presuncoes, turno,
+      );
     }
     if (action === "guard" || action === "plan_query" || action === "synthesize_answer") {
       return await handleAgente(
