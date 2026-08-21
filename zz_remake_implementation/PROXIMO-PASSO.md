@@ -59,23 +59,27 @@ conserta.
 
 ## 🤖 O que fica engatilhado para mim
 
-**B07 (A3 + A4 + presunções)** — o mais caro da etapa, e onde o `ad_hoc` passa a **responder** em vez
-de só reconhecer. Consome tudo que os seis blocos anteriores deixaram pronto.
+**B09 (`agg` ampliado)** ou **B10 (`registro`, `amostra` e orçamento)** — os dois que sobram, e
+independentes entre si.
 
-⚠️ **É a primeira vez que o `_shared/llm/claude.ts` roda.** Escrito no B05, nunca executado —
-qualquer surpresa, suspeite dele antes de suspeitar do prompt.
+⭐ **O B08 encolheu no B07:** a negação parcial saiu de graça quando os pedidos viraram um lote. O
+que resta dele é uma decisão, não código — ligar ou não o teto de cardinalidade no caminho legado,
+com o dado que o modo observação do B02 já vem acumulando (`[adhoc-observacao]` no CloudWatch).
 
-⚠️ O prompt do A3 é **o artefato mais importante da etapa** (V7 §9) e o único sem responsável
-nomeado. O texto da V7 §5.3 é ponto de partida, não entrega.
+⚠️ O prompt do A3 é **o artefato mais importante da etapa** (V7 §9) e continua sem responsável
+nomeado. Nada do B07 diz se ele planeja bem — só que a forma do que ele devolve é conferida. Quem
+diz é a suíte de 25–30 perguntas.
 
 ---
 
 ## Estado
 
 - **Etapa 0:** ✅ fechada e no ar.
-- **Etapa 1:** 6 dos 9 blocos escritos. **Tudo pushado; o Lambda tem B02, B03 e B04.** Falta a
-  Edge Function do B06 subir (o `ai-plum-chat`) e as duas migrations. Faltam B07, B08, B09 e B10.
-- **Testes:** 339 Python, 257 TypeScript, `tsc` limpo, lint na baseline (65 erros, nenhum novo).
+- **Etapa 1:** **8 dos 9 blocos** (o B08 encolheu para uma decisão). B02–B06 no ar e validados;
+  **B07 commitado, esperando o deploy do `ai-plum-chat`.** Faltam B09 e B10.
+- ⭐ **O `ad_hoc` responde de ponta a ponta** a partir do próximo deploy, com queda para o legado em
+  qualquer falha.
+- **Testes:** 339 Python, 269 TypeScript, `tsc` limpo, lint na baseline (65 erros, nenhum novo).
 - **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem
   usuário real, é o único critério de parada que o remake tem. **Não bloqueia nenhum bloco.**
 
