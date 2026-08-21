@@ -723,11 +723,20 @@ async function handleAdHocPlanejar(
     return "metadados_vazio";
   };
 
+  // ⚠️ `executor`, NÃO `reconhecedor`. Esta chamada é uma ida ao Lambda, e
+  // rotulá-la com o nome do agente seguinte produzia DUAS linhas `reconhecedor`
+  // no mesmo turno — o que corrompe exatamente as medições que a etapa existe
+  // para dar: `group by etapa` conta em dobro, a latência do Lambda entra no
+  // custo do A2, e a taxa de `cache_hit_a2` sai diluída por linhas que nunca
+  // tiveram cache. Visto no primeiro teste real do B06, em 2026-08-21.
   await registrar({
-    etapa: "reconhecedor",
+    etapa: "executor",
     status: descricaoValida ? "ok" : "erro",
     codigoErro: descricaoValida ? null : codigoDoErro(),
     latenciaMs: Date.now() - t1,
+    // Quantas linhas a base tem. É o que o `linhas_origem` sempre quis dizer, e
+    // o `metadados` é o único lugar do caminho que sabe isso de graça.
+    linhasOrigem: typeof descricao?.n_linhas === "number" ? descricao.n_linhas : null,
     // O erro do executor vai para cá, que é onde ele sempre deveria ter ido —
     // e não para dentro do reconhecimento, onde parecia opinião do modelo.
     respostaAgente: descricaoValida ? null : descricao ?? null,

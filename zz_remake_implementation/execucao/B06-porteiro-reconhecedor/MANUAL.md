@@ -66,7 +66,13 @@ order by created_at;
 ```
 
 Esperado: linhas `legado` (`guard`, `plan_query`, `execute_plan`, `synthesize_answer`) **e** linhas
-`ad_hoc` (`porteiro`, `reconhecedor`), com o **mesmo `turno_id`**.
+`ad_hoc` (`porteiro`, `executor`, `reconhecedor`), com o **mesmo `turno_id`**.
+
+⚠️ **São TRÊS etapas no `ad_hoc`, não duas.** O `executor` é a ida ao Lambda buscar `metadados` —
+ela não é do A2, embora aconteça para alimentá-lo. Até 2026-08-21 ela vinha rotulada como
+`reconhecedor` e produzia duas linhas com o mesmo nome no turno: `group by etapa` contava em dobro,
+a latência do Lambda entrava no custo do A2, e a taxa de `cache_hit_a2` saía diluída por linhas que
+nunca tiveram cache.
 
 ⭐ **Este é o critério §0.5 do V3**, adiado desde a Etapa 0 porque não havia dois caminhos: uma
 pergunta rodando com a chave ligada e o log mostrando por qual caminho cada etapa passou. Aqui ele é
