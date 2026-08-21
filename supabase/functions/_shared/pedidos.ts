@@ -15,7 +15,18 @@
  * substitui. Isto é higiene de forma: recusar cedo o que quebraria longe.
  */
 
-export type TipoDePedido = "agregado" | "serie" | "vocabulario";
+/**
+ * ⚠️ `registro` e `amostra` devolvem LINHA BRUTA — são a exceção ao P1.3, e a
+ * única razão de poderem existir é que o `orcamento.ts` os conta antes de
+ * executar e o `linhas.py` corta em 5. Acrescentar um terceiro tipo aqui sem
+ * passar pelos dois reabriria a porta.
+ */
+export type TipoDePedido =
+  | "agregado"
+  | "serie"
+  | "vocabulario"
+  | "registro"
+  | "amostra";
 
 export interface Pedido {
   /** Identificador local do turno. Vira `card_id` no payload do executor. */
@@ -58,7 +69,13 @@ export interface PlanoDoA3 {
   inviavel?: string;
 }
 
-const TIPOS = new Set<TipoDePedido>(["agregado", "serie", "vocabulario"]);
+const TIPOS = new Set<TipoDePedido>([
+  "agregado",
+  "serie",
+  "vocabulario",
+  "registro",
+  "amostra",
+]);
 
 /** Teto de pedidos por turno. Ver o comentário em `normalizarPlanoDoA3`. */
 export const MAX_PEDIDOS = 6;

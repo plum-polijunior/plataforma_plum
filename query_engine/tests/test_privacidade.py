@@ -15,6 +15,7 @@ privacidade que está no material comercial. Não conserte o teste; conserte o
 executor.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -23,6 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from query_engine import linhas  # noqa: E402
 from query_engine.pandas_executor import (  # noqa: E402
     CardinalidadeExcedida,
     ExecutorError,
@@ -821,3 +823,190 @@ def test_as_novas_sao_redutoras():
         assert classificar_agregacao(agg) == "redutora", agg
     for agg in ("nunique", "first", "last"):
         assert classificar_agregacao(agg) == "seletora", agg
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B10 — `registro` e `amostra`: a ÚNICA exceção ao P1.3
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ Todo o resto deste arquivo prova que linha bruta NÃO atravessa. Esta seção
+# prova o contrário — e é por isso que ela existe aqui, junto, em vez de num
+# arquivo à parte: quem revisar privacidade tem de ver as duas coisas na mesma
+# leitura.
+#
+# O que sustenta a exceção são três travas, e duas ficam FORA do executor:
+#   1. teto de 5 linhas por pedido        → `linhas.py`, testado aqui
+#   2. orçamento de 200 por janela        → Edge Function (`orcamento.ts`)
+#   3. colunas do `allowed_columns`       → barreira 4 do `main.py`
+
+
+@pytest.fixture
+def base_larga():
+    return pd.DataFrame(
+        {
+            "cliente": [f"CLIENTE {i:03d}" for i in range(50)],
+            "regiao": ["Sul", "Norte"] * 25,
+            "valor": [float(i) for i in range(50)],
+        }
+    )
+
+
+@pytest.mark.invariante
+def test_registro_nunca_devolve_mais_de_cinco(base_larga):
+    """
+    O teto por pedido. ⚠️ Sozinho ele não protege nada — 200 pedidos de 5 linhas
+    é a base inteira — mas sem ele o orçamento seria gasto num pedido só.
+    """
+    r = linhas.registro(
+        base_larga, ["cliente", "valor"],
+        {"left": "regiao", "op": "=", "right": "Sul"}, {},
+    )
+
+    assert len(r["rows"]) == linhas.TETO_POR_PEDIDO
+    assert r["linhas_brutas_entregues"] == linhas.TETO_POR_PEDIDO
+
+
+@pytest.mark.invariante
+def test_registro_sem_filtro_e_recusado(base_larga):
+    """
+    ⭐ Sem `where`, "me dá 5 registros" é AMOSTRA. Permitir aqui apagaria a
+    distinção e daria um jeito educado de paginar a base: 10 pedidos sem filtro
+    = 50 linhas em ordem.
+    """
+    for vazio in (None, {}, "regiao = Sul", []):
+        with pytest.raises(ExecutorError) as exc:
+            linhas.registro(base_larga, ["cliente"], vazio, {})
+        assert "filtro" in str(exc.value)
+
+
+@pytest.mark.invariante
+def test_registro_so_devolve_as_colunas_pedidas(base_larga):
+    """
+    A barreira 4 já filtrou a lista antes de chegar aqui, mas o recorte tem de
+    respeitá-la mesmo assim: o DataFrame carregado pode ter mais colunas do que
+    ESTE pedido pediu, quando o lote tem vários.
+    """
+    r = linhas.registro(
+        base_larga, ["cliente"], {"left": "regiao", "op": "=", "right": "Sul"}, {},
+    )
+
+    assert r["columns"] == ["cliente"]
+    assert all(set(linha) == {"cliente"} for linha in r["rows"])
+
+
+def test_registro_respeita_o_filtro(base_larga):
+    r = linhas.registro(
+        base_larga, ["cliente", "regiao"],
+        {"left": "regiao", "op": "=", "right": "Norte"}, {},
+    )
+    assert {linha["regiao"] for linha in r["rows"]} == {"Norte"}
+
+
+def test_registro_sem_correspondencia_devolve_vazio(base_larga):
+    r = linhas.registro(
+        base_larga, ["cliente"],
+        {"left": "regiao", "op": "=", "right": "Marte"}, {},
+    )
+    assert r["rows"] == []
+    assert r["linhas_brutas_entregues"] == 0
+
+
+# ── amostra ──────────────────────────────────────────────────────────────────
+
+@pytest.mark.invariante
+def test_amostra_nunca_devolve_mais_de_cinco(base_larga):
+    r = linhas.amostra(base_larga, ["cliente"], 42)
+    assert len(r["rows"]) == linhas.TETO_POR_PEDIDO
+
+
+def test_amostra_e_deterministica(base_larga):
+    """
+    ⭐ A mesma base tem de dar a mesma amostra. Aleatório puro faria o mesmo par
+    (pergunta, base) gerar planos diferentes em execuções diferentes — e "por que
+    hoje deu outro número?" precisa ter resposta.
+    """
+    a = linhas.amostra(base_larga, ["cliente"], 42)
+    b = linhas.amostra(base_larga, ["cliente"], 42)
+    assert a["rows"] == b["rows"]
+
+
+def test_amostra_muda_quando_a_base_muda(base_larga):
+    """Amostra congelada de uma base que cresceu descreveria o passado."""
+    semente_antes = linhas.semente_de("ds-1", len(base_larga))
+    semente_depois = linhas.semente_de("ds-1", len(base_larga) + 10)
+    assert semente_antes != semente_depois
+
+
+def test_semente_nao_usa_o_hash_do_python():
+    """
+    ⚠️ `hash()` é aleatorizado por processo desde o Python 3.3. Usá-lo faria a
+    "semente determinística" mudar a cada cold start do Lambda — determinismo
+    que só vale dentro de uma invocação não é determinismo.
+
+    Este teste roda a semente num SUBPROCESSO com outro PYTHONHASHSEED e compara.
+    """
+    import subprocess
+    import sys
+
+    codigo = (
+        "import sys; sys.path.insert(0, '.');"
+        "from query_engine.linhas import semente_de; print(semente_de('ds-1', 50))"
+    )
+    saidas = set()
+    for seed in ("0", "12345"):
+        env = {**os.environ, "PYTHONHASHSEED": seed}
+        r = subprocess.run(
+            [sys.executable, "-c", codigo], capture_output=True, text=True,
+            env=env, cwd=str(Path(__file__).resolve().parents[2]),
+        )
+        # ⚠️ Sem isto o teste passa de graca quando o subprocesso quebra:
+        # dois subprocessos que falham devolvem {""}, que tem tamanho 1.
+        assert r.returncode == 0, r.stderr
+        saidas.add(r.stdout.strip())
+
+    assert saidas != {""}
+    assert len(saidas) == 1, f"semente variou entre processos: {saidas}"
+
+
+def test_amostra_de_base_vazia_nao_estoura():
+    r = linhas.amostra(pd.DataFrame({"cliente": []}), ["cliente"], 42)
+    assert r["rows"] == []
+    assert r["linhas_brutas_entregues"] == 0
+
+
+def test_a_lista_de_quem_consome_bate_com_o_typescript():
+    """
+    ⚠️ Espelhada em `_shared/orcamento.ts::consomeOrcamento`. Divergir faz o
+    executor entregar linha que o orçamento não contou.
+    """
+    assert linhas.tipos_que_consomem_orcamento() == ["registro", "amostra"]
+
+
+def test_registro_nao_devolve_a_coluna_que_so_apareceu_no_filtro():
+    """
+    ⚠️ `resolved_columns` inclui as colunas do `where` — o `extractColumns`
+    percorre o filtro tambem, e TEM de percorrer, senao a coluna se esconde do
+    RBAC (I-05). Mas devolver o `cpf` porque o filtro citou o `cpf`, num tipo que
+    ja e a excecao ao P1.3, e entregar coluna a mais por acidente.
+    """
+    from query_engine.main import colunas_de_linha
+
+    plano = {
+        "select": ["nome"],
+        "where": {"left": "cpf", "op": "=", "right": "111"},
+    }
+    assert colunas_de_linha(plano, ["nome", "cpf"]) == ["nome"]
+
+
+def test_o_select_escolhe_mas_nunca_amplia():
+    """⭐ A intersecao e nesta ordem: `select` escolhe, `allowed` filtra."""
+    from query_engine.main import colunas_de_linha
+
+    plano = {"select": ["nome", "salario"]}
+    assert colunas_de_linha(plano, ["nome"]) == ["nome"]
+
+
+def test_sem_select_utilizavel_cai_no_conjunto_autorizado():
+    from query_engine.main import colunas_de_linha
+
+    for plano in ({}, {"select": []}, {"select": [{"expr": {"agg": "sum"}}]}):
+        assert colunas_de_linha(plano, ["nome"]) == ["nome"]

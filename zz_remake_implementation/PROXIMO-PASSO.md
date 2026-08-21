@@ -1,6 +1,6 @@
 # ▶ Próximo passo — onde o remake parou
 
-**Atualizado:** 2026-08-20, fim do dia · **Leia isto primeiro ao retomar.**
+**Atualizado:** 2026-08-21, com o B10 escrito · **Leia isto primeiro ao retomar.**
 
 Este arquivo existe porque o agendador do Claude Code morre junto com a sessão: um lembrete só
 sobrevive se estiver no repositório. Ele é sempre reescrito por inteiro — não é histórico, é estado.
@@ -10,82 +10,92 @@ O histórico está nos `DIARIO.md` de cada bloco.
 
 ## 👤 A fila, em ordem
 
-### 1. Publicar o `ai-plum-chat` e seguir o `MANUAL.md` do B07
+### 1. ⚠️ Publicar o `ai-plum-chat` — está atrasado três blocos
 
 ```bash
 npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
 ```
 
-⭐ **É o bloco em que o remake passa a RESPONDER.** Com a chave ligada, a resposta na tela vem do
-caminho novo — e qualquer falha dele cai para o legado em silêncio, que é o que torna isso seguro.
+**B07-bis, B09 e B10 estão commitados e não estão no ar.** Confirme pelo `ezbr_sha256` (receita em
+`supabase/functions/README.md`), nunca pelo `version`.
 
-⚠️ **Consequência: ausência de defeito na tela NÃO prova que o `ad_hoc` funcionou.** O manual tem a
-query que separa os dois casos, e ela é o passo mais importante do bloco.
+⚠️ **No B10 esse deploy virou obrigatório e urgente.** O Lambda já aceita `registro`/`amostra`; quem
+conta as linhas contra o orçamento é a Edge Function. Entre o push e este deploy, **o teto de 200
+linhas por dia não existe** — só o de 5 por pedido, que sozinho não protege nada (200 pedidos de 5
+linhas é a base inteira).
 
-⚠️ Confira que `planejador` e `interprete` saem com `modelo = gemini-3.1-pro-preview` no log. Se
-vier Flash, alguém apontou os dois para o modelo barato; se toda pergunta cair para o legado com
-erro do provedor no `planejador`, o modelo em preview pode ter sido aposentado.
+### 2. Seguir o `MANUAL.md` do B10
 
-⭐ E o passo que mais rende: **repita `quanto joão silva vendeu?`** e compare com R$ 224.042,24, que é
-o que o caminho antigo respondeu em 2026-08-20. Número diferente é o achado mais importante que este
-bloco pode produzir.
+`zz_remake_implementation/execucao/B10-registro-amostra/MANUAL.md`. O passo que mais importa é o
+**4**: forçar a negação e confirmar que a agregação continua respondendo. Se ela parar junto, o
+orçamento está cobrando de quem não devolve linha.
 
-### 2. ✅ (feito) Migrations, Lambda e o deploy do B06
+### 3. Seguir o `MANUAL.md` do B07 — ainda não foi feito
 
-⚠️ Do episódio do push de 2026-08-21, uma coisa **continua de pé**: o `query-engine.yml` roda
-`update-function-code` **antes** do smoke test, então não há janela em que o deploy seja verificado
-antes de valer. Derrubou o executor uma vez (**I-09**), e virou **C4b** em `20-pendencias.md`.
+⭐ **É o bloco em que o remake passa a RESPONDER**, e agora sem rede: com a chave ligada, **só** o
+`ad_hoc` responde. Não há mais queda para o legado — decisão sua de 2026-08-21 (*"prefiro chat
+quebrado pra remake habilitado"*). Falha agora aparece na tela, nomeando a etapa.
 
+⚠️ Confira que `planejador` e `interprete` saem com `modelo = gemini-3.1-pro-preview` no log.
+
+⭐ E o passo que mais rende: **repita `quanto joão silva vendeu?`** e compare com R$ 224.042,24, que
+é o que o caminho antigo respondeu em 2026-08-20.
+
+### 4. Três respostas que continuam pendentes
+
+- ⭐ **A `latencia_ms` do `planejador`.** Ele tem uma invocação só para ele desde o B07-bis, então o
+  número é limpo — e é o que diz se o modelo de raciocínio cabe no orçamento de tempo.
+- ⭐ **`custo_produto` é total ou unitário?** Decide se o caminho legado vem calculando lucro errado.
+- **Apagar a Edge Function órfã `plum-chat`** pelo painel do Supabase (T7), e olhar o consumo do
+  Gemini no período.
+
+---
 
 ## 🤖 O que fica engatilhado para mim
 
-**B10 (`registro`, `amostra` e orçamento)** — o último. É o único bloco que mexe no caminho que
-devolve linha **sem** agregação, e o §B4 do plano já resolveu a parte difícil: o saldo sai de
-`SUM(plum_logs.linhas_brutas_entregues)`, sem tabela nova, com o débito sendo uma **escrita
-verificada** em vez de best-effort.
+**A Etapa 1 está escrita inteira.** Não há próximo bloco.
 
-⭐ **B09 feito** — e ele foi menos "acrescentar" e mais consertar: `std`/`median`/`var` respondiam
-com `group_by` e devolviam `null` sem, e `quantile` devolvia a **mediana** em silêncio.
+⚠️ **O que falta para fechá-la não é código:** a suíte de **25–30 perguntas de avaliação** (V3 §6).
+Sem usuário real, é o único critério de parada que o remake tem, e o prompt do A3 — *o artefato mais
+importante da etapa* (V7 §9) — continua sem ninguém dizendo se ele planeja **bem**. Os blocos
+conferem a **forma** do que ele devolve, nunca a qualidade. Continua sem responsável nomeado.
 
-⭐ **O B08 encolheu no B07:** a negação parcial saiu de graça quando os pedidos viraram um lote. O
-que resta dele é uma decisão, não código — ligar ou não o teto de cardinalidade no caminho legado,
-com o dado que o modo observação do B02 já vem acumulando (`[adhoc-observacao]` no CloudWatch).
-
-⚠️ O prompt do A3 é **o artefato mais importante da etapa** (V7 §9) e continua sem responsável
-nomeado. Nada do B07 diz se ele planeja bem — só que a forma do que ele devolve é conferida. Quem
-diz é a suíte de 25–30 perguntas.
+⭐ **O que resta do B08 é uma decisão, não código:** ligar ou não o teto de cardinalidade no caminho
+legado, com o dado que o modo observação do B02 vem acumulando (`[adhoc-observacao]` no CloudWatch).
 
 ---
 
 ## Estado
 
 - **Etapa 0:** ✅ fechada e no ar.
-- **Etapa 1:** **8 dos 9 escritos** (o B08 encolheu para uma decisão). B02–B06 no ar; **B07-bis e
-  B09 commitados**, esperando deploy do `ai-plum-chat` e push. Falta só o **B10**.
-- ⭐ **O `ad_hoc` responde de ponta a ponta** a partir do próximo deploy, com queda para o legado em
-  qualquer falha.
-- **Testes:** 357 Python, 272 TypeScript, `tsc` limpo, lint na baseline (65 erros, nenhum novo).
-- **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem
-  usuário real, é o único critério de parada que o remake tem. **Não bloqueia nenhum bloco.**
+- **Etapa 1:** ✅ **escrita** — B02..B10 (o B08 encolheu para uma decisão). B02–B06 no ar; **B07-bis,
+  B09 e B10 commitados, esperando o deploy do `ai-plum-chat`**.
+- ⭐ **Com a chave ligada, só o `ad_hoc` responde** — sem queda para o legado. Falha vira mensagem na
+  tela nomeando a etapa.
+- **Testes:** 374 Python, 286 TypeScript, `tsc` limpo, lint na baseline.
+- **Bloqueante da etapa, sem dono:** as **25–30 perguntas de avaliação**. Não bloqueia nenhum bloco.
 
 ## Pontas soltas
 
+- ⚠️ **Um `error` de Postgrest ignorado foi achado pela terceira vez** (no B10, na leitura do saldo;
+  antes na leitura e na gravação do cache do A2). O padrão é sempre `const { data } = await ...`: o
+  Postgrest **não lança**, devolve `{ data: null, error }`, e o `?? []` transforma falha em resposta
+  vazia plausível. Vale uma varredura por `const { data }` sem `error` no `ai-plum-chat`.
 - ⚠️ **`_shared/llm/claude.ts` nunca foi executado e hoje é inalcançável.** A análise de custo de
-  2026-08-21 levou planejador e intérprete para `gemini-3.1-pro-preview`, então nenhum papel aponta
-  para a Anthropic. ⭐ O adaptador fica de propósito: trocar de provedor é uma linha em
-  `MODELO_POR_PAPEL`, e apagá-lo desfaria o ponto do B05. A chave já está nos secrets.
-- ⚠️ **O modelo de raciocínio é `-preview`.** Se for aposentado, o sintoma é o `ad_hoc` caindo para
-  o legado em toda pergunta — **em silêncio na tela**, visível só em `plum_logs.codigo_erro`.
+  2026-08-21 levou planejador e intérprete para `gemini-3.1-pro-preview`. ⭐ O adaptador fica de
+  propósito: trocar de provedor é uma linha em `MODELO_POR_PAPEL`. A chave já está nos secrets.
+- ⚠️ **O modelo de raciocínio é `-preview`.** Se for aposentado, agora o sintoma é o chat **quebrado
+  na tela** (não mais silêncio), com `etapa: planejador`.
 - ⚠️ **Duas dívidas de normalização duplicada**, TS × Python, com tabela de casos replicada:
   nome de coluna (D-017, falha barulhenta) e **valor de texto** (B04, falha **muda** — devolve
   resultado vazio). Mudou um lado, mude o outro e os dois testes.
-- **C11 e C12** em `contexto/20-pendencias.md` saíram desta semana e se resolvem juntos, no
-  onboarding: cabeçalhos que colidem ao normalizar, e `allowed_columns` que nunca é revalidado
-  contra a planilha. ⭐ O `metadados` já sabe apontar o segundo.
+- ⚠️ **C4b:** o `query-engine.yml` roda `update-function-code` **antes** do smoke test, então não há
+  janela em que o deploy do Lambda seja verificado antes de valer. Derrubou o executor uma vez
+  (**I-09**).
+- **C11 e C12** em `contexto/20-pendencias.md` se resolvem juntos, no onboarding: cabeçalhos que
+  colidem ao normalizar, e `allowed_columns` que nunca é revalidado contra a planilha.
 - `zz_remake/LEIA-PRIMEIRO.md` modificado no working tree apontando o **V2** como autoritativo, que
   o V3 substituiu. É edição sua; não commitei.
-- `20260818120000_plum_logs_resposta.sql` está sem quebra de linha no fim — edição sua ao colar no
-  SQL Editor. Inofensivo.
 - `zz_remake_implementation/chequei-dashboard-agent-e-n-o-nested-platypus.md` continua **não
   rastreado de propósito**: contém a chave publicável do projeto Supabase abandonado.
 - `contexto/30-decisoes.md` passou de 450 linhas (teto 400). Divisão limpa: D-001..D-030 `vigente`

@@ -173,6 +173,52 @@ export function criarRegistradorCom(
 }
 
 /**
+ * Igual ao `criarRegistradorCom`, mas **não engole o erro** — devolve se gravou.
+ *
+ * ⚠️ Existe por causa do orçamento do B10, e a diferença é deliberada. A regra
+ * deste arquivo é *o log nunca derruba a pergunta*, e ela está certa para
+ * observabilidade: perder uma linha de custo não justifica perder a resposta.
+ *
+ * ⭐ **Mas o débito do orçamento não é observabilidade — é controle.** Um
+ * orçamento apoiado numa escrita best-effort se contorna fazendo a escrita
+ * falhar: bastaria o log quebrar para as linhas brutas saírem de graça, para
+ * sempre. Por isso o chamador recebe o resultado e **falha o pedido** quando o
+ * débito não grava.
+ *
+ * São duas posturas na mesma tabela, de propósito. Qual usar depende de uma
+ * pergunta só: *se esta linha se perder, alguém ganha alguma coisa?*
+ */
+export function criarRegistradorVerificado(
+  cliente: ClienteDeLog | null,
+  turno: Partial<DadosDoTurno>,
+  caminho: CaminhoLog = "legado",
+): (linha: LinhaDeLog) => Promise<{ ok: boolean; erro?: string }> {
+  if (!cliente) {
+    // ⚠️ Sem client não há como debitar, e "não consegui cobrar" tem de ser
+    // falha — não um passe livre.
+    return async () => ({ ok: false, erro: "sem cliente para gravar o debito" });
+  }
+
+  return async (linha: LinhaDeLog) => {
+    try {
+      const { error } = await cliente
+        .from("plum_logs")
+        .insert(montarLinha(turno, caminho, linha));
+
+      if (error) {
+        console.error("[orcamento] debito nao gravou:", error.message);
+        return { ok: false, erro: error.message };
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[orcamento] excecao ao gravar debito:", msg);
+      return { ok: false, erro: msg };
+    }
+  };
+}
+
+/**
  * ⭐ `extrairUsoDeTokens` saiu daqui no B05 — agora é `tokensDoGemini` e
  * `tokensDaAnthropic`, em `llm_core.ts`.
  *

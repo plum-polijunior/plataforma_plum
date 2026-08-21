@@ -673,3 +673,41 @@ describe("B09 — o `p` do quantile não é coluna", () => {
     });
   });
 });
+
+describe("B10 — `select` de nomes crus (registro/amostra) passa pelo RBAC", () => {
+  // ⚠️ `registro` e `amostra` são a única forma de `select` que NÃO leva
+  // `{"agg": ...}`: é uma lista de nomes de coluna. Forma nova na gramática é
+  // exatamente onde uma coluna se esconde do RBAC (I-05), e aqui o risco é
+  // maior que nos outros blocos — o que atravessa é linha bruta.
+  it("cada nome do select vira coluna a autorizar", () => {
+    const cols = extractColumns({
+      from: "producao",
+      select: ["cliente", "valor", "data"],
+    } as never);
+
+    expect([...cols].sort()).toEqual(["cliente", "data", "valor"]);
+  });
+
+  it("⭐ a coluna que só aparece no where também é autorizada", () => {
+    // Ela não vai para a resposta (o `colunas_de_linha` do Lambda a corta),
+    // mas filtrar por uma coluna é ler essa coluna — quem não pode vê-la não
+    // pode usá-la como peneira.
+    const cols = extractColumns({
+      from: "producao",
+      select: ["nome"],
+      where: { left: "cpf", op: "=", right: "111" },
+    } as never);
+
+    expect([...cols].sort()).toEqual(["cpf", "nome"]);
+  });
+
+  it("authorizePlan nega o registro que pede coluna fora do cargo", () => {
+    const r = authorizePlan(
+      { from: "producao", select: ["nome", "salario"] } as never,
+      ["nome"],
+    );
+
+    expect(r.allowed).toBe(false);
+    expect(r.forbidden).toEqual(["salario"]);
+  });
+});

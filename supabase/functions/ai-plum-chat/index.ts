@@ -45,9 +45,18 @@ import {
 import { parseGeminiJson } from "../_shared/gemini_parsing.ts";
 import {
   criarRegistrador,
+  criarRegistradorVerificado,
   type DadosDoTurno,
   type StatusLog,
 } from "../_shared/log.ts";
+import {
+  aprovarLote,
+  calcularSaldo,
+  consomeOrcamento,
+  type Gasto,
+  JANELA_HORAS,
+  TETO_DE_LINHAS_BRUTAS,
+} from "../_shared/orcamento.ts";
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
 import { colunasComVocabularioUtil } from "../_shared/reconhecimento.ts";
 import {
@@ -1024,15 +1033,66 @@ async function handleAdHocExecutar(
   const registrar = criarRegistrador(authHeader, turno, "ad_hoc");
   const lista = pedidos as Pedido[];
 
+  // ── Orçamento de linhas brutas (B10) ─────────────────────────────────────
+  //
+  // ⭐ Só entra em cena quando há `registro` ou `amostra` no lote. Agregado,
+  // série, metadados e vocabulário não devolvem linha, e cobrar por eles
+  // empurraria o planejador a agregar MENOS para caber — o contrário do que o
+  // orçamento quer.
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader ?? "" } } },
+  );
+
+  let negadosPorOrcamento: { id: string; motivo: string }[] = [];
+  let aprovados = lista;
+
+  if (lista.some((p) => consomeOrcamento(p.tipo))) {
+    const gasto = await saldoDaJanela(supabase, turno.datasetId);
+    const veredito = aprovarLote(lista, gasto.saldo, TETO_POR_PEDIDO);
+
+    aprovados = veredito.aprovados as Pedido[];
+    negadosPorOrcamento = veredito.negados;
+
+    if (negadosPorOrcamento.length) {
+      console.warn(
+        `[orcamento] ${negadosPorOrcamento.length} pedido(s) negados — ` +
+          `gasto ${gasto.gasto}/${TETO_DE_LINHAS_BRUTAS} na janela`,
+      );
+    }
+  }
+
+  // ⚠️ Todos negados pelo orçamento: nada a executar, e a resposta é uma frase,
+  // não uma falha. O usuário estourou uma cota, não quebrou nada.
+  if (!aprovados.length) {
+    await registrar({
+      etapa: "executor",
+      status: "negado",
+      codigoErro: "orcamento_esgotado",
+      linhasBrutasEntregues: 0,
+    });
+    return json({
+      status: "negado",
+      mensagem:
+        "Você já viu o máximo de linhas detalhadas desta base nas últimas " +
+        `${JANELA_HORAS} horas. Perguntas que somam, contam ou agrupam continuam ` +
+        "funcionando normalmente.",
+    });
+  }
+
   // ── Executor ─────────────────────────────────────────────────────────────
   const t0 = Date.now();
   const resp = await handleExecutePlan(req, datasetId, {}, {
     caminho: "ad_hoc",
-    lote: lista.map((p) => ({ id: p.id, plano: p.plano, tipo: p.tipo })),
+    lote: aprovados.map((p) => ({ id: p.id, plano: p.plano, tipo: p.tipo })),
   });
   const corpo = await resp.json().catch(() => null);
   const results = (corpo?.results ?? []) as Record<string, unknown>[];
-  const negadosRbac = (corpo?.negados ?? []) as { id: string; motivo: string }[];
+  const negadosRbac = [
+    ...((corpo?.negados ?? []) as { id: string; motivo: string }[]),
+    ...negadosPorOrcamento,
+  ];
 
   const porId = new Map(lista.map((p) => [p.id, p]));
   const resultados: ResultadoDePedido[] = [
@@ -1053,15 +1113,50 @@ async function handleAdHocExecutar(
     })),
   ];
 
+  // ── ⚠️ O DÉBITO, e ele é uma escrita VERIFICADA ──────────────────────────
+  //
+  // O executor devolve `linhas_brutas_entregues` por pedido — quem sabe quanto
+  // saiu é ele, não uma estimativa daqui.
+  //
+  // ⭐ Esta gravação NÃO pode ser best-effort como o resto do log. O saldo sai
+  // de `SUM(plum_logs.linhas_brutas_entregues)`, então um débito que não grava
+  // é uma linha bruta que saiu de graça — e, se o log estiver quebrado, saem
+  // todas, para sempre. Se não gravar, o turno falha.
+  const entregues = results.reduce(
+    (t, r) => t + (typeof r.linhas_brutas_entregues === "number" ? r.linhas_brutas_entregues : 0),
+    0,
+  );
+
   const comDados = resultados.filter((x) => x.status === "ok");
-  await registrar({
-    etapa: "executor",
-    status: comDados.length ? "ok" : negadosRbac.length ? "negado" : "erro",
-    latenciaMs: Date.now() - t0,
-    // Agregado não entrega linha bruta. O B10 muda isto quando `registro` e
-    // `amostra` existirem — e é a coluna de que o orçamento vai viver.
-    linhasBrutasEntregues: 0,
-  });
+
+  if (entregues > 0) {
+    const debitar = criarRegistradorVerificado(supabase as never, turno, "ad_hoc");
+    const { ok, erro } = await debitar({
+      etapa: "executor",
+      status: "ok",
+      latenciaMs: Date.now() - t0,
+      linhasBrutasEntregues: entregues,
+      respostaAgente: { debito: entregues, tipos: aprovados.map((p) => p.tipo) },
+    });
+
+    if (!ok) {
+      console.error("[orcamento] debito falhou, turno recusado:", erro);
+      return json({
+        status: "erro",
+        etapa: "orcamento",
+        mensagem:
+          "Não consegui registrar o uso desta consulta, então preferi não " +
+          "entregá-la. Tente de novo em instantes.",
+      });
+    }
+  } else {
+    await registrar({
+      etapa: "executor",
+      status: comDados.length ? "ok" : negadosRbac.length ? "negado" : "erro",
+      latenciaMs: Date.now() - t0,
+      linhasBrutasEntregues: 0,
+    });
+  }
 
   // ⚠️ Nenhum resultado: nada para o A4 interpretar. Chamar o modelo caro aqui
   // produziria uma frase educada sobre o nada.
@@ -1096,6 +1191,59 @@ async function handleAdHocExecutar(
 
   if (!texto) return json({ status: "erro", etapa: "interprete" });
   return json({ status: "ok", resposta: texto });
+}
+
+/** Teto por pedido do executor (`query_engine/linhas.py`). Espelhado aqui para
+ *  a reserva ser feita pelo PIOR caso, antes de qualquer linha ser lida. */
+const TETO_POR_PEDIDO = 5;
+
+/**
+ * Quanto de linha bruta este usuário já recebeu desta base na janela.
+ *
+ * ⭐ Sai de `plum_logs`, sem tabela nova: a coluna existe desde a Etapa 0 e a
+ * RLS já limita à organização.
+ *
+ * ⚠️ **Mas a RLS de leitura é POR ORGANIZAÇÃO, não por pessoa** — a policy
+ * "membro ativo le o log da org" deixa qualquer membro ler o log de todos. Sem
+ * o `user_id` explícito no filtro, a cota viraria coletiva: um colega gastaria
+ * as 200 linhas de todo mundo. É a mesma armadilha do RLS ≠ GRANT — supor que a
+ * policy já faz o recorte que você queria.
+ *
+ * ⚠️ **A chave não é `sessao_id`.** Ele é uuid do cliente, renovado a cada F5 —
+ * amarrar a cota a ele daria orçamento novo a cada recarga. O aviso está escrito
+ * desde a Etapa 0 na migration, no `log.ts` e no `PlumChat.tsx`.
+ */
+async function saldoDaJanela(
+  supabase: ReturnType<typeof createClient>,
+  datasetId: string | null | undefined,
+): Promise<Gasto> {
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user?.id) throw new Error("sem usuario no JWT");
+
+    const desde = new Date(Date.now() - JANELA_HORAS * 3600_000).toISOString();
+    const { data, error } = await supabase
+      .from("plum_logs")
+      .select("linhas_brutas_entregues")
+      .eq("user_id", auth.user.id)
+      .eq("dataset_id", datasetId ?? "")
+      .gt("linhas_brutas_entregues", 0)
+      .gte("created_at", desde);
+
+    // ⚠️ Postgrest não lança: erro vem em `error` com `data: null`. Destruturar
+    // só o `data` faria `data ?? []` virar saldo cheio — o orçamento falharia
+    // ABERTO exatamente quando o banco está ruim. Foi assim que a gravação do
+    // cache do A2 ficou meses invisível.
+    if (error) throw new Error(error.message);
+
+    return calcularSaldo((data ?? []).map((l) => l.linhas_brutas_entregues as number));
+  } catch (e) {
+    // ⚠️ Falha ao LER o saldo trata como esgotado, não como livre. Um orçamento
+    // que abre quando o banco tosse não é orçamento — e o custo do lado seguro
+    // é uma pergunta respondida sem linha detalhada.
+    console.error("[orcamento] leitura do saldo falhou:", e instanceof Error ? e.message : e);
+    return { gasto: TETO_DE_LINHAS_BRUTAS, saldo: 0 };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

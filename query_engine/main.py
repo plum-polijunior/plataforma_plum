@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import ValidationError
 
-from query_engine import config, metadados as metadados_mod, sheets
+from query_engine import config, linhas as linhas_mod, metadados as metadados_mod, sheets
 from query_engine.pandas_executor import (
     CardinalidadeExcedida,
     ExecutorError,
@@ -59,6 +59,37 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), force=True)
 logger = logging.getLogger("plum.executor")
 
 app = FastAPI(title="PLUM Query Engine", docs_url=None, redoc_url=None)
+
+
+def plano_where(plan: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """O `where` do plano, quando ha um. Usado so por `registro`."""
+    onde = (plan or {}).get("where")
+    return onde if isinstance(onde, dict) else None
+
+
+def colunas_de_linha(plan: Dict[str, Any], autorizadas: List[str]) -> List[str]:
+    """
+    As colunas que um `registro`/`amostra` devolve: o `select` do plano,
+    INTERSECTADO com o que a barreira 4 autorizou.
+
+    ⚠️ Nao da para usar `resolved_columns` direto. Ele inclui as colunas do
+    `where` (o `extractColumns` percorre o filtro tambem, e tem de percorrer —
+    e assim que uma coluna se esconde do RBAC), entao um `registro` que filtra
+    por `cpf` e pede so `nome` devolveria o `cpf` junto. Autorizado, mas nao
+    pedido: num tipo que ja e a excecao ao P1.3, entregar coluna a mais por
+    acidente e o contrario do que se quer.
+
+    ⭐ A intersecao e nesta ordem de proposito: o `select` escolhe, o
+    `autorizadas` filtra. Nunca o contrario — `select` nao amplia nada.
+    """
+    permitidas = {c for c in autorizadas if c}
+    pedidas = [
+        c for c in (plan or {}).get("select") or []
+        if isinstance(c, str) and c in permitidas
+    ]
+    # Sem `select` utilizavel, cai no conjunto autorizado — que ja e o recorte
+    # minimo que a barreira 4 deixou passar.
+    return pedidas or list(autorizadas)
 
 # Reaproveitado entre invocações enquanto o container do Lambda vive. Evita
 # reconstruir credencial e cliente a cada requisição.
@@ -198,6 +229,37 @@ async def execute(
                     ),
                 }
             )
+            continue
+
+        # ── `registro` e `amostra`: a UNICA excecao ao P1.3 ──────────────────
+        # ⚠️ Sao os unicos pedidos que devolvem linha sem agregacao, e por isso
+        # vivem num arquivo so (`query_engine/linhas.py`): toda a discussao de
+        # privacidade cabe num diff, e a revisao vira pergunta binaria.
+        #
+        # ⚠️ O teto de 5 linhas e aplicado la. O ORCAMENTO da janela e aplicado
+        # na Edge Function, antes de chegar aqui — so ela sabe quanto o usuario
+        # ja gastou. Teto por pedido sozinho nao protege nada: 200 pedidos de 5
+        # linhas e a base inteira sem violar teto nenhum.
+        if pedido.tipo in ("registro", "amostra"):
+            try:
+                colunas = colunas_de_linha(pedido.plan, pedido.resolved_columns)
+                if pedido.tipo == "registro":
+                    saida = linhas_mod.registro(
+                        df, colunas, plano_where(pedido.plan), column_roles
+                    )
+                else:
+                    saida = linhas_mod.amostra(
+                        df,
+                        colunas,
+                        linhas_mod.semente_de(payload.sheet_id, len(df)),
+                    )
+            except ExecutorError as exc:
+                resultados.append(
+                    {"card_id": pedido.card_id, "status": "error", "error": str(exc)}
+                )
+                continue
+
+            resultados.append({"card_id": pedido.card_id, "status": "ok", **saida})
             continue
 
         # `from` do plano pode nomear a tabela; aqui só existe uma.

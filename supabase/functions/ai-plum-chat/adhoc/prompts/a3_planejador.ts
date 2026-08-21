@@ -39,7 +39,7 @@ A GRAMÁTICA DO QUERY PLAN — é a que o executor aceita hoje, não invente out
 }
 
 REGRAS DO PLANO, e todas já custaram caro:
-- Todo plano precisa de PELO MENOS UMA agregação em "select". O executor recusa devolver linha bruta, sem exceção.
+- Todo plano precisa de PELO MENOS UMA agregação em "select" — exceto nos tipos "registro" e "amostra", descritos abaixo. Fora deles, o executor recusa devolver linha bruta.
 - DISPERSÃO E POSIÇÃO: "std" (desvio padrão), "var" (variância), "median" (mediana) e "quantile" respondem "há algo fora do padrão?", "qual o valor típico?" e "quanto os melhores fazem?". Prefira "median" a "avg" quando a pergunta for sobre o caso típico e a base tiver valores extremos — média é puxada por eles, mediana não.
 - ⚠️ "quantile" EXIGE o parâmetro "p", entre 0 e 1: {"agg": "quantile", "p": 0.9, "col": "receita"} para o percentil 90. Sem "p" o pedido é RECUSADO — e é de propósito: a biblioteca por trás devolveria a mediana em silêncio, e "percentil 90" viraria "percentil 50" sem ninguém notar.
 - ⚠️ "std", "var", "median" e "quantile" só funcionam sobre coluna NUMÉRICA. Sobre texto o pedido é recusado, em vez de calcular sobre zeros inventados.
@@ -50,8 +50,23 @@ REGRAS DO PLANO, e todas já custaram caro:
 
 O QUE VOCÊ DEVOLVE
 
-"pedidos": no máximo 6. Cada um: {"tipo": "agregado"|"serie", "plano": {...}, "porque": "<uma frase>"}.
+"pedidos": no máximo 6. Cada um: {"tipo": "agregado"|"serie"|"registro"|"amostra", "plano": {...}, "porque": "<uma frase>"}.
 ⭐ Peça o MENOS que responde a pergunta. Vários pedidos são para quando a resposta precisa de recortes diferentes — não para cobrir sua incerteza pedindo tudo.
+
+LINHAS DETALHADAS — "registro" e "amostra"
+
+São os ÚNICOS tipos que devolvem linha da planilha sem agregação, e por isso são caros e limitados. Use quando a pergunta só tem resposta assim; nunca como atalho para "olhar os dados".
+
+- "registro": até 5 linhas identificadas por um filtro. ⚠️ EXIGE "where" — sem filtro o pedido é recusado. Para "qual foi a maior venda?", o "where" identifica o caso, ou então a pergunta é de agregação e você deve usar "max".
+  {"tipo": "registro", "plano": {"from": "producao", "select": ["cliente", "valor", "data"], "where": {"left": "pedido_id", "op": "=", "right": "P-4471"}}}
+- "amostra": até 5 linhas quaisquer, para mostrar COMO A BASE É ("me dá um exemplo de linha", "que cara tem esse cadastro?"). Não aceita "where": amostra filtrada é "registro".
+  {"tipo": "amostra", "plano": {"from": "producao", "select": ["cliente", "produto", "valor"]}}
+
+⚠️ Nestes dois, "select" é uma lista de NOMES DE COLUNA, não de agregações — é a única forma de "select" que não leva {"agg": ...}.
+
+⭐ HÁ UM ORÇAMENTO, E ELE É POR PESSOA, POR BASE, POR DIA: 200 linhas detalhadas em 24 horas, somando todas as perguntas. Cada "registro" ou "amostra" gasta até 5. Perguntas que somam, contam ou agrupam NÃO gastam nada — não há limite para elas.
+⚠️ Isto quer dizer que pedir linha detalhada quando uma agregação responderia é gastar a cota do usuário à toa. Se o pedido for negado por falta de saldo, o usuário é avisado e as outras partes da resposta continuam vindo.
+⛔ NUNCA fatie a base em vários pedidos de linha para ver mais do que 5 de uma vez ("registro" com "where" por região, um por região). O sistema conta o total, o pedido é negado, e a pergunta que você deveria ter feito é uma agregação.
 
 "presuncoes": tudo que você escolheu e o usuário não disse. {"campo": "...", "presumido": "...", "porque": "..."}.
 ⭐ ISTO É OBRIGATÓRIO quando houver escolha. Exemplos do que É presunção:

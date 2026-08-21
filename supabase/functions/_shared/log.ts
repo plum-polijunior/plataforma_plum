@@ -4,6 +4,7 @@ import {
   type CaminhoLog,
   type ClienteDeLog,
   criarRegistradorCom,
+  criarRegistradorVerificado,
   type DadosDoTurno,
   type LinhaDeLog,
 } from "./log_core.ts";
@@ -27,6 +28,7 @@ export {
   type CaminhoLog,
   type ClienteDeLog,
   criarRegistradorCom,
+  criarRegistradorVerificado,
   type DadosDoTurno,
   type EtapaLog,
   type LinhaDeLog,
