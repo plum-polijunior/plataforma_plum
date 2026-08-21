@@ -8,54 +8,33 @@ O histórico está nos `DIARIO.md` de cada bloco.
 
 ---
 
-## ⚠️ O que aconteceu no push de 2026-08-21
-
-O push subiu tudo e **derrubou o executor**: o `Dockerfile` listava os módulos um a um e o
-`metadados.py` (B03) nunca entrou na lista. `Runtime.ImportModuleError`, executor fora do ar até o
-push seguinte. Corrigido com `COPY *.py` — está em **I-09** de `contexto/31-incidentes-e-licoes.md`.
-
-⭐ **A lição que sobrou, e é mais geral que o Docker:** *um teste que roda contra o repositório não
-diz nada sobre o artefato publicado.* Vale igual para o `_shared/` das Edge Functions, que é
-empacotado por função.
-
-⚠️ E a causa que **continua de pé**: o `query-engine.yml` roda `update-function-code` **antes** do
-smoke test. Virou **C4b** em `20-pendencias.md`.
-
----
-
 ## 👤 A fila, em ordem
 
-### 1. ✅ (feito) `git push` — Lambda no ar com B03, B04 e os consertos
+### 1. Publicar o `ai-plum-chat` e seguir o `MANUAL.md` do B07
 
-### 2. Duas migrations, nesta ordem
-
-```
-supabase/migrations/20260820120000_vocabulario_exposto.sql     (B04)
-supabase/migrations/20260820130000_plum_reconhecimento.sql     (B06)
+```bash
+npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
 ```
 
-A ordem numérica é a de aplicação. Leia o bloco de verificação de cada uma.
+⭐ **É o bloco em que o remake passa a RESPONDER.** Com a chave ligada, a resposta na tela vem do
+caminho novo — e qualquer falha dele cai para o legado em silêncio, que é o que torna isso seguro.
 
-⚠️ A do B06 falhou na primeira tentativa com `42710: policy already exists` — faltava
-`DROP POLICY IF EXISTS`. **Corrigido**: pode rodar de novo do começo, por cima da execução parcial.
+⚠️ **Consequência: ausência de defeito na tela NÃO prova que o `ad_hoc` funcionou.** O manual tem a
+query que separa os dois casos, e ela é o passo mais importante do bloco.
 
-### 3. `npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu`
+⚠️ **É a primeira vez que o adaptador da Anthropic roda.** Confira que `planejador` e `interprete`
+saem com `modelo = claude-opus-5` no log — se vier Flash, a chave não está sendo lida.
 
-Confirme pelo `ezbr_sha256` — receita em `supabase/functions/README.md`, seção Deploy.
+⭐ E o passo que mais rende: **repita `quanto joão silva vendeu?`** e compare com R$ 224.042,24, que é
+o que o caminho antigo respondeu em 2026-08-20. Número diferente é o achado mais importante que este
+bloco pode produzir.
 
-### 4. O `MANUAL.md` do B06, do começo
+### 2. ✅ (feito) Migrations, Lambda e o deploy do B06
 
-`execucao/B06-porteiro-reconhecedor/MANUAL.md`. Ele testa **primeiro com a chave desligada** (nada
-pode mudar), depois ligando numa organização de teste. Dois critérios da etapa saem dali:
+⚠️ Do episódio do push de 2026-08-21, uma coisa **continua de pé**: o `query-engine.yml` roda
+`update-function-code` **antes** do smoke test, então não há janela em que o deploy seja verificado
+antes de valer. Derrubou o executor uma vez (**I-09**), e virou **C4b** em `20-pendencias.md`.
 
-- **§0.5 do V3** — os dois caminhos (`legado` e `ad_hoc`) no **mesmo `turno_id`**;
-- **V7 §8 item 4** — `cache_hit_a2 = true` na 2ª pergunta na mesma base.
-
-⭐ **O passo 7 é o único do remake sem teste automatizado:** ler o `plum_reconhecimento` e julgar se
-o A2 entendeu a base. Se ele estiver lendo mal, o A3 vai planejar mal e nenhum ajuste no B07
-conserta.
-
----
 
 ## 🤖 O que fica engatilhado para mim
 
