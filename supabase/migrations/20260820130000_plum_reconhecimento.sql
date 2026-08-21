@@ -114,6 +114,28 @@ CREATE INDEX IF NOT EXISTS plum_reconhecimento_busca
   ON public.plum_reconhecimento (dataset_id, digital_dicionario);
 
 
+-- ⚠️⚠️ GRANT NÃO É OPCIONAL, E RLS NÃO SUBSTITUI GRANT.
+--
+-- São duas camadas independentes: o GRANT diz se o papel pode TOCAR a tabela; a
+-- policy diz QUAIS LINHAS ele alcança. Sem o GRANT, o Postgres recusa antes de
+-- olhar policy nenhuma, com `permission denied for table` — mensagem que NÃO se
+-- parece com erro de RLS e manda quem investiga para o lado errado.
+--
+-- ⚠️ Este projeto já pagou por isto quatro vezes: existem migrations chamadas
+-- `20260807200000_grant_plum_chat_authenticated.sql` e
+-- `20260807210000_plum_chat_grant_update.sql`, que são só o conserto do
+-- esquecimento. Esta tabela foi a quinta: as três policies existiam, a tabela
+-- estava vazia, e o `upsert` do cache do A2 era negado em silêncio — o sintoma
+-- visível era "o cache nunca acerta".
+--
+-- ⭐ O default privilege do Supabase NÃO cobre este projeto. Não conte com ele.
+--
+-- UPDATE entra porque o `upsert` é `INSERT ... ON CONFLICT DO UPDATE`: sem ele,
+-- a primeira gravação passa e a segunda na mesma chave é negada.
+GRANT SELECT, INSERT, UPDATE ON public.plum_reconhecimento TO authenticated;
+GRANT ALL                    ON public.plum_reconhecimento TO service_role;
+
+
 -- =========================================================================
 -- VERIFICAÇÃO
 -- =========================================================================
@@ -151,6 +173,15 @@ FROM (VALUES
   ('Sem policy de DELETE',
    NOT EXISTS (SELECT 1 FROM pg_policies
                 WHERE tablename = 'plum_reconhecimento' AND cmd = 'DELETE')),
+
+  -- ⭐ A que faltava, e a que teria evitado a investigacao inteira. RLS sem
+  -- GRANT recusa com `permission denied for table`, que nao parece erro de RLS.
+  ('authenticated pode SELECT, INSERT e UPDATE (o GRANT, nao a policy)',
+   (SELECT count(DISTINCT privilege_type) = 3
+      FROM information_schema.role_table_grants
+     WHERE table_schema = 'public' AND table_name = 'plum_reconhecimento'
+       AND grantee = 'authenticated'
+       AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE'))),
 
   ('A digital so aceita sha256 em hex',
    EXISTS (SELECT 1 FROM pg_constraint

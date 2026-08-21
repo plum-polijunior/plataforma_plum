@@ -22,7 +22,10 @@ export interface ClienteDeCache {
     select(cols: string): {
       eq(c: string, v: unknown): {
         eq(c: string, v: unknown): {
-          maybeSingle(): PromiseLike<{ data: { reconhecimento: unknown } | null }>;
+          maybeSingle(): PromiseLike<{
+            data: { reconhecimento: unknown } | null;
+            error?: { message: string } | null;
+          }>;
         };
       };
     };
@@ -135,12 +138,23 @@ async function buscar(
   digital: string,
 ): Promise<unknown | null> {
   try {
-    const { data } = await cliente
+    const { data, error } = await cliente
       .from("plum_reconhecimento")
       .select("reconhecimento")
       .eq("dataset_id", datasetId)
       .eq("digital_dicionario", digital)
       .maybeSingle();
+
+    // ⚠️ Ler o `error` não é zelo. O supabase-js NÃO lança em erro de banco: ele
+    // devolve `{data: null, error}`. Destruturar só o `data` — como este código
+    // fazia até 2026-08-21 — transforma "permission denied" em "não achei no
+    // cache", que é indistinguível do caso normal. Foi metade do motivo de a
+    // falha de GRANT ter passado despercebida: nem a escrita nem a LEITURA
+    // avisavam.
+    if (error) {
+      console.error("[a2] leitura do cache falhou:", error.message);
+      return null;
+    }
     return data?.reconhecimento ?? null;
   } catch (e) {
     // Cache indisponível não pode derrubar a pergunta: segue e chama o A2.

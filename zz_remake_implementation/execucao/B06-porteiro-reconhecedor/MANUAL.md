@@ -7,7 +7,14 @@ primeiro que liga a chave `remake_habilitado`, criada na Etapa 0 e sem leitor at
 
 **1. Colar `supabase/migrations/20260820130000_plum_reconhecimento.sql`.**
 
-Sete linhas de verificação. Duas merecem olhar:
+⚠️ **Se você já rodou esta migration antes de 2026-08-21, rode de novo.** Ela ganhou os `GRANT`, que
+faltavam — sem eles a tabela existe, as três policies existem, e todo `upsert` é negado com
+`permission denied for table`. O sintoma era `cache_hit_a2` sempre `false` e a tabela vazia.
+
+Oito linhas de verificação. Três merecem olhar:
+
+- ⭐ *"authenticated pode SELECT, INSERT e UPDATE (o GRANT, nao a policy)"* — a que faltava. RLS não
+  substitui GRANT: sem ele o Postgres recusa antes de avaliar policy nenhuma.
 
 - *"Chave unica (dataset_id, digital_dicionario)"* — sem ela o `upsert` grava linha duplicada e o
   cache **nunca acerta de verdade**. Como a gravação do cache engole o próprio erro, o sintoma seria

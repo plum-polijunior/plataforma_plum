@@ -41,7 +41,27 @@ a omissão — mas **`ls` é a lista real**, não o §6.
 ## 3. Padrão obrigatório de toda migration
 
 - **Idempotente:** `IF NOT EXISTS`, `CREATE OR REPLACE`, `DROP POLICY IF EXISTS` antes de
-  `CREATE POLICY`.
+  `CREATE POLICY`. ⚠️ O Postgres **não tem** `CREATE POLICY IF NOT EXISTS`; sem o `DROP` antes,
+  reexecutar morre em `42710` no meio e deixa as policies seguintes por criar.
+- ⚠️⚠️ **Tabela nova precisa de `GRANT` explícito. RLS NÃO substitui GRANT.** São camadas
+  independentes: o GRANT diz se o papel pode **tocar** a tabela, a policy diz **quais linhas** ele
+  alcança. Sem GRANT o Postgres recusa antes de olhar policy nenhuma, com
+  `permission denied for table` — mensagem que **não se parece** com erro de RLS e manda quem
+  investiga para o lado errado.
+
+  ```sql
+  GRANT SELECT, INSERT ON public.<tabela> TO authenticated;  -- só o que a tabela precisa
+  GRANT ALL              ON public.<tabela> TO service_role;
+  ```
+
+  ⭐ **O default privilege do Supabase não cobre este projeto** — quatro migrations do histórico
+  existem só para consertar esse esquecimento (`20260807200000_grant_plum_chat_authenticated.sql`,
+  `20260807210000_plum_chat_grant_update.sql`, …), e a quinta foi o `plum_reconhecimento` em
+  2026-08-21. Ponha uma linha no bloco de verificação conferindo
+  `information_schema.role_table_grants`.
+
+  ⚠️ **`UPDATE` entra sempre que houver `upsert`**: ele é `INSERT ... ON CONFLICT DO UPDATE`, então
+  sem o grant de UPDATE a primeira gravação passa e a segunda na mesma chave é negada.
 - **Não destrutiva.** Coluna que deixou de ser usada é **aposentada, não dropada** — há dois
   precedentes vivos (`organizations.dashboard_k_min`, `plum_chat.assunto`).
 - **Termina com bloco autoverificável:**
