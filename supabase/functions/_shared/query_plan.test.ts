@@ -645,3 +645,31 @@ describe("formattingRulesFromSchema", () => {
     expect(formattingRulesFromSchema(undefined, new Set(["x"]))).toEqual({});
   });
 });
+
+describe("B09 — o `p` do quantile não é coluna", () => {
+  it("⭐ `p` não entra em resolved_columns", () => {
+    // ⚠️ Forma nova na gramática é onde uma coluna se esconde do RBAC (I-05), e
+    // o inverso também é problema: se o `p` fosse tratado como nome de coluna,
+    // o `authorizePlan` exigiria permissão para uma coluna chamada "0.9" e todo
+    // pedido de percentil morreria como negação de RBAC — apontando para o
+    // lugar errado.
+    const plano = {
+      from: "producao",
+      select: [{ expr: { agg: "quantile", p: 0.9, col: "receita" }, as: "p90" }],
+    };
+
+    expect([...extractColumns(plano as never)].sort()).toEqual(["receita"]);
+  });
+
+  it("o plano de percentil é autorizado por quem pode ver a coluna", () => {
+    const plano = {
+      from: "producao",
+      select: [{ expr: { agg: "quantile", p: 0.9, col: "receita" }, as: "p90" }],
+    };
+
+    expect(authorizePlan(plano as never, ["receita"])).toMatchObject({
+      allowed: true,
+      required: ["receita"],
+    });
+  });
+});

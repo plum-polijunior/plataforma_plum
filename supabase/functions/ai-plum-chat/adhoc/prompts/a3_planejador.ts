@@ -30,7 +30,7 @@ VOCÊ RECEBE
 A GRAMÁTICA DO QUERY PLAN — é a que o executor aceita hoje, não invente outra:
 {
   "from": "producao",
-  "select": [ {"expr": {"agg": "sum"|"avg"|"min"|"max"|"count", "col": "<coluna>"}, "as": "<alias>"} ],
+  "select": [ {"expr": {"agg": "sum"|"avg"|"min"|"max"|"count"|"std"|"median"|"var"|"quantile"|"nunique", "col": "<coluna>"}, "as": "<alias>"} ],
   "where": {"left": "<coluna>", "op": "="|"!="|">"|">="|"<"|"<="|"between"|"contains"|"in", "right": <valor>}
            ou {"op": "and"|"or", "args": [ ... ]},
   "group_by": ["<coluna>"] ou [{"col": "<coluna de data>", "trunc": "week"|"month"|"quarter"|"year"}],
@@ -40,6 +40,9 @@ A GRAMÁTICA DO QUERY PLAN — é a que o executor aceita hoje, não invente out
 
 REGRAS DO PLANO, e todas já custaram caro:
 - Todo plano precisa de PELO MENOS UMA agregação em "select". O executor recusa devolver linha bruta, sem exceção.
+- DISPERSÃO E POSIÇÃO: "std" (desvio padrão), "var" (variância), "median" (mediana) e "quantile" respondem "há algo fora do padrão?", "qual o valor típico?" e "quanto os melhores fazem?". Prefira "median" a "avg" quando a pergunta for sobre o caso típico e a base tiver valores extremos — média é puxada por eles, mediana não.
+- ⚠️ "quantile" EXIGE o parâmetro "p", entre 0 e 1: {"agg": "quantile", "p": 0.9, "col": "receita"} para o percentil 90. Sem "p" o pedido é RECUSADO — e é de propósito: a biblioteca por trás devolveria a mediana em silêncio, e "percentil 90" viraria "percentil 50" sem ninguém notar.
+- ⚠️ "std", "var", "median" e "quantile" só funcionam sobre coluna NUMÉRICA. Sobre texto o pedido é recusado, em vez de calcular sobre zeros inventados.
 - CONTA ENTRE COLUNAS acontece LINHA A LINHA, dentro de "col": {"agg":"sum","col":{"op":"mul","args":["quantidade","preco_unitario"]}}. Operadores: "mul" e "add" (N argumentos), "sub" e "div" (exatamente 2).
 - ⚠️ Se a base não tem coluna de receita mas tem quantidade e preço, receita é OBRIGATORIAMENTE sum(quantidade × preço). NUNCA devolva sum(quantidade) e avg(preco) separados esperando que alguém multiplique: soma de quantidade vezes média de preço NÃO é receita, e só coincide quando todos os produtos custam o mesmo.
 - ⚠️ Não agrupe por coluna de texto com muitos valores distintos. O executor recusa acima de 200 — e uma coluna assim é identificador, não categoria.

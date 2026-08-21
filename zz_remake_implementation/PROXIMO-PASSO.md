@@ -39,8 +39,13 @@ antes de valer. Derrubou o executor uma vez (**I-09**), e virou **C4b** em `20-p
 
 ## 🤖 O que fica engatilhado para mim
 
-**B09 (`agg` ampliado)** ou **B10 (`registro`, `amostra` e orçamento)** — os dois que sobram, e
-independentes entre si.
+**B10 (`registro`, `amostra` e orçamento)** — o último. É o único bloco que mexe no caminho que
+devolve linha **sem** agregação, e o §B4 do plano já resolveu a parte difícil: o saldo sai de
+`SUM(plum_logs.linhas_brutas_entregues)`, sem tabela nova, com o débito sendo uma **escrita
+verificada** em vez de best-effort.
+
+⭐ **B09 feito** — e ele foi menos "acrescentar" e mais consertar: `std`/`median`/`var` respondiam
+com `group_by` e devolviam `null` sem, e `quantile` devolvia a **mediana** em silêncio.
 
 ⭐ **O B08 encolheu no B07:** a negação parcial saiu de graça quando os pedidos viraram um lote. O
 que resta dele é uma decisão, não código — ligar ou não o teto de cardinalidade no caminho legado,
@@ -55,11 +60,11 @@ diz é a suíte de 25–30 perguntas.
 ## Estado
 
 - **Etapa 0:** ✅ fechada e no ar.
-- **Etapa 1:** **8 dos 9 blocos** (o B08 encolheu para uma decisão). B02–B06 no ar e validados;
-  **B07 commitado, esperando o deploy do `ai-plum-chat`.** Faltam B09 e B10.
+- **Etapa 1:** **8 dos 9 escritos** (o B08 encolheu para uma decisão). B02–B06 no ar; **B07-bis e
+  B09 commitados**, esperando deploy do `ai-plum-chat` e push. Falta só o **B10**.
 - ⭐ **O `ad_hoc` responde de ponta a ponta** a partir do próximo deploy, com queda para o legado em
   qualquer falha.
-- **Testes:** 339 Python, 269 TypeScript, `tsc` limpo, lint na baseline (65 erros, nenhum novo).
+- **Testes:** 357 Python, 272 TypeScript, `tsc` limpo, lint na baseline (65 erros, nenhum novo).
 - **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem
   usuário real, é o único critério de parada que o remake tem. **Não bloqueia nenhum bloco.**
 

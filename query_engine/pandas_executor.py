@@ -91,9 +91,22 @@ AGREGACOES_REDUTORAS: frozenset = frozenset(
     {"sum", "avg", "mean", "count", "std", "median", "var", "quantile"}
 )
 
+# ⚠️ Exigem numero de verdade. As NOVAS (B09) recusam coluna de texto em vez de
+# coagir — media de zeros forjados ja e ruim, mediana de zeros forjados e ruido
+# puro. As antigas (`sum`, `avg`, `min`, `max`) continuam coagindo via
+# `_coerce_numeric_for_agg`: mudar aquilo agora alteraria o resultado de cards
+# que existem, e a divida irma esta registrada como C10 em 20-pendencias.
+AGREGACOES_QUE_EXIGEM_NUMERO: frozenset = frozenset(
+    {"std", "median", "var", "quantile"}
+)
+
+
 AGREGACOES_SELETORAS: frozenset = frozenset(
     {"min", "max", "first", "last", "nunique"}
 )
+
+# Tudo que o executor sabe fazer. `_scalar_agg` levanta para o que estiver fora.
+AGREGACOES_CONHECIDAS: frozenset = AGREGACOES_REDUTORAS | AGREGACOES_SELETORAS
 
 # ⭐ Um teto, dois consumidores. É o mesmo número que o pedido `vocabulario`
 # (B04) usa como limite de cardinalidade: acima disto a coluna é identificador,
@@ -126,11 +139,41 @@ def classificar_agregacao(func: str) -> str:
     return "desconhecida"
 
 
+def _parametros_da_agregacao(func: str, expr: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extrai e VALIDA os parametros da agregacao. Hoje so o `p` do `quantile`.
+
+    ⭐ `quantile` sem `p` e ERRO, nunca 0.5. O `.agg("quantile")` do pandas
+    devolve a MEDIANA em silencio: "percentil 90" viraria "percentil 50" e nada
+    avisaria. Assumir um default aqui seria reintroduzir esse comportamento com
+    a nossa assinatura, que e pior que nao ter a funcao.
+    """
+    if func != "quantile":
+        return {}
+
+    bruto = expr.get("p")
+    try:
+        p = float(bruto)
+    except (TypeError, ValueError):
+        raise ExecutorError(
+            "'quantile' exige o parametro 'p' entre 0 e 1 — por exemplo "
+            "{\"agg\": \"quantile\", \"p\": 0.9, \"col\": \"receita\"} para o "
+            f"percentil 90. Recebido: {bruto!r}."
+        ) from None
+
+    if not (0 < p < 1):
+        raise ExecutorError(
+            f"'quantile' com p={p} nao faz sentido: p tem de estar entre 0 e 1 "
+            f"(exclusive). Para o percentil 90 use p=0.9."
+        )
+    return {"p": p}
+
+
 def _seletoras_de_texto(aggs: list, roles: Dict[str, str]) -> list:
     """Aliases cuja agregação é seletora sobre coluna de papel `text`."""
     return sorted(
         alias
-        for alias, func, col in aggs
+        for alias, func, col, _params in aggs
         if classificar_agregacao(func) == "seletora" and _is_text(col, roles)
     )
 
@@ -644,7 +687,7 @@ def execute_plan(
         )
 
     direct_cols: list = []   # (alias, raw_col)
-    aggs: list = []          # (alias, func, raw_col)
+    aggs: list = []          # (alias, func, raw_col, params)
     derivadas: list = []     # colunas sintéticas materializadas neste plano
     df_copiado = False       # `df` aqui é a fatia do where; escrever exige cópia
 
@@ -689,6 +732,8 @@ def execute_plan(
             # Exigir aqui um `op` conhecido mandava `{"op":"pow",...}` para o
             # caminho de coluna normal, onde o dict inteiro virava nome de
             # coluna e o erro saía como "coluna '{'op': 'pow', ...}' nao existe".
+            params = _parametros_da_agregacao(func, expr)
+
             no = expr.get("col")
             if not isinstance(no, dict):
                 no = expr if _eh_no_aritmetico(expr) else None
@@ -706,7 +751,7 @@ def execute_plan(
                 if alias is None:
                     partes = _colunas_da_expressao(no)[:2]
                     alias = f"{func}_" + ("_".join(partes) if partes else "calculado")
-                aggs.append((alias, func, col))
+                aggs.append((alias, func, col, params))
                 continue
 
             col = _strip_table(str(expr.get("col", "")))
@@ -728,8 +773,21 @@ def execute_plan(
                     f"ou pegar o menor/maior — para contar registros use "
                     f"count sobre outra coluna."
                 )
+            # ⚠️ As agregacoes do B09 recusam coluna de texto em vez de coagir.
+            # Media de zeros forjados ja e ruim; mediana e desvio padrao de zeros
+            # forjados sao ruido puro, com cara de numero. As antigas continuam
+            # coagindo (`_coerce_numeric_for_agg`) — ver o comentario da
+            # constante e a divida C10.
+            if func in AGREGACOES_QUE_EXIGEM_NUMERO and _is_text(col, roles):
+                raise ExecutorError(
+                    f"'{func}' precisa de uma coluna numerica, e '{col}' e de "
+                    f"texto. Se ela guarda numero, corrija o tipo dela na tela "
+                    f"de base de dados — converter aqui produziria uma "
+                    f"estatistica sobre zeros inventados."
+                )
+
             alias = alias or f"{func}_{col}"
-            aggs.append((alias, func, col))
+            aggs.append((alias, func, col, params))
         else:
             col = _strip_table(str(expr))
             alias = alias or col
@@ -797,8 +855,8 @@ def execute_plan(
         # Um número só, sobre a base inteira depois do where.
         agregado_unico = True
         row: Dict[str, Any] = {}
-        for alias, func, col in aggs:
-            row[alias] = _scalar_agg(df, func, col, roles)
+        for alias, func, col, params in aggs:
+            row[alias] = _scalar_agg(df, func, col, roles, params)
         df_out = pd.DataFrame([row])
 
     # ── B02: quantos literais de texto este resultado carrega ────────────────
@@ -822,7 +880,7 @@ def execute_plan(
     saida_de: Dict[str, str] = {}
     for alias, raw in direct_cols:
         saida_de.setdefault(raw, alias)
-    for alias, _func, raw in aggs:
+    for alias, _func, raw, _params in aggs:
         saida_de.setdefault(raw, alias)
 
     for order in plan.get("order_by", []):
@@ -900,7 +958,7 @@ def _coerce_numeric_for_agg(
     df: pd.DataFrame, aggs: list, roles: Dict[str, str]
 ) -> None:
     """Converte in-place colunas de texto usadas em agregação numérica."""
-    for _, func, col in aggs:
+    for _alias, func, col, _params in aggs:
         if (
             col in df.columns
             and not pd.api.types.is_numeric_dtype(df[col])
@@ -931,12 +989,19 @@ def _grouped_agg(
     g = df.groupby(gb_cols, dropna=False)
 
     agg_dict: Dict[str, tuple] = {}
-    for alias, func, col in aggs:
+    for alias, func, col, params in aggs:
         if col not in df.columns:
             raise MissingColumnError(
                 f"Coluna '{col}' referenciada em select nao existe nos dados."
             )
-        agg_dict[alias] = (col, "mean" if func == "avg" else func)
+        if func == "quantile":
+            # ⚠️ `.agg("quantile")` sem parametro devolve a MEDIANA em silencio.
+            # O `p` ja foi validado no parsing; aqui ele so precisa chegar ao
+            # pandas, e a unica forma e um callable.
+            pp = params["p"]
+            agg_dict[alias] = (col, lambda x, _p=pp: x.quantile(_p))
+        else:
+            agg_dict[alias] = (col, "mean" if func == "avg" else func)
 
     df_out = g.agg(**agg_dict).reset_index()
 
@@ -956,15 +1021,35 @@ def _grouped_agg(
     for c in gb_cols:
         if c in df_out.columns and c not in ordered:
             ordered.append(c)
-    for alias, _, _ in aggs:
+    for alias, _f, _c, _p in aggs:
         if alias in df_out.columns and alias not in ordered:
             ordered.append(alias)
 
     return df_out[[c for c in ordered if c in df_out.columns]]
 
 
-def _scalar_agg(df: pd.DataFrame, func: str, col: str, roles: Dict[str, str]):
-    """Uma agregação sobre a base inteira. Sem agrupamento."""
+def _scalar_agg(
+    df: pd.DataFrame,
+    func: str,
+    col: str,
+    roles: Dict[str, str],
+    params: Optional[Dict[str, Any]] = None,
+):
+    """
+    Uma agregação sobre a base inteira. Sem agrupamento.
+
+    ⚠️ **Este caminho ficava para trás do agrupado, e falhava calado.** Até o B09
+    ele tratava `sum|avg|mean|min|max|count` e fazia `return None` para o resto —
+    enquanto `_grouped_agg` passa o `func` direto para o pandas e aceita `std`,
+    `median`, `var`, `nunique`. Resultado: *"qual o desvio padrao do
+    faturamento?"* com `group_by` funcionava e sem `group_by` devolvia `null`.
+
+    ⭐ E o conserto nao foi so somar `if`s. O `None` final era o valor de "funcao
+    desconhecida" — e `None` ja significa outra coisa legitima tres linhas acima
+    (coluna vazia depois do `dropna`). Agora sao distinguiveis: desconhecida
+    LEVANTA nomeando qual, vazia continua `None`.
+    """
+    params = params or {}
     if col not in df.columns:
         raise MissingColumnError(
             f"Coluna '{col}' referenciada em select nao existe nos dados."
@@ -986,7 +1071,36 @@ def _scalar_agg(df: pd.DataFrame, func: str, col: str, roles: Dict[str, str]):
         return _to_python(s.max())
     if func == "count":
         return int(s.count())
-    return None
+
+    # ── B09 ──────────────────────────────────────────────────────────────────
+    if func == "nunique":
+        return int(s.nunique())
+    if func == "first":
+        return _to_python(s.iloc[0])
+    if func == "last":
+        return _to_python(s.iloc[-1])
+
+    # As numericas: se o dtype nao colabora, dizer isso vale mais que devolver
+    # um numero calculado sobre coisa nenhuma.
+    if func in AGREGACOES_QUE_EXIGEM_NUMERO:
+        if not pd.api.types.is_numeric_dtype(s):
+            raise ExecutorError(
+                f"'{func}' precisa de uma coluna numerica, e '{col}' nao esta "
+                f"tipada como numero nos dados."
+            )
+        if func == "median":
+            return float(s.median())
+        if func == "std":
+            return float(s.std())
+        if func == "var":
+            return float(s.var())
+        if func == "quantile":
+            return float(s.quantile(params["p"]))
+
+    raise ExecutorError(
+        f"Agregacao '{func}' nao e conhecida pelo executor. Conhecidas: "
+        f"{', '.join(sorted(AGREGACOES_CONHECIDAS))}."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

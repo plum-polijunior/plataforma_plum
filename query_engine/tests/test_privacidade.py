@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from query_engine.pandas_executor import (  # noqa: E402
     CardinalidadeExcedida,
+    ExecutorError,
     MissingColumnError,
     RawRowsBlocked,
     RowLimitExceeded,
@@ -667,3 +668,156 @@ def test_o_where_casa_o_literal_escrito_de_outro_jeito(carteira):
     )
 
     assert r["rows"][0]["n"] == 100
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B09 — `std`, `median`, `var` e `quantile`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ O bloco e menos "acrescentar" e mais CONSERTAR. `std`, `median` e `var` ja
+# funcionavam no caminho agrupado (o `func` vai direto para o `.agg()` do
+# pandas) e devolviam `None` CALADO no escalar. E `quantile` era pior: o
+# `.agg("quantile")` do pandas devolve a MEDIANA em silencio.
+
+
+@pytest.fixture
+def numeros():
+    """0..99. Mediana 49.5, percentil 90 em 89.1 — bem separados de proposito."""
+    return {
+        "producao": pd.DataFrame(
+            {"valor": [float(i) for i in range(100)], "grupo": ["a", "b"] * 50}
+        )
+    }
+
+
+PAPEIS_NUM = {"valor": "number", "grupo": "text"}
+
+
+def _select(agg, col="valor", **extra):
+    return {
+        "from": "producao",
+        "select": [{"expr": {"agg": agg, "col": col, **extra}, "as": "r"}],
+    }
+
+
+def test_std_no_caminho_escalar_deixa_de_ser_nulo(numeros):
+    """
+    ⭐ O caso que falha antes do conserto. "Qual o desvio padrao do faturamento?"
+    sem group_by devolvia `null`, sem erro nenhum — enquanto a MESMA pergunta com
+    group_by funcionava.
+    """
+    r = execute_plan(_select("std"), numeros, column_roles=PAPEIS_NUM)
+    assert r["rows"][0]["r"] == pytest.approx(29.011, rel=1e-3)
+
+
+@pytest.mark.parametrize("agg,esperado", [("median", 49.5), ("var", 841.67)])
+def test_median_e_var_tambem(numeros, agg, esperado):
+    r = execute_plan(_select(agg), numeros, column_roles=PAPEIS_NUM)
+    assert r["rows"][0]["r"] == pytest.approx(esperado, rel=1e-3)
+
+
+def test_nunique_first_e_last_no_escalar(numeros):
+    for agg, esperado in [("nunique", 100), ("first", 0.0), ("last", 99.0)]:
+        r = execute_plan(_select(agg), numeros, column_roles=PAPEIS_NUM)
+        assert r["rows"][0]["r"] == esperado, agg
+
+
+# ── quantile: o silencio do pandas, tapado ───────────────────────────────────
+
+@pytest.mark.invariante
+def test_quantile_sem_p_e_erro_e_nao_mediana(numeros):
+    """
+    ⭐ O motivo de o `p` existir. `.agg("quantile")` do pandas devolve a MEDIANA
+    sem avisar: "percentil 90" viraria "percentil 50" e a resposta sairia
+    convincente e errada. Assumir 0.5 aqui seria reintroduzir o mesmo
+    comportamento com a nossa assinatura.
+    """
+    with pytest.raises(ExecutorError) as exc:
+        execute_plan(_select("quantile"), numeros, column_roles=PAPEIS_NUM)
+    assert "p" in str(exc.value)
+
+
+@pytest.mark.parametrize("p", [0, 1, -0.5, 1.5, "alto", None])
+def test_quantile_com_p_invalido_e_erro(numeros, p):
+    with pytest.raises(ExecutorError):
+        execute_plan(_select("quantile", p=p), numeros, column_roles=PAPEIS_NUM)
+
+
+def test_quantile_com_p_devolve_o_percentil_certo(numeros):
+    # ⭐ Diferente da mediana, que e o ponto todo.
+    r90 = execute_plan(_select("quantile", p=0.9), numeros, column_roles=PAPEIS_NUM)
+    r50 = execute_plan(_select("quantile", p=0.5), numeros, column_roles=PAPEIS_NUM)
+
+    assert r90["rows"][0]["r"] == pytest.approx(89.1)
+    assert r50["rows"][0]["r"] == pytest.approx(49.5)
+    assert r90["rows"][0]["r"] != r50["rows"][0]["r"]
+
+
+def test_quantile_agrupado_tambem_respeita_o_p(numeros):
+    """
+    No caminho agrupado o `p` precisa de um callable para chegar ao pandas —
+    `.agg("quantile")` ignoraria. Se este teste devolver a mediana, o `p` se
+    perdeu entre o parsing e o `agg_dict`.
+    """
+    plano = {
+        **_select("quantile", p=0.9),
+        "group_by": ["grupo"],
+    }
+    r = execute_plan(plano, numeros, column_roles=PAPEIS_NUM)
+    valores = {linha["grupo"]: linha["r"] for linha in r["rows"]}
+
+    # Grupo "a" tem os pares 0..98; percentil 90 fica bem acima da mediana (49).
+    assert valores["a"] == pytest.approx(88.2, rel=1e-2)
+
+
+# ── Numerica sobre texto: as novas recusam, as velhas continuam coagindo ─────
+
+@pytest.mark.invariante
+def test_median_sobre_texto_e_recusada(numeros):
+    """
+    Mediana de zeros forjados e ruido puro com cara de numero. As novas nascem
+    recusando em vez de coagir.
+    """
+    with pytest.raises(ExecutorError) as exc:
+        execute_plan(_select("median", col="grupo"), numeros, column_roles=PAPEIS_NUM)
+    assert "numerica" in str(exc.value)
+
+
+def test_sum_sobre_texto_CONTINUA_coagindo(numeros):
+    """
+    ⚠️ O contraponto, e ele importa: mudar o comportamento antigo alteraria o
+    resultado de cards que existem hoje. A divida irma (min/max agrupado sobre
+    texto devolvendo 0) esta registrada como C10 — o B09 nao a resolve, e nao
+    deve resolver de passagem.
+    """
+    r = execute_plan(_select("sum", col="grupo"), numeros, column_roles=PAPEIS_NUM)
+    assert r["rows"][0]["r"] == 0.0
+
+
+# ── Agregacao desconhecida: levanta em vez de devolver None ──────────────────
+
+@pytest.mark.invariante
+def test_agregacao_desconhecida_levanta_no_escalar(numeros):
+    """
+    ⭐ `None` era o valor de "nao sei fazer" E o valor de "coluna vazia". Duas
+    coisas diferentes com a mesma representacao: uma pergunta legitima sobre uma
+    coluna vazia e uma funcao inventada saiam identicas.
+    """
+    with pytest.raises(ExecutorError) as exc:
+        execute_plan(_select("skewness"), numeros, column_roles=PAPEIS_NUM)
+    assert "skewness" in str(exc.value)
+
+
+def test_coluna_vazia_continua_devolvendo_nulo():
+    """O outro lado da distincao: vazio e um resultado legitimo, nao um erro."""
+    tabelas = {"producao": pd.DataFrame({"valor": [None, None]})}
+    r = execute_plan(_select("std"), tabelas, column_roles={"valor": "number"})
+    assert r["rows"][0]["r"] is None
+
+
+def test_as_novas_sao_redutoras():
+    # ⭐ Entram na tabela do B02 — e e o motivo de ela ter nascido extensivel.
+    for agg in ("std", "median", "var", "quantile"):
+        assert classificar_agregacao(agg) == "redutora", agg
+    for agg in ("nunique", "first", "last"):
+        assert classificar_agregacao(agg) == "seletora", agg
