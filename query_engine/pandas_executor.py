@@ -1404,6 +1404,17 @@ def _fmt_percentual(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     return _parse_ptbr_number(s, strip_percent=True)
 
 
+# Serial do Sheets/Excel, contado de 1899-12-30, para o ULTIMO instante que o
+# `datetime64[ns]` representa: 2262-04-11.
+#
+# ⚠️ Nao e 9999-12-31. O primeiro corte que escrevi usava 2.958.465 (o limite do
+# Excel) e um teste de regressao o derrubou na hora: `datetime64[ns]` conta
+# nanossegundos num int64 desde 1970, e isso acaba em 2262. Serial acima disto
+# nao vira data — vira NaT — entao deixa-lo passar so alimenta a multiplicacao
+# que este corte existe para evitar.
+_SERIAL_MAX = 132_320
+
+
 def _fmt_data(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     # UNFORMATTED_VALUE (sheets.py) devolve numero de serie do Sheets/Excel
     # (dias desde 1899-12-30) para celulas formatadas como Data, e texto puro
@@ -1415,7 +1426,38 @@ def _fmt_data(s: pd.Series, params: Dict[str, Any]) -> pd.Series:
     # dias desde 1899. Por isso a escolha e por LINHA: serial onde o valor bruto
     # e numerico, texto (com dayfirst) onde nao e.
     numerico = pd.to_numeric(s, errors="coerce")
-    via_serial = pd.to_datetime(numerico, unit="D", origin="1899-12-30", errors="coerce")
+
+    # ⚠️⚠️ SO OS VALORES DE VERDADE ENTRAM NO `to_datetime`. NaN NAO ENTRA.
+    #
+    # Nao e otimizacao: e contorno de um bug do pandas 2.2.x que derrubou o CI em
+    # 2026-08-21 com `FloatingPointError: overflow encountered in multiply`, num
+    # teste que passava na maquina de quem o escreveu.
+    #
+    # ⭐ O `cast_from_unit_vectorized` aloca o vetor de fracoes com `np.empty` e
+    # chama `np.round(..., 13)` sobre ele INTEIRO — inclusive nas posicoes que
+    # correspondem a NaN, onde ha LIXO DE MEMORIA e nao zero. O traceback do CI
+    # mostrava valores como `-1.77e+307` e `1.40e-321` num vetor que deveria ser
+    # todo NaN; `np.round` multiplica por 10^13 e `-1.77e+307 x 1e13` estoura.
+    #
+    # ⚠️ Como depende de lixo de memoria, o teste era FLAKY, nao dependente de
+    # plataforma: mesma pandas 2.2.3 e mesma numpy 2.2.1 dos dois lados. Passava
+    # aqui e falhava la por SORTE, e voltaria a falhar em qualquer lugar.
+    #
+    # Passar so o subconjunto valido nunca alimenta a funcao com NaN, entao a
+    # fatia nao inicializada deixa de existir.
+    #
+    # ⭐ O corte de faixa e independente e vale por si: serial util vive entre 1
+    # (1899-12-31) e 132.320 (2262-04-11, o teto do `datetime64[ns]`). Fora
+    # disso o valor nao e data serializada, e sim um numero que caiu numa coluna
+    # de data — e o `errors="coerce"` trata o RESULTADO, nao a multiplicacao que
+    # vem antes dele.
+    serial = numerico.where((numerico > 0) & (numerico <= _SERIAL_MAX))
+    via_serial = pd.Series(pd.NaT, index=s.index, dtype="datetime64[ns]")
+    convertivel = serial.notna()
+    if convertivel.any():
+        via_serial.loc[convertivel] = pd.to_datetime(
+            serial[convertivel], unit="D", origin="1899-12-30", errors="coerce"
+        )
     via_texto = pd.to_datetime(s, dayfirst=bool(params.get("dayfirst", True)), errors="coerce")
     return via_serial.where(numerico.notna(), via_texto)
 

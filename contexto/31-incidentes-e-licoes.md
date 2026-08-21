@@ -242,6 +242,38 @@ tinha.
 
 ---
 
+## I-10 · 2026-08-21 · O teste que passava por sorte, e o lixo de memória do pandas
+
+**O que aconteceu:** o CI reprovou `test_periodo.py::test_gabarito_semanal_da_base_de_vendas` com
+`FloatingPointError: overflow encountered in multiply`, bloqueando o deploy do executor. O mesmo
+teste passava na máquina de quem investigou — **com a mesma pandas 2.2.3 e a mesma numpy 2.2.1**.
+
+**Causa raiz:** ⭐ o `cast_from_unit_vectorized` do pandas aloca o vetor de frações com `np.empty` e
+roda `np.round(..., 13)` sobre ele **inteiro** — inclusive nas posições que correspondem a `NaN`,
+onde há **lixo de memória** e não zero. O traceback do CI mostrava `-1.77e+307` e `1.40e-321` num
+vetor que deveria ser todo NaN; `np.round` multiplica por 10¹³ e aquilo estoura.
+
+O `_fmt_data` entregava a coluna inteira ao `to_datetime(..., unit="D")` — e numa coluna de datas
+**textuais** o vetor numérico é 100% NaN, ou seja, 100% lixo.
+
+**Correção:** só o subconjunto numérico válido entra na conversão. Sem NaN na entrada, a fatia não
+inicializada deixa de existir.
+
+⭐ **A lição, e ela não é sobre pandas:** *"passa aqui e falha lá" nem sempre é ambiente.* A
+investigação começou procurando diferença de plataforma e de versão — e não havia nenhuma. Era
+**sorte**. Antes de atribuir uma falha a ambiente, vale perguntar se o teste depende de algo não
+determinístico; um teste que lê memória não inicializada falha em qualquer lugar, eventualmente.
+
+⚠️ **E um erro de método que custou tempo:** foram levantadas duas hipóteses (RLS/policy e diferença
+Linux×Windows) antes de pedir o **traceback**, que resolveu em um minuto. Mensagem de erro sem stack
+não identifica causa — e pedir o stack é mais barato que qualquer teoria.
+
+**De brinde, o teto errado:** o primeiro corte de faixa usou 2.958.465 (o limite do Excel). Um teste
+de regressão o derrubou na hora: `datetime64[ns]` conta nanossegundos num int64 desde 1970 e acaba
+em **2262-04-11**, serial 132.320.
+
+---
+
 ## Padrões que aparecem em mais de um incidente
 
 ⭐ Vale ler esta seção antes de qualquer alteração grande. São os erros que este time comete mais
@@ -255,5 +287,7 @@ de uma vez:
 | **Garantia que cobre uma etapa só** | I-02 | em quantos lugares um número pode ser produzido? |
 | **O que está no repo ≠ o que está rodando** | I-03, I-09 | qual é a versão implantada? |
 | ⭐ **Teste que roda contra o repositório, não contra o artefato** | I-09 | esse teste passaria se o build tivesse esquecido um arquivo? |
+| ⭐ **"Passa aqui e falha lá" atribuído a ambiente** | I-10 | é ambiente mesmo, ou o teste depende de algo não determinístico? |
+| ⚠️ **Teoria antes do stack trace** | I-10 | eu tenho o traceback, ou só a mensagem? |
 | **Erro só aparece longe da causa** | I-08, I-03 | esse erro tinha como aparecer antes, com alguém olhando a tela? |
 | **Falsy usado onde zero é legítimo** | I-04 | `0` é um valor válido aqui? |

@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from query_engine.pandas_executor import (  # noqa: E402
     ExecutorError,
     MissingColumnError,
+    _fmt_data,
     execute_plan,
     execute_plan_with_formatting,
 )
@@ -452,3 +453,73 @@ def test_gabarito_semanal_da_base_de_vendas():
     assert round(sum(obtido.values()), 2) == 9229.27
     # Quatro pontos, em ordem — é o que um gráfico de linha precisa.
     assert list(obtido) == sorted(obtido)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regressão: o NaN que nunca deve chegar ao `to_datetime`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⭐ Em 2026-08-21 o CI caiu com `FloatingPointError: overflow encountered in
+# multiply` DENTRO do `test_gabarito_semanal_da_base_de_vendas` acima — um teste
+# que passava na máquina de quem o escreveu, com a MESMA pandas 2.2.3 e a MESMA
+# numpy 2.2.1.
+#
+# A causa não era plataforma, era SORTE. O `cast_from_unit_vectorized` do pandas
+# aloca o vetor de frações com `np.empty` e roda `np.round(..., 13)` sobre ele
+# inteiro, inclusive nas posições NaN — onde há lixo de memória. O traceback
+# mostrava `-1.77e+307` num vetor que deveria ser todo NaN.
+#
+# `_fmt_data` passou a converter só o subconjunto numérico válido. Os testes
+# abaixo travam as duas metades: nenhum NaN entra, e a faixa é respeitada.
+
+
+@pytest.mark.regressao
+def test_coluna_de_data_toda_textual_nao_estoura(recwarn):
+    """
+    O caso do CI, isolado: coluna tipada como `data` sem NENHUM serial. Antes,
+    o vetor de NaN inteiro ia para o `to_datetime` e a fatia não inicializada
+    virava roleta.
+    """
+    import numpy as np
+
+    antigo = np.seterr(all="raise")
+    try:
+        r = _fmt_data(pd.Series(["2026-01-05", "2026-01-06"]), {"dayfirst": False})
+    finally:
+        np.seterr(**antigo)
+
+    assert list(r.astype(str)) == ["2026-01-05", "2026-01-06"]
+
+
+@pytest.mark.regressao
+def test_coluna_mista_com_lixo_nao_estoura():
+    """
+    Serial, texto, número absurdo, negativo e vazio na mesma coluna — que é o
+    caso real que motivou a escolha por LINHA em `_fmt_data`.
+    """
+    import numpy as np
+
+    antigo = np.seterr(all="raise")
+    try:
+        r = _fmt_data(
+            pd.Series(["2026-01-05", 45000, 1e18, -5, "lixo", None]),
+            {"dayfirst": False},
+        )
+    finally:
+        np.seterr(**antigo)
+
+    assert list(r.astype(str)) == [
+        "2026-01-05", "2023-03-15", "NaT", "NaT", "NaT", "NaT",
+    ]
+
+
+def test_serial_fora_da_faixa_vira_nat():
+    """
+    ⚠️ O teto NÃO é 9999-12-31, e este teste existe porque a primeira versão do
+    corte achou que era. `datetime64[ns]` conta nanossegundos num int64 desde
+    1970 e acaba em **2262-04-11** — serial acima disso não vira data, vira
+    `NaT`, e deixá-lo passar só alimenta a multiplicação que o corte evita.
+    """
+    r = _fmt_data(pd.Series([132_320, 132_321, 2_958_465, 0, -1]), {"dayfirst": False})
+
+    assert str(r.iloc[0]).startswith("2262-04-11")
+    assert list(r.iloc[1:].astype(str)) == ["NaT", "NaT", "NaT", "NaT"]
