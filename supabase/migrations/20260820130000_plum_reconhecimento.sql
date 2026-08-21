@@ -80,12 +80,22 @@ CREATE TABLE IF NOT EXISTS public.plum_reconhecimento (
 
 ALTER TABLE public.plum_reconhecimento ENABLE ROW LEVEL SECURITY;
 
+-- ⚠️ `DROP ... IF EXISTS` antes de cada `CREATE POLICY`: o Postgres **não tem**
+-- `CREATE POLICY IF NOT EXISTS`, e sem isto reexecutar a migration morre em
+-- `42710: policy already exists` no meio — deixando as policies seguintes por
+-- criar. É a convenção do repositório (ver `20260818110000_plum_logs.sql`), e
+-- ela existe porque migration aqui é colada à mão: rodar duas vezes acontece.
+--
 -- Leitura: qualquer membro ativo da organização. É o que permite a 2ª pergunta
 -- de OUTRA pessoa aproveitar o cache da primeira.
+DROP POLICY IF EXISTS "membros ativos leem o reconhecimento da sua organizacao"
+  ON public.plum_reconhecimento;
 CREATE POLICY "membros ativos leem o reconhecimento da sua organizacao"
   ON public.plum_reconhecimento FOR SELECT
   USING (organization_id = public.current_org_id());
 
+DROP POLICY IF EXISTS "membros ativos gravam reconhecimento da sua organizacao"
+  ON public.plum_reconhecimento;
 CREATE POLICY "membros ativos gravam reconhecimento da sua organizacao"
   ON public.plum_reconhecimento FOR INSERT
   WITH CHECK (organization_id = public.current_org_id());
@@ -93,6 +103,8 @@ CREATE POLICY "membros ativos gravam reconhecimento da sua organizacao"
 -- ⚠️ UPDATE existe aqui, ao contrário de `plum_logs`, e por um motivo: o
 -- `upsert` do cache precisa dele quando duas chamadas concorrem na mesma chave.
 -- Não é edição de histórico — é a reescrita do mesmo artefato derivado.
+DROP POLICY IF EXISTS "membros ativos atualizam reconhecimento da sua organizacao"
+  ON public.plum_reconhecimento;
 CREATE POLICY "membros ativos atualizam reconhecimento da sua organizacao"
   ON public.plum_reconhecimento FOR UPDATE
   USING (organization_id = public.current_org_id())
