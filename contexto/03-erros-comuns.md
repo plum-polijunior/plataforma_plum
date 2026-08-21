@@ -64,6 +64,7 @@ atualizado_em: 2026-08-18
 | `_shared/` é compartilhado em runtime | É empacotado **por função**. Publicar um consumidor só deixa cópias divergentes do RBAC | `supabase/functions/CLAUDE.md` |
 | Divergência de `_shared/` avisa de algum jeito | ⚠️ **Não avisa.** É invisível até alguém emitir a forma nova — os dois lados ficam internamente coerentes e nenhum teste pega | `30-decisoes.md` D-028 |
 | `version` provando que o deploy subiu | `version` sobe em mudança de secret, sem código novo. Só `ezbr_sha256` prova | `31-incidentes-e-licoes.md` I-03 |
+| ⭐ Teste verde significando artefato certo | ⚠️ Os testes rodam contra o **repositório**, não contra a imagem nem contra o bundle. Um `COPY` faltando no Dockerfile passa por toda a suíte e derruba o Lambda | `31-incidentes-e-licoes.md` I-09 |
 
 ## Sobre front e segurança
 

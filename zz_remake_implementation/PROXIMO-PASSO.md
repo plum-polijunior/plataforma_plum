@@ -8,42 +8,24 @@ O histórico está nos `DIARIO.md` de cada bloco.
 
 ---
 
-## 🚨 ANTES DE QUALQUER COISA: o Lambda está 5 commits atrás
+## ⚠️ O que aconteceu no push de 2026-08-21
 
-**`git push`.** É o primeiro passo, e ele reordena tudo o que vem depois.
+O push subiu tudo e **derrubou o executor**: o `Dockerfile` listava os módulos um a um e o
+`metadados.py` (B03) nunca entrou na lista. `Runtime.ImportModuleError`, executor fora do ar até o
+push seguinte. Corrigido com `COPY *.py` — está em **I-09** de `contexto/31-incidentes-e-licoes.md`.
 
-Sete commits locais não pushados, e o `origin` está em `4ffc316` — ou seja, **o executor em produção
-tem o B02 e não tem o B03**. O `tipo: "metadados"` não existe para ele.
+⭐ **A lição que sobrou, e é mais geral que o Docker:** *um teste que roda contra o repositório não
+diz nada sobre o artefato publicado.* Vale igual para o `_shared/` das Edge Functions, que é
+empacotado por função.
 
-⚠️ **Isso muito provavelmente explica o erro do reconhecedor de ontem à noite**, e não a hipótese que
-levantei na hora (matriz de permissões velha). Sem o B03, o pedido `metadados` cai no caminho de
-plano normal com `plan: {}` → `RawRowsBlocked` → *"Este card precisa de uma agregação"*. Bate com o
-sintoma de "renomeei a coluna e continua dando erro".
-
-⭐ **A lição, para mim e para o arquivo:** eu teoricei sobre a causa antes de conferir o que estava
-publicado. É literalmente o I-03 (*"o código no repositório não é o que está rodando"*), e desta vez
-nem o repositório estava — o commit era local.
-
-**Como confirmar em 30 segundos, depois do push e do deploy:**
-
-```sql
-select codigo_erro, jsonb_pretty(resposta_agente) as detalhe
-from plum_logs
-where caminho = 'ad_hoc' and etapa = 'reconhecedor' and status = 'erro'
-order by created_at desc limit 1;
-```
-
-Se o `detalhe` de ontem falar em *"precisa de uma agregação"*, era o Lambda atrasado e acabou. Se
-falar em *"a planilha não tem a(s) coluna(s): X"*, aí sim é a matriz de permissões, e o conserto de
-ontem (`tolerar_ausentes`) faz o A2 reportar X nas `observacoes` em vez de morrer.
+⚠️ E a causa que **continua de pé**: o `query-engine.yml` roda `update-function-code` **antes** do
+smoke test. Virou **C4b** em `20-pendencias.md`.
 
 ---
 
 ## 👤 A fila, em ordem
 
-### 1. `git push`
-
-Sobe o Lambda sozinho (Action `query-engine`) com B03, B04 e o conserto do `metadados`.
+### 1. ✅ (feito) `git push` — Lambda no ar com B03, B04 e os consertos
 
 ### 2. Duas migrations, nesta ordem
 
@@ -53,6 +35,9 @@ supabase/migrations/20260820130000_plum_reconhecimento.sql     (B06)
 ```
 
 A ordem numérica é a de aplicação. Leia o bloco de verificação de cada uma.
+
+⚠️ A do B06 falhou na primeira tentativa com `42710: policy already exists` — faltava
+`DROP POLICY IF EXISTS`. **Corrigido**: pode rodar de novo do começo, por cima da execução parcial.
 
 ### 3. `npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu`
 
@@ -88,8 +73,8 @@ nomeado. O texto da V7 §5.3 é ponto de partida, não entrega.
 ## Estado
 
 - **Etapa 0:** ✅ fechada e no ar.
-- **Etapa 1:** 6 dos 9 blocos escritos. **B02 no ar. B03, B04, B05 e B06 commitados e NÃO pushados.**
-  Faltam B07, B08, B09 e B10.
+- **Etapa 1:** 6 dos 9 blocos escritos. **Tudo pushado; o Lambda tem B02, B03 e B04.** Falta a
+  Edge Function do B06 subir (o `ai-plum-chat`) e as duas migrations. Faltam B07, B08, B09 e B10.
 - **Testes:** 339 Python, 257 TypeScript, `tsc` limpo, lint na baseline (65 erros, nenhum novo).
 - **Bloqueante da etapa, sem dono:** o conjunto de **25–30 perguntas de avaliação** (V3 §6). Sem
   usuário real, é o único critério de parada que o remake tem. **Não bloqueia nenhum bloco.**

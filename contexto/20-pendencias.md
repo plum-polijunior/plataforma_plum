@@ -38,6 +38,7 @@ atualizado_em: 2026-08-14
 | C2 | ⭐ **Abstração de provedor de LLM** | Hoje a URL do Gemini está em **4 lugares** em 3 funções. Com 4 call sites é meio dia; com 20 é refatoração. ⚠️ É o B05 da Etapa 1 — e só o `ai-plum-chat` vai adotar, porque `dashboard-agent` e `ai-agents` estão fora do escopo do remake |
 | C3 | Renomear a rota `/dashboard` (que é "Minha Organização") | Já custou tempo de leitura mais de uma vez. Vários lugares mudam juntos |
 | C4 | Passo de verificação no fim do onboarding — ler a planilha de verdade | Pega aba errada, base não compartilhada, cabeçalho divergente e coluna sem título **de uma vez**, com a pessoa olhando a tela (I-08) |
+| C4b | ⚠️ **O smoke test do Lambda roda DEPOIS do `update-function-code`** | `query-engine.yml`: a imagem quebrada substitui a boa e o teste só avisa depois — não há janela em que o deploy seja verificado antes de valer. Derrubou o executor em 2026-08-21 (I-09). O conserto é publicar versão → invocar → promover alias, que é mudança de infra |
 | C5 | Testes E2E (Playwright) dos 6 fluxos que cruzam camadas | Revogação de coluna surtindo efeito e POST direto no executor retornando 401 só se provam ponta a ponta |
 | C6 | Eval do Agente A contra perguntas reais | Transforma "o chat parece que piorou" num número. É o único jeito de mexer no prompt com confiança |
 | C7 | Escala do percentual: 0–1 nativo vs 0–100 em texto | Aberto desde 2026-08-11. A mesma coluna sai em duas escalas conforme a origem da célula |

@@ -208,6 +208,40 @@ como efeito colateral.
 
 ---
 
+## I-09 · 2026-08-21 · O executor caiu porque o Dockerfile listava arquivo por arquivo
+
+**O que aconteceu:** um push publicou o Lambda sem um módulo novo (`query_engine/metadados.py`, do
+B03 do remake). A função subiu e todo pedido morreu em
+`Runtime.ImportModuleError: cannot import name 'metadados' from 'query_engine'`. Executor fora do ar
+até o push seguinte.
+
+**Causa raiz:** ⭐ **o `Dockerfile` enumerava os módulos um a um** (`COPY sheets.py`,
+`COPY main.py`, …) e ninguém acrescentou a linha do arquivo novo. Nada avisava: `main.py` importava
+o módulo, o arquivo existia no disco, e **os testes rodam contra o repositório, não contra a
+imagem** — `npm run test:py` local e o pytest do CI passaram os dois.
+
+⚠️ **O que transformou o erro em queda:** o `query-engine.yml` roda `aws lambda
+update-function-code` **antes** do passo *"Conferir que a função responde"*. A imagem quebrada
+substitui a boa e só depois o smoke test avisa — **não existe janela em que o deploy seja verificado
+antes de valer**.
+
+**Correção:** `COPY *.py`, que elimina a classe inteira. `tests/` não entra porque `COPY` com glob
+não é recursivo.
+
+**Estado:** o Dockerfile está corrigido. ⚠️ **A ordem do workflow continua como está** — inverter
+exige publicar versão, testar e promover alias, que é mudança de infraestrutura. Registrado em
+`20-pendencias.md`.
+
+⭐ **A lição, e ela é mais geral que o Docker:** *um teste que roda contra o repositório não diz nada
+sobre o artefato publicado.* Vale igual para o `_shared/` das Edge Functions, que é empacotado por
+função — o `npm test` passa com o código certo enquanto uma função no ar carrega outro.
+
+**É o I-03 por um mecanismo novo:** o que está no repositório não é o que está rodando. Da primeira
+vez foi o deploy que não aconteceu; desta, o deploy aconteceu com menos código do que o repositório
+tinha.
+
+---
+
 ## Padrões que aparecem em mais de um incidente
 
 ⭐ Vale ler esta seção antes de qualquer alteração grande. São os erros que este time comete mais
@@ -219,6 +253,7 @@ de uma vez:
 | **Forma nova esconde coluna do RBAC** | I-05 | `extractColumns` alcança essa estrutura? |
 | **Escrita descarta o que a leitura precisa** | I-04 | essa informação vai ser necessária depois? onde ela persiste? |
 | **Garantia que cobre uma etapa só** | I-02 | em quantos lugares um número pode ser produzido? |
-| **O que está no repo ≠ o que está rodando** | I-03 | qual é a versão implantada? |
+| **O que está no repo ≠ o que está rodando** | I-03, I-09 | qual é a versão implantada? |
+| ⭐ **Teste que roda contra o repositório, não contra o artefato** | I-09 | esse teste passaria se o build tivesse esquecido um arquivo? |
 | **Erro só aparece longe da causa** | I-08, I-03 | esse erro tinha como aparecer antes, com alguém olhando a tela? |
 | **Falsy usado onde zero é legítimo** | I-04 | `0` é um valor válido aqui? |
