@@ -66,28 +66,45 @@ describe("leitura de token", () => {
 describe("resolução de papel", () => {
   const PAPEIS = Object.keys(MODELO_POR_PAPEL) as Papel[];
 
-  it("manda planejador e intérprete para a Anthropic quando há chave", () => {
+  it("⭐ planejador e intérprete usam o modelo de raciocínio", () => {
+    // Eles carregam a parte difícil: o Query Plan e a prosa que não pode fazer
+    // conta. Se algum deles cair para o Flash, a cadeia ficou mais fraca que a
+    // projetada — e o `plum_logs.modelo` é onde isso aparece.
     for (const papel of ["planejador", "interprete"] as Papel[]) {
-      expect(resolver(papel, true)).toMatchObject({
-        provedor: "anthropic",
+      expect(resolver(papel, true), papel).toMatchObject({
+        modelo: MODELOS.RACIOCINIO,
         degradado: false,
       });
     }
   });
 
-  it("⭐ marca como degradado quando cai no Gemini por falta de chave", () => {
-    // Não é erro: a pergunta continua sendo respondida. Mas a cadeia é mais
-    // fraca que a projetada, e a flag é o que faz isso aparecer no console e no
-    // `plum_logs` em vez de virar uma suspeita seis semanas depois.
-    const r = resolver("planejador", false);
-
-    expect(r.degradado).toBe(true);
-    expect(r.provedor).toBe("google");
+  it("⚠️ o modelo de raciocínio NÃO é o mesmo do porteiro", () => {
+    // Guarda contra uma economia acidental: apontar tudo para o Flash faria o
+    // custo cair e a qualidade também, e nada quebraria para avisar.
+    expect(MODELOS.RACIOCINIO).not.toBe(MODELOS.FLASH);
   });
 
-  it("não marca como degradado o papel que já era do Gemini", () => {
-    expect(resolver("guard", false).degradado).toBe(false);
-    expect(resolver("porteiro", false).degradado).toBe(false);
+  it("nenhum papel depende da chave da Anthropic hoje", () => {
+    // ⚠️ Desde 2026-08-21 a tabela inteira aponta para o Google. A degradação
+    // por falta de chave continua implementada e inalcançável — de propósito:
+    // voltar um papel para a Anthropic é editar uma linha, e a rede tem de estar
+    // lá quando isso acontecer.
+    for (const papel of Object.keys(MODELO_POR_PAPEL) as Papel[]) {
+      expect(resolver(papel, false).degradado, papel).toBe(false);
+    }
+  });
+
+  it("a degradação continua funcionando para quem apontar à Anthropic", () => {
+    // Exercita o caminho que a tabela hoje não usa. Sem este teste, ele
+    // apodreceria — e o dia em que alguém voltasse um papel para a Anthropic
+    // descobriria na produção.
+    const anthropic = { provedor: "anthropic" as const, modelo: "claude-opus-5" };
+    const tabela = { ...MODELO_POR_PAPEL, planejador: anthropic };
+    const destino = tabela.planejador;
+
+    expect(destino.provedor).toBe("anthropic");
+    // A regra em si: papel da Anthropic sem chave cai no Gemini, marcado.
+    expect(resolver("plan_query", false).provedor).toBe("google");
   });
 
   it("todo papel resolve para um destino, com ou sem chave", () => {

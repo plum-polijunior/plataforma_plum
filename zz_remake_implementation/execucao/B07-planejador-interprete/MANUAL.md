@@ -56,13 +56,13 @@ order by created_at;
 Esperado, tudo com `caminho = 'ad_hoc'`: `porteiro` → `executor` (metadados) → `reconhecedor` →
 [`executor` (vocabulário)] → `planejador` → `executor` → `interprete`.
 
-⭐ **Confira o `modelo` do `planejador` e do `interprete`: têm de ser `claude-opus-5`.** Se vier
-`gemini-3.7-flash`, a `ANTHROPIC_API_KEY` não está sendo lida e a cadeia rodou mais fraca do que a
-projetada — vai aparecer também como `[llm]` no console da função.
+⭐ **Confira o `modelo` do `planejador` e do `interprete`: têm de ser `gemini-3.1-pro-preview`.** Se
+vier `gemini-3.7-flash`, alguém apontou os dois para o modelo barato e a cadeia rodou mais fraca do
+que a projetada — sem nada quebrar para avisar.
 
-⚠️ **Esta é a primeira vez que o adaptador da Anthropic roda.** Ele foi escrito no B05 e nunca
-executado. Se algo estranho acontecer — resposta vazia, token nulo, erro de recusa —, suspeite dele
-antes de suspeitar do prompt.
+⚠️ **`-preview` faz parte do ID.** Não existe `gemini-3.1-pro`: pedir aquele nome dá 400 em toda
+chamada, e com a queda para o legado isso é **silencioso** — o chat responde normalmente e o remake
+simplesmente não roda. Esta consulta é o único lugar onde a diferença aparece.
 
 **5. Teste a desambiguação.** Pergunte por um nome que exista escrito de mais de um jeito na base
 suja. O esperado é o chat **perguntar qual**, não escolher:
@@ -110,7 +110,8 @@ não falhas — cair ali faria a pergunta ser respondida por um caminho que o ou
 | Sintoma | O que fazer |
 |---|---|
 | Chat responde, mas sempre pelo legado | O `ad_hoc` está caindo. `select codigo_erro, jsonb_pretty(resposta_agente) from plum_logs where caminho='ad_hoc' and status='erro' order by created_at desc limit 1` |
-| `planejador`/`interprete` com `modelo = gemini-3.7-flash` | A `ANTHROPIC_API_KEY` não está sendo lida. Confira o secret e republique |
+| `planejador`/`interprete` com `modelo = gemini-3.7-flash` | Alguém apontou os dois para o modelo barato em `MODELO_POR_PAPEL`. Há teste que impede isso — se passou, me avise |
+| Toda pergunta responde pelo legado, e o log mostra o `planejador` com erro do provedor | ⚠️ O modelo pode ter sido aposentado (é `-preview`). Confira o `codigo_erro`: `gemini_400`/`gemini_404` no `planejador` é isso. Trocar é uma linha em `MODELOS.RACIOCINIO` |
 | Resposta sem bloco de presunções onde havia escolha | Prompt do A3. `adhoc/prompts/a3_planejador.ts` — e me diga qual escolha ficou implícita |
 | O A4 fez uma conta | ⚠️ **Grave, e é o R-13 (I-02).** Me avise com a pergunta e a resposta: todo número da resposta tem de estar literalmente nos resultados |
 | Ficou lento | São até 5 chamadas de LLM e 3 idas ao Lambda por pergunta. `update organizations set remake_habilitado = false;` desliga na hora, sem deploy |

@@ -66,8 +66,25 @@ export interface Destino {
 export const MODELOS = {
   /** Rápido e barato. Classificação e reconhecimento, que rodam em toda pergunta. */
   FLASH: "gemini-3.7-flash",
-  /** O caro. Query Plan e prosa — onde errar custa mais que a chamada. */
-  OPUS: "claude-opus-5",
+  /**
+   * O de raciocínio: Query Plan e prosa, onde errar custa mais que a chamada.
+   *
+   * ⭐ **O nome é neutro de propósito.** Era `OPUS` e apontava para
+   * `claude-opus-5`; uma análise de custo trocou por Gemini Pro em 2026-08-21, e
+   * um nome que carrega o provedor obriga a renomear em toda parte a cada troca
+   * — que é exatamente o acoplamento que este arquivo existe para não ter.
+   *
+   * ⚠️ **`-preview` faz parte do ID, não é um canal separado.** Não existe
+   * `gemini-3.1-pro`: pedir aquele nome é 400 em toda chamada. E com a queda
+   * para o legado do B07, esse 400 seria **silencioso** — o chat responderia
+   * pela cadeia antiga e ninguém veria o remake parar de rodar. Confira em
+   * `plum_logs.modelo`, não na tela.
+   *
+   * ⚠️ Modelo em preview pode ser aposentado sem aviso. O sintoma será o mesmo:
+   * `ad_hoc` caindo para o legado em toda pergunta, com `codigo_erro` do
+   * provedor no log.
+   */
+  RACIOCINIO: "gemini-3.1-pro-preview",
 } as const;
 
 /**
@@ -91,8 +108,11 @@ export const MODELO_POR_PAPEL: Readonly<Record<Papel, Destino>> = {
   porteiro: { provedor: "google", modelo: MODELOS.FLASH },
   reconhecedor: { provedor: "google", modelo: MODELOS.FLASH },
 
-  planejador: { provedor: "anthropic", modelo: MODELOS.OPUS },
-  interprete: { provedor: "anthropic", modelo: MODELOS.OPUS },
+  // ⚠️ Foram para a Anthropic (`claude-opus-5`) do B05 até 2026-08-21, quando
+  // uma análise de custo os trouxe para o Gemini Pro. O adaptador da Anthropic
+  // continua no repositório e passa a ser inalcançável — ver `llm/claude.ts`.
+  planejador: { provedor: "google", modelo: MODELOS.RACIOCINIO },
+  interprete: { provedor: "google", modelo: MODELOS.RACIOCINIO },
 };
 
 export interface PedidoLLM {

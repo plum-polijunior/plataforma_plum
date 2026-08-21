@@ -64,10 +64,14 @@ bloco mais caro da etapa. **Trate qualquer surpresa no B07 como suspeita deste a
 
 O que ficou decidido dentro dele, e vale conferir na primeira chamada real:
 
-**Modelo: `claude-opus-5` para os dois papéis.** É o padrão da referência da API. O planejador é o
-artefato mais importante da etapa e o intérprete é quem não pode fazer conta (R-13); nenhum dos dois
-é lugar para economizar antes de a suíte de avaliação existir. Baixar para `claude-sonnet-5` é uma
-linha, e a decisão fica melhor informada depois das 25–30 perguntas.
+**Modelo: `claude-opus-5` para os dois papéis** — ⚠️ **trocado em 2026-08-21.** Uma análise de custo
+do 👤 levou os dois para `gemini-3.1-pro-preview`, e a troca foi **uma linha** em `MODELO_POR_PAPEL`
+mais o rename da constante (`OPUS` → `RACIOCINIO`: nome que carrega provedor obriga a renomear a cada
+troca, que é o acoplamento que o bloco existe para não ter). ⭐ É a prova de que ele fez o que
+prometia.
+
+⚠️ O adaptador da Anthropic continua no repositório e passa a ser **inalcançável**, de propósito:
+apagá-lo desfaria o ponto do bloco, e a chave já está nos secrets. Voltar é editar a tabela.
 
 **SDK oficial (`npm:@anthropic-ai/sdk@0.120.0`), não `fetch`.** Diferente do Gemini, que não tem
 cliente para Deno. Versão pinada como o resto do repositório.

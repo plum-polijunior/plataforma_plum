@@ -11,11 +11,16 @@ import {
 /**
  * Adaptador da Anthropic, para o planejador e o intérprete.
  *
- * ⚠️ **NUNCA FOI EXECUTADO.** Não existe `ANTHROPIC_API_KEY` no projeto, então
- * o `resolver()` desvia os dois papéis para o Gemini e este arquivo não é
- * alcançado. Ele está escrito para que ligar o Claude seja criar um secret, não
- * abrir um bloco de trabalho — mas trate-o como não testado até a primeira
- * pergunta real passar por aqui.
+ * ⚠️⚠️ **NUNCA FOI EXECUTADO, E HOJE É INALCANÇÁVEL.** Em 2026-08-21 uma análise
+ * de custo trocou `claude-opus-5` por `gemini-3.1-pro-preview` no planejador e no
+ * intérprete, então **nenhum papel da tabela aponta para a Anthropic**.
+ *
+ * ⭐ **Fica no repositório de propósito.** O ponto do B05 é que trocar de
+ * provedor seja uma linha em `MODELO_POR_PAPEL`; apagar o adaptador desfaria
+ * isso e a próxima troca viraria um bloco de trabalho. A chave já está nos
+ * secrets, então voltar é editar a tabela e republicar.
+ *
+ * ⚠️ Continue tratando-o como **não testado**: nenhuma linha daqui jamais rodou.
  *
  * ── DIFERENÇAS QUE VALEM CONHECER ANTES DE MEXER ─────────────────────────
  *

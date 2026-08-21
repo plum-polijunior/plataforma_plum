@@ -22,8 +22,9 @@ caminho novo — e qualquer falha dele cai para o legado em silêncio, que é o 
 ⚠️ **Consequência: ausência de defeito na tela NÃO prova que o `ad_hoc` funcionou.** O manual tem a
 query que separa os dois casos, e ela é o passo mais importante do bloco.
 
-⚠️ **É a primeira vez que o adaptador da Anthropic roda.** Confira que `planejador` e `interprete`
-saem com `modelo = claude-opus-5` no log — se vier Flash, a chave não está sendo lida.
+⚠️ Confira que `planejador` e `interprete` saem com `modelo = gemini-3.1-pro-preview` no log. Se
+vier Flash, alguém apontou os dois para o modelo barato; se toda pergunta cair para o legado com
+erro do provedor no `planejador`, o modelo em preview pode ter sido aposentado.
 
 ⭐ E o passo que mais rende: **repita `quanto joão silva vendeu?`** e compare com R$ 224.042,24, que é
 o que o caminho antigo respondeu em 2026-08-20. Número diferente é o achado mais importante que este
@@ -64,9 +65,12 @@ diz é a suíte de 25–30 perguntas.
 
 ## Pontas soltas
 
-- ⚠️ **`_shared/llm/claude.ts` nunca foi executado**, mesmo com a `ANTHROPIC_API_KEY` criada: os
-  papéis que apontam para ele nascem no B07. Caminho alcançável e não testado é pior que
-  inalcançável.
+- ⚠️ **`_shared/llm/claude.ts` nunca foi executado e hoje é inalcançável.** A análise de custo de
+  2026-08-21 levou planejador e intérprete para `gemini-3.1-pro-preview`, então nenhum papel aponta
+  para a Anthropic. ⭐ O adaptador fica de propósito: trocar de provedor é uma linha em
+  `MODELO_POR_PAPEL`, e apagá-lo desfaria o ponto do B05. A chave já está nos secrets.
+- ⚠️ **O modelo de raciocínio é `-preview`.** Se for aposentado, o sintoma é o `ad_hoc` caindo para
+  o legado em toda pergunta — **em silêncio na tela**, visível só em `plum_logs.codigo_erro`.
 - ⚠️ **Duas dívidas de normalização duplicada**, TS × Python, com tabela de casos replicada:
   nome de coluna (D-017, falha barulhenta) e **valor de texto** (B04, falha **muda** — devolve
   resultado vazio). Mudou um lado, mude o outro e os dois testes.
