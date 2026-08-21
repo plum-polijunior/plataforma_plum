@@ -770,10 +770,14 @@ async function handleAdHocPlanejar(
     colunasReais,
   );
 
+  // ⚠️ `codigo_erro` numa linha `ok` não é contradição: o turno funcionou e algo
+  // está errado mesmo assim. `cache_nao_gravou` é o caso — a pergunta foi
+  // respondida, mas o próximo turno vai pagar o A2 de novo, e sem esta linha o
+  // sintoma ("o cache nunca acerta") só existiria no console da função.
   await registrar({
     etapa: "reconhecedor",
     status: Object.keys(r.reconhecimento.colunas).length ? "ok" : "erro",
-    codigoErro: r.llm?.erro?.codigo ?? null,
+    codigoErro: r.llm?.erro?.codigo ?? (r.erroDeCache ? "cache_nao_gravou" : null),
     modelo: r.llm?.modelo ?? null,
     provedor: r.llm?.provedor ?? null,
     tokensEntrada: r.llm?.tokens.entrada ?? null,
@@ -782,7 +786,9 @@ async function handleAdHocPlanejar(
     // ⭐ O critério de pronto do V7 §8 item 4 sai desta coluna: a 2ª pergunta na
     // mesma base tem de vir `true`.
     cacheHitA2: r.cacheHit,
-    respostaAgente: r.reconhecimento,
+    respostaAgente: r.erroDeCache
+      ? { reconhecimento: r.reconhecimento, erro_de_cache: r.erroDeCache }
+      : r.reconhecimento,
   });
 
   return json({

@@ -40,6 +40,17 @@ export interface ResultadoDoReconhecedor {
   cacheHit: boolean;
   /** Ausente quando veio do cache: não houve chamada. */
   llm?: RespostaLLM;
+  /**
+   * ⚠️ A gravação do cache falhou — mensagem crua do banco.
+   *
+   * Engolir o erro está certo para a PERGUNTA (cache é otimização, nunca motivo
+   * de falha) e errado para o DIAGNÓSTICO: sem isto, "o cache nunca acerta"
+   * aparece só no `console.error` da função, e o `plum_logs` diz *não acertou*
+   * sem dizer *não consegui escrever* — que são causas diferentes com o mesmo
+   * sintoma. Aconteceu em 2026-08-21: a migration morreu antes de criar a
+   * policy de INSERT, e sem policy a RLS negava todo `upsert`, em silêncio.
+   */
+  erroDeCache?: string;
 }
 
 export async function reconhecer(
@@ -110,11 +121,12 @@ export async function reconhecer(
   // cache permanente do erro: toda pergunta seguinte naquela base acertaria o
   // cache e receberia nada, sem nunca tentar de novo. É o modo de falha mais
   // caro que um cache pode ter — silencioso e definitivo.
+  let erroDeCache: string | undefined;
   if (Object.keys(reconhecimento.colunas).length > 0) {
-    await guardar(cliente, datasetId, digital, reconhecimento, llm);
+    erroDeCache = await guardar(cliente, datasetId, digital, reconhecimento, llm);
   }
 
-  return { reconhecimento, digital, cacheHit: false, llm };
+  return { reconhecimento, digital, cacheHit: false, llm, erroDeCache };
 }
 
 async function buscar(
@@ -143,7 +155,7 @@ async function guardar(
   digital: string,
   reconhecimento: Reconhecimento,
   llm: RespostaLLM,
-): Promise<void> {
+): Promise<string | undefined> {
   try {
     const { error } = await cliente.from("plum_reconhecimento").upsert(
       {
@@ -158,9 +170,16 @@ async function guardar(
       // (aceitável, acontece uma vez por base) mas nunca duas linhas.
       { onConflict: "dataset_id,digital_dicionario" },
     );
-    if (error) console.error("[a2] gravacao do cache falhou:", error.message);
+    if (error) {
+      console.error("[a2] gravacao do cache falhou:", error.message);
+      return error.message;
+    }
   } catch (e) {
-    // Mesma postura do log: o cache é otimização, nunca motivo de falha.
-    console.error("[a2] excecao ao gravar cache:", e instanceof Error ? e.message : e);
+    // Mesma postura do log: o cache é otimização, nunca motivo de falha. Mas o
+    // chamador recebe a mensagem para registrá-la — silêncio aqui já custou uma
+    // sessão de investigação.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[a2] excecao ao gravar cache:", msg);
+    return msg;
   }
 }

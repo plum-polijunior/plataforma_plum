@@ -86,7 +86,7 @@ select etapa, cache_hit_a2, latencia_ms, tokens_entrada
 from plum_logs
 where caminho = 'ad_hoc' and etapa = 'reconhecedor'
 order by created_at desc limit 4;
-```
+``` 
 
 Esperado: a linha mais recente com **`cache_hit_a2 = true`**, `tokens_entrada` nulo (não houve
 chamada) e latência muito menor.
@@ -129,5 +129,5 @@ Quem consome é o A3.
 | Chat quebrou depois do deploy | Republicar a versão anterior pelo painel. ⚠️ A chamada sombra é `void` + `.catch()` e **não deveria** conseguir derrubar nada — se derrubou, é bug meu e quero saber |
 | O reconhecimento fala de **erro da planilha** em vez de descrever colunas | O executor recusou o `metadados`. ⭐ A frase é do `sheets.py`, não do modelo. Filtre por `codigo_erro`: `metadados_executor` (o executor recusou — mensagem em `resposta_agente`), `metadados_vazio` (veio ok e sem coluna) ou `metadados_http_<n>`. Nada é cacheado em nenhum dos casos |
 | Uma coluna some das `observacoes` do A2 como *"não existe"* | ⭐ Esperado, e é informação: aquela coluna está no `allowed_columns` do cargo e **não está mais no cabeçalho da planilha**. Corrija a matriz em `Cfgdatabase.tsx?tab=permissoes`. Desde 2026-08-20 isso não derruba mais o `metadados` inteiro |
-| `cache_hit_a2` nunca vira `true` | A digital do dicionário está instável. Me avise: é a canonicalização, e tem teste que deveria ter pego |
+| `cache_hit_a2` nunca vira `true` | ⭐ **Duas causas, e uma query separa:** `select count(*) from plum_reconhecimento`. **Zero** → o cache não GRAVA, e o motivo mais provável é a migration ter morrido antes de criar a policy de INSERT (`select cmd from pg_policies where tablename = 'plum_reconhecimento'` tem de trazer três). Desde 2026-08-21 isso aparece no log como `codigo_erro = 'cache_nao_gravou'`, com a mensagem crua do banco em `resposta_agente`. **Um ou mais** → grava e não encontra: é a digital do dicionário instável, me avise (tem teste que deveria ter pego) |
 | Aparece `ad_hoc` no log de organização com a chave desligada | ⚠️ Grave. `update organizations set remake_habilitado = false;` em tudo e me avise |
