@@ -56,6 +56,10 @@ order by created_at;
 Esperado, tudo com `caminho = 'ad_hoc'`: `porteiro` → `executor` (metadados) → `reconhecedor` →
 [`executor` (vocabulário)] → `planejador` → `executor` → `interprete`.
 
+⭐ **Olhe a `latencia_ms` do `planejador`.** Ele agora tem uma invocação só para ele, então esse
+número é limpo — e é o que diz se o modelo de raciocínio cabe no orçamento de tempo. Se passar de
+uns 40s, a próxima conversa é sobre streaming ou sobre um modelo mais rápido no planejador.
+
 ⭐ **Confira o `modelo` do `planejador` e do `interprete`: têm de ser `gemini-3.1-pro-preview`.** Se
 vier `gemini-3.7-flash`, alguém apontou os dois para o modelo barato e a cadeia rodou mais fraca do
 que a projetada — sem nada quebrar para avisar.
@@ -85,31 +89,28 @@ não recusar tudo.
 cliente?" numa base sem CNPJ). Duas recusas diferentes, e as duas são respostas legítimas: o
 porteiro barra a primeira, o planejador declara a segunda `inviavel`.
 
-## ⭐ A queda para o legado — o que torna isto seguro
+## ⭐ Não há queda para o legado — e é decisão, não descuido
 
-**Qualquer falha do `ad_hoc` cai para o caminho antigo, em silêncio.** Você não vê erro; a pergunta é
-respondida pela cadeia de sempre e o defeito fica no `plum_logs`.
+**Com a chave ligada, o `ad_hoc` responde ou você vê um erro.** A queda existiu por um dia e foi
+removida em 2026-08-21 a pedido do 👤: ela **escondeu a primeira falha real**. O chat respondeu
+normalmente, o número saiu igual ao de antes, e só o bloco de presunções ausente denunciou que o
+caminho novo não tinha respondido.
 
-Então **a ausência de defeito na tela não prova que o `ad_hoc` funcionou.** Confira sempre:
+⭐ **Por isso o erro nomeia a etapa:** *"Não consegui responder agora (falhou em: planejador)"*. Sem
+a rede, a mensagem na tela é a principal superfície de diagnóstico.
 
-```sql
-select caminho, etapa, status, codigo_erro
-from plum_logs
-where turno_id = (select turno_id from plum_logs order by created_at desc limit 1)
-order by created_at;
-```
+⚠️ **Com a chave DESLIGADA nada muda** — o legado responde inteiro, como sempre.
 
-Se houver linhas dos **dois** caminhos no mesmo turno, o `ad_hoc` tentou e caiu — e o `codigo_erro`
-diz onde.
-
-⚠️ **Duas exceções que NÃO caem:** `bloqueado` (porteiro) e `inviavel` (planejador). São respostas,
-não falhas — cair ali faria a pergunta ser respondida por um caminho que o outro já tinha recusado.
+**Três invocações, não uma:** `ad_hoc_reconhecer` → `ad_hoc_planejar` → `ad_hoc_executar`. Juntas
+elas encadeariam cinco idas à rede, sendo a última um modelo de raciocínio — foi o que derrubou o
+primeiro teste, com a função terminando o trabalho e morrendo antes de responder.
 
 ## Se der errado
 
 | Sintoma | O que fazer |
 |---|---|
-| Chat responde, mas sempre pelo legado | O `ad_hoc` está caindo. `select codigo_erro, jsonb_pretty(resposta_agente) from plum_logs where caminho='ad_hoc' and status='erro' order by created_at desc limit 1` |
+| Erro na tela nomeando uma etapa | É o desenho funcionando. `select codigo_erro, jsonb_pretty(resposta_agente) from plum_logs where caminho='ad_hoc' order by created_at desc limit 3` diz o resto |
+| Chat responde pelo legado com a chave LIGADA | ⚠️ Não deveria mais acontecer. Se acontecer, o `ad_hoc_reconhecer` devolveu `habilitado: false` — a chave não está sendo lida |
 | `planejador`/`interprete` com `modelo = gemini-3.7-flash` | Alguém apontou os dois para o modelo barato em `MODELO_POR_PAPEL`. Há teste que impede isso — se passou, me avise |
 | Toda pergunta responde pelo legado, e o log mostra o `planejador` com erro do provedor | ⚠️ O modelo pode ter sido aposentado (é `-preview`). Confira o `codigo_erro`: `gemini_400`/`gemini_404` no `planejador` é isso. Trocar é uma linha em `MODELOS.RACIOCINIO` |
 | Resposta sem bloco de presunções onde havia escolha | Prompt do A3. `adhoc/prompts/a3_planejador.ts` — e me diga qual escolha ficou implícita |

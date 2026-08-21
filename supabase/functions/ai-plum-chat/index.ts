@@ -670,7 +670,7 @@ PORTUGUÊS CORRETO:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ad_hoc_planejar — A1 → metadados → A2. O caminho novo começa aqui.
+// ad_hoc_reconhecer — A1 → metadados → A2 → vocabulário.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -686,7 +686,7 @@ PORTUGUÊS CORRETO:
  * É o mesmo formato do modo observação do B02, e pela mesma razão: sem ele, A1 e
  * A2 ficariam mais duas semanas sem nenhum sinal de realidade.
  */
-async function handleAdHocPlanejar(
+async function handleAdHocReconhecer(
   req: Request,
   pergunta: unknown,
   datasetId: unknown,
@@ -896,12 +896,59 @@ async function handleAdHocPlanejar(
     });
   }
 
-  // ── A3 · Planejador ──────────────────────────────────────────────────────
-  const t4 = Date.now();
-  const { plano, llm: llmA3 } = await planejar({
-    pergunta,
+  return json({
+    habilitado: true,
+    status: "ok",
+    cacheHit: r.cacheHit,
     reconhecimento: r.reconhecimento,
     vocabularios,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ad_hoc_planejar — só o A3. A invocação que existe por causa do relógio.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ⚠️ **Isto era a segunda metade do `ad_hoc_reconhecer` até 2026-08-21.** Juntas,
+ * as duas encadeavam CINCO idas à rede numa invocação só — porteiro, Lambda, A2,
+ * Lambda e o A3 — e a última é um modelo de raciocínio, lento por construção.
+ *
+ * ⭐ O sintoma foi cruel: o `plum_logs` mostrava `porteiro`, `executor`,
+ * `reconhecedor` e `planejador` todos gravados, com um plano bem formado, e
+ * **nenhuma** linha do `ad_hoc_executar`. A função terminava o trabalho e morria
+ * antes de responder — logs são gravados durante a execução, o `return` é a
+ * última coisa. Separar dá ao agente lento um orçamento de tempo só dele, e
+ * torna a latência dele legível isolada no log.
+ *
+ * ⚠️ `reconhecimento` e `vocabularios` chegam do cliente. É seguro pela mesma
+ * razão dos `pedidos`: **nada disso é decisão de autorização.** O
+ * `authorizePlan` roda no servidor sobre o plano final e a barreira 4 do Lambda
+ * reconfere contra o `allowed_columns` lido com o JWT. O vocabulário contém
+ * valores da base, sim — mas são os valores que aquele mesmo usuário acabou de
+ * ter permissão de ler, indo e voltando para ele.
+ */
+async function handleAdHocPlanejar(
+  req: Request,
+  pergunta: unknown,
+  reconhecimento: unknown,
+  vocabularios: unknown,
+  turno: Partial<DadosDoTurno>,
+): Promise<Response> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return json({ error: "sem credencial" }, 401);
+  if (typeof pergunta !== "string" || !pergunta.trim() || !reconhecimento) {
+    return json({ error: "prompt e reconhecimento obrigatorios" }, 400);
+  }
+
+  const registrar = criarRegistrador(authHeader, turno, "ad_hoc");
+  const voc = (vocabularios ?? {}) as Record<string, ValorDoVocabulario[]>;
+
+  const t0 = Date.now();
+  const { plano, llm: llmA3 } = await planejar({
+    pergunta,
+    reconhecimento: reconhecimento as Reconhecimento,
+    vocabularios: voc,
   });
 
   const registrarA3 = async (status: StatusLog) => {
@@ -913,7 +960,7 @@ async function handleAdHocPlanejar(
       provedor: llmA3.provedor,
       tokensEntrada: llmA3.tokens.entrada,
       tokensSaida: llmA3.tokens.saida,
-      latenciaMs: Date.now() - t4,
+      latenciaMs: Date.now() - t0,
       presuncoesQtd: plano.presuncoes.length,
       respostaAgente: plano,
     });
@@ -924,18 +971,13 @@ async function handleAdHocPlanejar(
   // devolve um número certo sobre a pessoa errada.
   const literais = new Map<string, string>();
   for (const { termo, coluna } of plano.entidades) {
-    const casado = resolverEntidade(termo, vocabularios[coluna] ?? []);
+    const casado = resolverEntidade(termo, voc[coluna] ?? []);
 
     if (casado.tipo === "exato") {
       literais.set(termo, casado.literal);
     } else if (casado.tipo === "ambiguo") {
       await registrarA3("desambiguacao");
-      return json({
-        habilitado: true,
-        status: "desambiguacao",
-        termo,
-        opcoes: casado.opcoes,
-      });
+      return json({ status: "desambiguacao", termo, opcoes: casado.opcoes });
     }
     // `nenhum`: segue com o termo cru. O `where` do executor normaliza os dois
     // lados, então ainda pode casar — e devolver zero é mais honesto que trocar
@@ -949,20 +991,10 @@ async function handleAdHocPlanejar(
 
   await registrarA3(plano.inviavel ? "inviavel" : pedidos.length ? "ok" : "erro");
 
-  if (plano.inviavel) {
-    return json({ habilitado: true, status: "inviavel", mensagem: plano.inviavel });
-  }
-  if (!pedidos.length) {
-    return json({ habilitado: true, status: "erro", etapa: "planejador" });
-  }
+  if (plano.inviavel) return json({ status: "inviavel", mensagem: plano.inviavel });
+  if (!pedidos.length) return json({ status: "erro", etapa: "planejador" });
 
-  return json({
-    habilitado: true,
-    status: "ok",
-    cacheHit: r.cacheHit,
-    pedidos,
-    presuncoes: plano.presuncoes,
-  });
+  return json({ status: "ok", pedidos, presuncoes: plano.presuncoes });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1078,7 +1110,7 @@ Deno.serve(async (req: Request) => {
       // motivo que o `plan` acima: o `authorizePlan` roda no servidor para cada
       // pedido e a barreira 4 do Lambda reconfere. Plano é candidato, nunca
       // verdade (§4 regra 1).
-      pedidos, presuncoes,
+      pedidos, presuncoes, reconhecimento, vocabularios,
       // Identificam a conversa e a pergunta, para o log costurar as etapas.
       // Gerados no cliente — ver `20260818110000_plum_logs.sql`. Opcionais de
       // propósito: front antigo continua funcionando, só sem registro.
@@ -1122,8 +1154,11 @@ Deno.serve(async (req: Request) => {
 
       return resposta;
     }
+    if (action === "ad_hoc_reconhecer") {
+      return await handleAdHocReconhecer(req, prompt, datasetId, turno);
+    }
     if (action === "ad_hoc_planejar") {
-      return await handleAdHocPlanejar(req, prompt, datasetId, turno);
+      return await handleAdHocPlanejar(req, prompt, reconhecimento, vocabularios, turno);
     }
     if (action === "ad_hoc_executar") {
       return await handleAdHocExecutar(

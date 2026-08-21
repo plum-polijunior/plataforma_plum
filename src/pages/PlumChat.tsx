@@ -196,66 +196,92 @@ export default function PlumChat() {
 
       // 1-bis. ⭐ O CAMINHO `ad_hoc` (B07 do remake).
       //
-      // Quando `remake_habilitado` está ligado para a organização, é ELE quem
-      // responde: A1 → metadados → A2 → vocabulário → A3 → resolvedor, e depois
-      // executor → A4. O caminho de baixo (Agente Z/A/C) fica de reserva.
+      // Quando `remake_habilitado` está ligado, é ELE quem responde — e é o
+      // único que responde. Três invocações: reconhecer → planejar → executar.
       //
-      // ⚠️ **Qualquer falha aqui cai para o legado, em silêncio para o usuário.**
-      // É o que torna seguro deixar o remake responder de verdade: a regra que
-      // organiza a V3 é *não quebrar a demo*, e um A3 com defeito não pode virar
-      // chat quebrado. O defeito aparece em `plum_logs`, não na tela.
+      // ⚠️ **NÃO HÁ QUEDA PARA O LEGADO**, por decisão do 👤 em 2026-08-21.
+      // Existiu por um dia e escondeu a primeira falha real: o chat respondeu
+      // normalmente, o número saiu igual, e só o bloco de presunções ausente
+      // denunciou que o `ad_hoc` não tinha respondido. Uma rede que esconde o
+      // que deveria mostrar custa mais do que protege — e o legado vai ser
+      // substituído de qualquer forma.
       //
-      // Duas invocações, não uma: o turno inteiro numa chamada só encadearia
-      // quatro LLMs e duas idas ao Lambda dentro do teto de parede da Edge
-      // Function, com a pessoa olhando um spinner por um minuto sem sinal.
-      let respondidoPeloAdHoc = false;
-      try {
-        const planRes = await supabase.functions.invoke('ai-plum-chat', {
-          body: { action: 'ad_hoc_planejar', prompt: userMsgContent, datasetId: selectedDatasetId, sessaoId, turnoId }
+      // ⭐ Por isso o erro NOMEIA A ETAPA. Sem a rede, a mensagem na tela vira a
+      // principal superfície de diagnóstico; "erro" sozinho obrigaria a abrir o
+      // SQL a cada tentativa.
+      //
+      // Por que três chamadas e não uma: o turno inteiro numa invocação
+      // encadearia cinco idas à rede, sendo a última um modelo de raciocínio.
+      // Foi exatamente o que derrubou o primeiro teste — a função terminava o
+      // trabalho e morria antes de responder.
+      const chamarAdHoc = (body: Record<string, unknown>) =>
+        supabase.functions.invoke('ai-plum-chat', {
+          body: { ...body, prompt: userMsgContent, datasetId: selectedDatasetId, sessaoId, turnoId }
         });
-        const p = planRes.data;
 
-        // `habilitado: false` é o caso de toda organização que não está no
-        // remake: volta na hora, sem chamar LLM nenhum.
-        if (!planRes.error && p?.habilitado) {
-          if (p.status === 'bloqueado' || p.status === 'inviavel') {
-            // ⭐ Recusa do porteiro ou do planejador NÃO cai para o legado: são
-            // respostas, não falhas. Cair aqui faria a pergunta ser respondida
-            // por um caminho que já a tinha recusado no outro.
-            await saveAndShowAssistantMsg(p.mensagem || 'Não consegui responder isso.');
-            respondidoPeloAdHoc = true;
-          } else if (p.status === 'desambiguacao') {
-            // ⭐ Dois candidatos plausíveis viram pergunta, nunca escolha.
-            await saveAndShowAssistantMsg(
-              `Encontrei mais de um "${p.termo}" na sua base. Qual deles?\n\n` +
-              (p.opcoes ?? []).map((o: string) => `- ${o}`).join('\n')
-            );
-            respondidoPeloAdHoc = true;
-          } else if (p.status === 'ok' && p.pedidos?.length) {
-            const execRes = await supabase.functions.invoke('ai-plum-chat', {
-              body: {
-                action: 'ad_hoc_executar', prompt: userMsgContent, datasetId: selectedDatasetId,
-                pedidos: p.pedidos, presuncoes: p.presuncoes, sessaoId, turnoId,
-              }
-            });
-            const e = execRes.data;
-            if (!execRes.error && e?.status === 'ok' && e.resposta) {
-              await saveAndShowAssistantMsg(e.resposta);
-              respondidoPeloAdHoc = true;
-            } else if (!execRes.error && e?.status === 'negado' && e.mensagem) {
-              await saveAndShowAssistantMsg(e.mensagem);
-              respondidoPeloAdHoc = true;
-            }
-          }
-        }
-      } catch (e) {
-        // Nem loga como erro: a pergunta vai ser respondida logo abaixo.
-        console.debug('[ad_hoc] falhou, caindo para o legado:', e);
-      }
-
-      if (respondidoPeloAdHoc) {
+      const falhou = async (etapa: string) => {
+        await saveAndShowAssistantMsg(
+          `Não consegui responder agora (falhou em: ${etapa}). ` +
+          `O detalhe está em \`plum_logs\`, no turno ${turnoId.slice(0, 8)}.`
+        );
         setIsProcessing(false);
-        return;
+      };
+
+      const rec = await chamarAdHoc({ action: 'ad_hoc_reconhecer' });
+
+      // `habilitado: false` é o caso de toda organização fora do remake: volta
+      // na hora, sem chamar LLM nenhum, e o legado abaixo responde.
+      if (!rec.error && rec.data?.habilitado) {
+        if (rec.data.status === 'bloqueado') {
+          await saveAndShowAssistantMsg(rec.data.mensagem || 'Requisição bloqueada.');
+          setIsProcessing(false);
+          return;
+        }
+        if (rec.data.status !== 'ok') return await falhou(rec.data.etapa ?? 'reconhecedor');
+
+        const pl = await chamarAdHoc({
+          action: 'ad_hoc_planejar',
+          reconhecimento: rec.data.reconhecimento,
+          vocabularios: rec.data.vocabularios,
+        });
+        if (pl.error || !pl.data) return await falhou('planejador');
+
+        // ⭐ Desambiguação e inviabilidade são RESPOSTAS, não falhas.
+        if (pl.data.status === 'desambiguacao') {
+          await saveAndShowAssistantMsg(
+            `Encontrei mais de um "${pl.data.termo}" na sua base. Qual deles?\n\n` +
+            (pl.data.opcoes ?? []).map((o: string) => `- ${o}`).join('\n')
+          );
+          setIsProcessing(false);
+          return;
+        }
+        if (pl.data.status === 'inviavel') {
+          await saveAndShowAssistantMsg(pl.data.mensagem);
+          setIsProcessing(false);
+          return;
+        }
+        if (pl.data.status !== 'ok' || !pl.data.pedidos?.length) {
+          return await falhou('planejador');
+        }
+
+        const ex = await chamarAdHoc({
+          action: 'ad_hoc_executar',
+          pedidos: pl.data.pedidos,
+          presuncoes: pl.data.presuncoes,
+        });
+        if (ex.error || !ex.data) return await falhou('executor');
+
+        if (ex.data.status === 'ok' && ex.data.resposta) {
+          await saveAndShowAssistantMsg(ex.data.resposta);
+          setIsProcessing(false);
+          return;
+        }
+        if (ex.data.status === 'negado' && ex.data.mensagem) {
+          await saveAndShowAssistantMsg(ex.data.mensagem);
+          setIsProcessing(false);
+          return;
+        }
+        return await falhou(ex.data.etapa ?? 'interprete');
       }
 
       // 2. Chama Agente Z (Guardião)

@@ -31,6 +31,7 @@ Para cada coluna, diga:
 - "papel_analitico": "medida" (serve para somar/tirar média), "dimensao" (serve para agrupar/filtrar), "identificador" (aponta uma linha específica) ou "temporal".
 - "vocabulario_util": true quando conhecer os valores distintos ajudaria a interpretar perguntas — tipicamente dimensão de texto com poucos valores. false para identificador, número e data.
 - "confianca": "alta" quando o nome é explícito, "baixa" quando você está deduzindo. ⚠️ Seja honesto: confiança baixa faz o sistema perguntar ao usuário em vez de presumir, e presumir errado devolve um número certo sobre a coisa errada.
+  ⚠️ REGRA DURA: se o seu próprio "conceito" contiver "ou", "pode ser", "provavelmente" ou qualquer hesitação, a confiança é "baixa". SEM EXCEÇÃO. Escrever "custo total OU unitário" e marcar confiança alta é contradição — e foi exatamente assim que uma coluna ambígua passou por aqui como certa em 2026-08-21, levando o planejador a presumir sem saber que estava presumindo.
 
 E para a base como um todo:
 - "grao": o que UMA LINHA representa ("uma venda", "um dia por loja", "um atendimento"). Use a razão linhas ÷ valores distintos das colunas temporais e de identificador — se há 1.200 linhas e 30 datas distintas, cada linha não é um dia.
