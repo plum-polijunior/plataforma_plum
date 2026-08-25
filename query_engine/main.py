@@ -91,6 +91,64 @@ def colunas_de_linha(plan: Dict[str, Any], autorizadas: List[str]) -> List[str]:
     # minimo que a barreira 4 deixou passar.
     return pedidas or list(autorizadas)
 
+def descrever_cabecalhos(service, payload) -> Dict[str, Any]:
+    """
+    O cabecalho da planilha, sem carregar dado nenhum.
+
+    ⭐ **E a UNICA porta deste executor que nao passa pela barreira 4**, e o
+    motivo e circular por natureza: quem pergunta "quais sao as colunas?" ainda
+    nao pode ter uma lista de colunas permitidas. No cadastro, esta chamada
+    acontece ANTES de existir `role_permissions` — e o que ela devolve e
+    exatamente o insumo para criar essa permissao.
+
+    ⚠️ Nao ha o que autorizar porque nao ha coluna pedida: `resolved_columns`
+    vem vazio e nenhuma celula de dado e lida. `sheets.get_meta` busca so a
+    linha 1 (`ranges=['Aba'!1:1]`) — cabecalho e contagem de linhas, uma
+    requisicao. Nome de coluna nao e dado do negocio; e o enderecamento dele.
+
+    ⚠️ Quem confere QUEM pode chamar isto e a Edge Function, que exige Admin da
+    organizacao dona da base. Aqui so se confere a assinatura HMAC, como em todo
+    o resto — este endpoint nunca soube quem e o usuario.
+    """
+    tab = sheets.resolver_aba(service, payload.sheet_id, payload.tab, payload.tab_gid)
+    meta = sheets.get_meta(service, payload.sheet_id, tab)
+
+    # ⭐ A colisao de normalizacao aparece AQUI, com a pessoa olhando a tela.
+    #
+    # Dois cabecalhos que normalizam para o mesmo nome fazem uma coluna sumir do
+    # `schema_metadata` e, por tabela, do `allowed_columns` — e ate hoje isso
+    # acontecia calado, na importacao (C11). Devolver as colisoes deixa o
+    # cadastro dizer "renomeie uma destas" no primeiro passo, em vez de a base
+    # nascer com uma coluna a menos que ninguem procurou.
+    por_normalizado: Dict[str, List[str]] = {}
+    colunas: List[Dict[str, str]] = []
+    sem_titulo = 0
+
+    for original in meta.headers:
+        nome = sheets.normalizar_coluna(original)
+        if not nome:
+            # Coluna sem titulo nao e enderecavel e inventar um nome seria
+            # adivinhar. Conta-se quantas ha, para o cadastro poder avisar.
+            sem_titulo += 1
+            continue
+        por_normalizado.setdefault(nome, []).append(str(original))
+        colunas.append({"original": str(original), "nome": nome})
+
+    colisoes = {n: orig for n, orig in por_normalizado.items() if len(orig) > 1}
+
+    return {
+        "tipo": "cabecalhos",
+        "aba": tab,
+        "colunas": colunas,
+        # `row_count` e o tamanho da GRADE, nao o numero de linhas preenchidas —
+        # o Sheets aloca linhas vazias. Serve para ordem de grandeza, nao para
+        # contagem exata; quem conta de verdade e o `metadados`.
+        "row_count": meta.row_count,
+        "colisoes": colisoes,
+        "colunas_sem_titulo": sem_titulo,
+    }
+
+
 # Reaproveitado entre invocações enquanto o container do Lambda vive. Evita
 # reconstruir credencial e cliente a cada requisição.
 _service = None
@@ -136,6 +194,38 @@ async def execute(
         raise HTTPException(status_code=401, detail="payload expirado") from exc
 
     max_rows = payload.max_rows or config.default_max_rows()
+
+    # ── `cabecalhos`: antes da barreira 4, e so ele ──────────────────────────
+    #
+    # ⚠️ Ele vem ANTES de propósito, e a razao esta em `descrever_cabecalhos`:
+    # nao ha coluna a autorizar quando o que se pede e a lista de colunas. E o
+    # mesmo formato do desvio que o `metadados` do B03 faz sobre a autorizacao
+    # POR PLANO — aqui o desvio e sobre o conjunto de colunas.
+    #
+    # ⚠️⚠️ Exige o lote INTEIRO ser `cabecalhos`. Num lote misto, deixar passar
+    # daria a um pedido com plano uma carona para fora da barreira 4 — e a
+    # barreira 4 e a unica coisa entre um Query Plan e a coluna de salario.
+    tipos = {p.tipo for p in payload.plans}
+    if tipos == {"cabecalhos"}:
+        try:
+            saida = descrever_cabecalhos(_google_service(), payload)
+        except sheets.SheetError as exc:
+            return {
+                "results": [
+                    {"card_id": p.card_id, "status": "error", "error": str(exc)}
+                    for p in payload.plans
+                ]
+            }
+        return {
+            "results": [
+                {"card_id": p.card_id, "status": "ok", **saida} for p in payload.plans
+            ]
+        }
+    if "cabecalhos" in tipos:
+        raise HTTPException(
+            status_code=400,
+            detail="'cabecalhos' nao pode vir num lote com outros tipos",
+        )
 
     # ── Barreira 4: conjunto de colunas, por card ────────────────────────────
     # Feita antes de tocar no Google: um card proibido não deve nem gerar leitura.
@@ -240,19 +330,20 @@ async def execute(
         # na Edge Function, antes de chegar aqui — so ela sabe quanto o usuario
         # ja gastou. Teto por pedido sozinho nao protege nada: 200 pedidos de 5
         # linhas e a base inteira sem violar teto nenhum.
-        if pedido.tipo in ("registro", "amostra"):
+        if pedido.tipo in ("registro", "amostra", "amostra_cadastro"):
             try:
                 colunas = colunas_de_linha(pedido.plan, pedido.resolved_columns)
+                semente = linhas_mod.semente_de(payload.sheet_id, len(df))
                 if pedido.tipo == "registro":
                     saida = linhas_mod.registro(
                         df, colunas, plano_where(pedido.plan), column_roles
                     )
+                elif pedido.tipo == "amostra_cadastro":
+                    # ⚠️ Teto de 20, e ele NAO chega por parametro — o tipo do
+                    # pedido e que escolhe a funcao. Ver `linhas.TETO_DE_CADASTRO`.
+                    saida = linhas_mod.amostra_de_cadastro(df, colunas, semente)
                 else:
-                    saida = linhas_mod.amostra(
-                        df,
-                        colunas,
-                        linhas_mod.semente_de(payload.sheet_id, len(df)),
-                    )
+                    saida = linhas_mod.amostra(df, colunas, semente)
             except ExecutorError as exc:
                 resultados.append(
                     {"card_id": pedido.card_id, "status": "error", "error": str(exc)}

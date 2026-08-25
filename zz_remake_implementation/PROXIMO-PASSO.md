@@ -10,13 +10,15 @@ O histórico está nos `DIARIO.md` de cada bloco.
 
 ## 👤 A fila, em ordem
 
-### 1. ⚠️ Publicar o `ai-plum-chat` — está atrasado três blocos
+### 1. ⚠️ Publicar o Lambda e o `ai-plum-chat` — está atrasado quatro blocos
 
 ```bash
 npx supabase functions deploy ai-plum-chat --project-ref rjwidarrsykufuifzunu
 ```
 
-**B07-bis, B09 e B10 estão commitados e não estão no ar.** Confirme pelo `ezbr_sha256` (receita em
+**B07-bis, B09, B10 e agora o B12 estão commitados e não estão no ar.** O B12 publica **Lambda
+também** — `git push` primeiro, Action `query-engine` verde, e só então o deploy abaixo. O roteiro
+completo está em `execucao/B12-ler-a-planilha/MANUAL.md`. Confirme pelo `ezbr_sha256` (receita em
 `supabase/functions/README.md`), nunca pelo `version`.
 
 ⚠️ **No B10 esse deploy virou obrigatório e urgente.** O Lambda já aceita `registro`/`amostra`; quem
@@ -67,8 +69,8 @@ Sheets, sem nada garantindo que sejam a mesma planilha — **C11 e C12 são as d
 uma fonte só, elas deixam de ser possíveis em vez de serem consertadas, e a **C4** vira
 desnecessária.
 
-Sete blocos: **B11** ✅ dicionário v2 + leitor único · **B12** ler a planilha antes de existir permissão
-(`cabecalhos` no Lambda + `TETO_DE_CADASTRO = 20`) · **B13** a inversão do cadastro, que passa a ter
+Sete blocos: **B11** ✅ dicionário v2 + leitor único · **B12** ✅ ler a planilha antes de existir
+permissão (`cabecalhos` no Lambda + `TETO_DE_CADASTRO = 20`) · **B13** a inversão do cadastro, que passa a ter
 **4 passos** · **B14** `ai-agents` reorganizado e as etapas 3 e 4 em raciocínio, com a 4 absorvendo o
 A2 · **B15** o A3 recebe o dicionário e o A2 sai do chat · **B16** `ad_hoc` como padrão · **B17** a
 suíte de avaliação.
@@ -92,8 +94,9 @@ legado, com o dado que o modo observação do B02 vem acumulando (`[adhoc-observ
   B09 e B10 commitados, esperando o deploy do `ai-plum-chat`**.
 - ⭐ **Com a chave ligada, só o `ad_hoc` responde** — sem queda para o legado. Falha vira mensagem na
   tela nomeando a etapa.
-- **Etapa 2:** **B11 feito** (leitor do dicionário, sem consumidor ainda). Próximo: **B12**.
-- **Testes:** 374 Python, 313 TypeScript, `tsc` limpo, lint na baseline.
+- **Etapa 2:** **B11 e B12 feitos**. Próximo: **B13** (a inversão do cadastro).
+  ⚠️ O B12 **precisa estar no ar** antes de eu mexer na tela — ver o `MANUAL.md` dele.
+- **Testes:** 387 Python, 313 TypeScript, `tsc` limpo, lint na baseline.
 - **Bloqueante da etapa, sem dono:** as **25–30 perguntas de avaliação**. Não bloqueia nenhum bloco.
 
 ## Pontas soltas

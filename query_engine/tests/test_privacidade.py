@@ -1010,3 +1010,59 @@ def test_sem_select_utilizavel_cai_no_conjunto_autorizado():
 
     for plano in ({}, {"select": []}, {"select": [{"expr": {"agg": "sum"}}]}):
         assert colunas_de_linha(plano, ["nome"]) == ["nome"]
+
+
+# ── B12 · o teto do cadastro ─────────────────────────────────────────────────
+
+@pytest.mark.invariante
+def test_amostra_de_cadastro_para_em_vinte(base_larga):
+    """
+    O cadastro ve mais que o chat, e de proposito: e dele que sai o
+    `vocabulario_util`, e cinco linhas de uma coluna de texto parecem iguais
+    tendo ela 12 valores distintos ou 12.000.
+    """
+    r = linhas.amostra_de_cadastro(base_larga, ["cliente"], 42)
+
+    assert len(r["rows"]) == linhas.TETO_DE_CADASTRO == 20
+
+
+@pytest.mark.invariante
+def test_o_teto_do_cadastro_nao_vaza_para_o_chat(base_larga):
+    """
+    ⭐ O teste que importa. Os dois tetos convivem no mesmo arquivo, e o risco de
+    isso ter sido feito com um parametro e o de 5 virar sugestao.
+    """
+    assert len(linhas.amostra(base_larga, ["cliente"], 42)["rows"]) == 5
+    assert linhas.TETO_POR_PEDIDO == 5
+
+
+@pytest.mark.invariante
+def test_nenhuma_funcao_publica_aceita_teto_por_parametro():
+    """
+    ⚠️ Um teto que chega por argumento e um teto que alguem aumenta num lugar so
+    e ninguem revisa. O que o chamador escolhe e o TIPO do pedido.
+    """
+    import inspect
+
+    for fn in (linhas.registro, linhas.amostra, linhas.amostra_de_cadastro):
+        params = set(inspect.signature(fn).parameters)
+        assert not params & {"teto", "limite", "max_linhas", "n"}, fn.__name__
+
+
+def test_amostra_de_cadastro_e_deterministica(base_larga):
+    a = linhas.amostra_de_cadastro(base_larga, ["cliente"], 7)
+    b = linhas.amostra_de_cadastro(base_larga, ["cliente"], 7)
+    assert a["rows"] == b["rows"]
+
+
+def test_amostra_de_cadastro_nao_consome_orcamento():
+    """
+    Ela roda fora do chat, onde nao ha cota de usuario para debitar. ⚠️ Se um
+    dia o A3 alcancar este tipo, ele entra na lista no mesmo commit.
+    """
+    assert "amostra_cadastro" not in linhas.tipos_que_consomem_orcamento()
+
+
+def test_amostra_de_cadastro_de_base_menor_que_o_teto(base_larga):
+    pequena = base_larga.head(3)
+    assert len(linhas.amostra_de_cadastro(pequena, ["cliente"], 1)["rows"]) == 3

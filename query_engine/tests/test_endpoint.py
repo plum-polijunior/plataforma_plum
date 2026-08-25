@@ -559,3 +559,121 @@ def test_todas_as_colunas_sumidas_nao_estoura(client):
     assert card["status"] == "ok"
     assert card["n_linhas"] == 0
     assert card["colunas"]["fantasma_a"] == {"existe": False}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B12 · `cabecalhos` — a unica porta que nao passa pela barreira 4
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _corpo_cabecalhos(**over):
+    corpo = {
+        "sheet_id": "planilha-do-cliente-A",
+        "tab": "Sheet1",
+        "plans": [{"card_id": "c1", "plan": {}, "resolved_columns": [], "tipo": "cabecalhos"}],
+        # ⭐ VAZIO de proposito: no cadastro ainda nao existe role_permissions.
+        # E o cenario inteiro do bloco.
+        "allowed_columns": [],
+        "formatting_rules": {},
+        "issued_at": int(time.time()),
+    }
+    corpo.update(over)
+    return json.dumps(corpo).encode()
+
+
+@pytest.fixture
+def planilha(monkeypatch):
+    """Dubla o cabecalho da planilha. Nenhuma celula de dado e lida."""
+    estado = {"headers": ["Faturamento", "Região", "Data da Venda"], "rows": 1200}
+
+    monkeypatch.setattr(sheets, "resolver_aba", lambda *a, **k: "Vendas")
+    monkeypatch.setattr(
+        sheets, "get_meta",
+        lambda *a, **k: sheets.SheetMeta(estado["headers"], estado["rows"]),
+    )
+    return estado
+
+
+@pytest.mark.invariante
+def test_cabecalhos_funciona_com_allowed_columns_vazio(client, planilha):
+    """
+    ⭐ O ponto do bloco. Quem pergunta "quais sao as colunas?" ainda nao pode ter
+    uma lista de colunas permitidas — a pergunta e circular por natureza, e a
+    resposta dela e o insumo para criar a permissao.
+    """
+    r = _post(client, _corpo_cabecalhos())
+
+    assert r.status_code == 200
+    card = r.json()["results"][0]
+    assert card["status"] == "ok"
+    assert [c["nome"] for c in card["colunas"]] == [
+        "faturamento", "regiao", "data_da_venda",
+    ]
+    assert card["row_count"] == 1200
+    assert card["aba"] == "Vendas"
+
+
+@pytest.mark.invariante
+def test_cabecalhos_nao_le_nenhuma_celula(client, planilha, ambiente):
+    """
+    ⚠️ Ele pula a barreira 4. A garantia que substitui a barreira e esta: nao ha
+    leitura de dado nenhuma, so a linha 1. Se um dia isto carregar o DataFrame,
+    a porta aberta deixa de ser sobre nome de coluna.
+    """
+    _post(client, _corpo_cabecalhos())
+    assert ambiente["n"] == 0, "load_columns foi chamado — cabecalhos leu dado"
+
+
+@pytest.mark.invariante
+def test_cabecalhos_num_lote_misto_e_recusado(client, planilha):
+    """
+    ⚠️⚠️ Deixar passar daria a um pedido COM PLANO uma carona para fora da
+    barreira 4 — e ela e a unica coisa entre um Query Plan e a coluna de salario.
+    """
+    misto = json.loads(_corpo_cabecalhos().decode())
+    misto["plans"].append({
+        "card_id": "c2",
+        "plan": {"select": [{"expr": {"agg": "sum", "col": "salario"}}]},
+        "resolved_columns": ["salario"],
+        "tipo": "agregado",
+    })
+    r = _post(client, json.dumps(misto).encode())
+
+    assert r.status_code == 400
+
+
+def test_cabecalhos_denuncia_colisao_de_normalizacao(client, planilha):
+    """
+    ⭐ E a C11 aparecendo com a pessoa olhando a tela. Ate hoje a segunda coluna
+    sumia calada na importacao, e por tabela sumia do allowed_columns.
+    """
+    planilha["headers"] = ["Número de Peças", "numero de pecas", "Valor"]
+    card = _post(client, _corpo_cabecalhos()).json()["results"][0]
+
+    assert card["colisoes"] == {
+        "numero_de_pecas": ["Número de Peças", "numero de pecas"],
+    }
+
+
+def test_cabecalhos_conta_coluna_sem_titulo(client, planilha):
+    """Coluna sem nome nao e enderecavel; inventar um seria adivinhar (I-08)."""
+    planilha["headers"] = ["Valor", "", "   ", "Regiao"]
+    card = _post(client, _corpo_cabecalhos()).json()["results"][0]
+
+    assert card["colunas_sem_titulo"] == 2
+    assert [c["nome"] for c in card["colunas"]] == ["valor", "regiao"]
+
+
+def test_cabecalhos_continua_exigindo_assinatura(client, planilha):
+    """A barreira 2 vale igual: pular a 4 nao pula as outras."""
+    assert _post(client, _corpo_cabecalhos(), assinar_com="errado").status_code == 401
+
+
+def test_cabecalhos_devolve_erro_de_planilha_por_card(client, planilha, monkeypatch):
+    def explode(*a, **k):
+        raise sheets.SheetError("A planilha nao foi compartilhada com o Plum.")
+
+    monkeypatch.setattr(sheets, "get_meta", explode)
+    card = _post(client, _corpo_cabecalhos()).json()["results"][0]
+
+    assert card["status"] == "error"
+    assert "compartilhada" in card["error"]

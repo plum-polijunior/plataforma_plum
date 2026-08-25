@@ -343,31 +343,8 @@ async function handleExecutePlan(
     issued_at: Math.floor(Date.now() / 1000),
   };
 
-  const raw = JSON.stringify(payload);
-  const assinatura = await signPayload(raw, EXECUTOR_HMAC_SECRET);
-
-  // SigV4 fecha o endpoint na infraestrutura (Function URL em AWS_IAM); o HMAC
-  // acima usa outro segredo. Vazar um dos dois não basta para forjar payload.
-  const aws = new AwsClient({
-    accessKeyId: AWS_ACCESS_KEY_ID,
-    secretAccessKey: AWS_SECRET_ACCESS_KEY,
-    region: AWS_REGION,
-    service: "lambda",
-  });
-
   try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), EXECUTOR_TIMEOUT_MS);
-    const resp = await aws.fetch(`${EXECUTOR_URL}/execute`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Plum-Signature": assinatura },
-      body: raw,
-      signal: controller.signal,
-    });
-    clearTimeout(t);
-    if (!resp.ok) throw new Error(`executor respondeu ${resp.status}`);
-
-    const corpo = await resp.json();
+    const corpo = await postarNoExecutor(payload);
 
     if (opcoes.lote) {
       // ⭐ Lote devolve TODOS os resultados, cada um com o seu `card_id`. O A4
@@ -393,6 +370,166 @@ async function handleExecutePlan(
         error: "Não consegui calcular isso agora. Tente novamente em instantes.",
       } satisfies ExecutorResult,
     });
+  }
+}
+
+/**
+ * `cabecalhos_da_planilha` — o primeiro passo do cadastro (B12).
+ *
+ * ⭐ **É a única ação desta função que roda antes de existir permissão**, e por
+ * isso a única que não pode se apoiar no `role_permissions`. A pergunta é
+ * circular: quem quer saber quais colunas a planilha tem ainda não pode ter uma
+ * lista de colunas autorizadas. O que ela devolve é justamente o insumo para
+ * criar essa lista.
+ *
+ * ⚠️ **Então a autorização aqui é EXPLÍCITA, não herdada.** Todo o resto do
+ * arquivo confere `allowed_columns` e deixa a RLS fazer o recorte de
+ * organização; aqui não há `allowed_columns`, então é preciso conferir à mão:
+ *
+ *   1. sessão válida (JWT);
+ *   2. perfil **ativo** e com organização;
+ *   3. cargo **Admin** — quem cadastra base é quem administra a organização;
+ *   4. a base pertence à organização do perfil.
+ *
+ * Sem o item 4 isto viraria um leitor de cabeçalho de planilha de qualquer
+ * organização para quem soubesse um `datasetId` — a forma exata do I-01.
+ *
+ * ⚠️ E nenhuma célula de dado é lida: o executor responde com `sheets.get_meta`,
+ * que busca só a linha 1. Nome de coluna não é dado do negócio; é o endereço
+ * dele. Há um teste no Lambda garantindo que `load_columns` não é chamado.
+ */
+async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Response> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return json({ error: "sessao invalida" }, 401);
+  if (typeof datasetId !== "string" || !datasetId) {
+    return json({ error: "datasetId obrigatorio" }, 400);
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) return json({ error: "sessao invalida" }, 401);
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id, role_id, status")
+    .eq("id", auth.user.id)
+    .single();
+
+  if (!profile?.organization_id) return json({ error: "perfil sem organizacao" }, 403);
+  if (profile.status !== "ativo") return json({ error: "perfil nao ativo" }, 403);
+
+  // ⚠️ Admin por NOME do cargo, como o `DatabasePipeline` já faz ao conceder as
+  // colunas. Não há flag booleana de admin no schema — se um dia houver, os dois
+  // lugares mudam juntos.
+  const { data: cargo } = await supabase
+    .from("roles")
+    .select("name")
+    .eq("id", profile.role_id ?? "")
+    .maybeSingle();
+
+  if (!/^admin$/i.test(String(cargo?.name ?? ""))) {
+    return json({ error: "apenas administradores cadastram bases" }, 403);
+  }
+
+  // ⭐ O `.eq("organization_id", ...)` é o item 4, e é o que impede isto de virar
+  // leitor de planilha alheia para quem souber um uuid.
+  const { data: dataset } = await supabase
+    .from("datasets")
+    .select("id, google_sheet_id, google_sheet_tab, google_sheet_gid")
+    .eq("id", datasetId)
+    .eq("organization_id", profile.organization_id)
+    .maybeSingle();
+
+  if (!dataset) return json({ error: "base nao encontrada" }, 403);
+  if (!dataset.google_sheet_id) {
+    return json({ error: "Esta base ainda nao tem o link da planilha." }, 409);
+  }
+
+  try {
+    const corpo = await postarNoExecutor({
+      sheet_id: dataset.google_sheet_id,
+      tab: dataset.google_sheet_tab ?? "Sheet1",
+      tab_gid: dataset.google_sheet_gid ?? null,
+      plans: [{ card_id: "cadastro", plan: {}, resolved_columns: [], tipo: "cabecalhos" }],
+      // ⭐ Vazio, e é o cenário inteiro do bloco. O executor tem um desvio para
+      // `cabecalhos` que acontece antes da barreira 4 — e recusa o tipo num lote
+      // misto, justamente para esse desvio não virar carona.
+      allowed_columns: [],
+      formatting_rules: {},
+      issued_at: Math.floor(Date.now() / 1000),
+    });
+
+    const r = ((corpo.results ?? []) as Record<string, unknown>[])[0];
+    if (!r || r.status !== "ok") {
+      // ⚠️ A frase do executor chega ao usuário: "a planilha não foi
+      // compartilhada com o Plum" é acionável, "erro ao ler" não é.
+      return json({
+        status: "erro",
+        mensagem: String(r?.error ?? "Não consegui ler a planilha."),
+      });
+    }
+
+    return json({
+      status: "ok",
+      aba: r.aba,
+      colunas: r.colunas,
+      row_count: r.row_count,
+      // ⭐ Vão para a tela do passo 1. A colisão é a C11 deixando de ser
+      // silenciosa: hoje a segunda coluna some na importação e ninguém procura.
+      colisoes: r.colisoes,
+      colunas_sem_titulo: r.colunas_sem_titulo,
+    });
+  } catch (err) {
+    console.error("[cabecalhos] executor indisponivel:", err);
+    return json({
+      status: "erro",
+      mensagem: "Não consegui ler a planilha agora. Tente novamente em instantes.",
+    });
+  }
+}
+
+/**
+ * O transporte até o executor: assina, chama, devolve o corpo. Nada de regra.
+ *
+ * ⭐ Extraído no B12 porque passou a ter **dois** chamadores. Duas cópias da
+ * assinatura HMAC + SigV4 seria a forma mais cara possível de divergir: o
+ * sintoma de uma delas ficar para trás é `401 assinatura invalida` vindo de um
+ * caminho só, e ninguém procura duplicação quando o erro diz "assinatura".
+ *
+ * ⚠️ Lança em vez de devolver erro. Quem chama sabe o que dizer ao usuário —
+ * o chat degrada para uma frase, o cadastro precisa nomear a planilha.
+ */
+async function postarNoExecutor(payload: unknown): Promise<Record<string, unknown>> {
+  const raw = JSON.stringify(payload);
+  const assinatura = await signPayload(raw, EXECUTOR_HMAC_SECRET);
+
+  // SigV4 fecha o endpoint na infraestrutura (Function URL em AWS_IAM); o HMAC
+  // acima usa outro segredo. Vazar um dos dois não basta para forjar payload.
+  const aws = new AwsClient({
+    accessKeyId: AWS_ACCESS_KEY_ID,
+    secretAccessKey: AWS_SECRET_ACCESS_KEY,
+    region: AWS_REGION,
+    service: "lambda",
+  });
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), EXECUTOR_TIMEOUT_MS);
+  try {
+    const resp = await aws.fetch(`${EXECUTOR_URL}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Plum-Signature": assinatura },
+      body: raw,
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`executor respondeu ${resp.status}`);
+    return await resp.json();
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -1302,6 +1439,14 @@ Deno.serve(async (req: Request) => {
 
       return resposta;
     }
+    // ⭐ Fora do `ad_hoc` e fora do legado: é o CADASTRO, não o chat. Não passa
+    // pela chave `remake_habilitado` nem escreve em `plum_logs` — não há turno,
+    // não há pergunta, e uma linha de log por leitura de cabeçalho poluiria a
+    // tabela que mede o chat.
+    if (action === "cabecalhos_da_planilha") {
+      return await handleCabecalhos(req, datasetId);
+    }
+
     if (action === "ad_hoc_reconhecer") {
       return await handleAdHocReconhecer(req, prompt, datasetId, turno);
     }

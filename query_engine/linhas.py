@@ -44,11 +44,39 @@ from query_engine.pandas_executor import ExecutorError, _eval_where, _serialize_
 # negocia é o orçamento da janela, que é onde a conta realmente fecha.
 TETO_POR_PEDIDO = 5
 
+# ⭐ O teto do CADASTRO, e ele é maior de propósito.
+#
+# Quem cadastra é o dono da base registrando a própria planilha, com todas as
+# colunas concedidas, antes de existir cargo, RBAC ou orçamento. Não é o chat: é
+# a pessoa olhando os próprios dados na tela em que ela os conecta.
+#
+# E cinco linhas não bastam ali. É do cadastro que sai o `vocabulario_util`, e
+# uma coluna de texto com cinco amostras parece idêntica tendo ela 12 valores
+# distintos ou 12.000 — que é exatamente a decisão que o passo precisa tomar.
+#
+# ⚠️⚠️ **Este número NÃO é parâmetro.** Nem daqui, nem do payload, nem do
+# chamador. Os dois tetos são constantes, cada um alcançado por um `tipo`
+# diferente do pedido — se virar argumento, o teto de 5 do chat deixa de ser
+# teto e vira sugestão, e o B10 inteiro existe porque limite que se negocia não
+# é limite.
+TETO_DE_CADASTRO = 20
 
-def _saida(df: pd.DataFrame, colunas: Sequence[str], tipo: str) -> Dict[str, Any]:
-    """Recorta, corta no teto e serializa. Caminho único para os dois tipos."""
+
+def _saida(
+    df: pd.DataFrame,
+    colunas: Sequence[str],
+    tipo: str,
+    teto: int = TETO_POR_PEDIDO,
+) -> Dict[str, Any]:
+    """
+    Recorta, corta no teto e serializa. Caminho único para todos os tipos.
+
+    ⚠️ `teto` é interno: nenhuma função pública deste módulo o recebe de fora.
+    Ele existe para as duas constantes compartilharem o mesmo recorte, não para
+    o chamador escolher um número.
+    """
     presentes = [c for c in colunas if c in df.columns]
-    recorte = _serialize_df(df[presentes].head(TETO_POR_PEDIDO).copy())
+    recorte = _serialize_df(df[presentes].head(teto).copy())
 
     return {
         "tipo": tipo,
@@ -100,14 +128,45 @@ def amostra(
     devolve amostra nova, que é o comportamento desejado — uma amostra congelada
     de uma base que cresceu descreveria o passado.
     """
-    if df.empty:
-        return _saida(df, colunas, "amostra")
+    return _amostrar(df, colunas, semente, TETO_POR_PEDIDO, "amostra")
 
-    quantas = min(TETO_POR_PEDIDO, len(df))
+
+def amostra_de_cadastro(
+    df: pd.DataFrame,
+    colunas: Sequence[str],
+    semente: int,
+) -> Dict[str, Any]:
+    """
+    Até 20 linhas, e só no cadastro da base. Ver `TETO_DE_CADASTRO`.
+
+    ⭐ **Função separada em vez de `amostra(..., teto=20)`, de propósito.** O que
+    o chamador escolhe é o TIPO do pedido, nunca o número de linhas — mesma
+    postura que separa `registro` de `amostra`. Um teto que chega por argumento
+    é um teto que alguém aumenta num lugar só e ninguém revisa.
+
+    ⚠️ O caminho até aqui é o normal: quando este pedido roda, o cadastro já
+    concedeu as colunas ao Admin, então a barreira 4 vale igual. Quem não passa
+    pela barreira é só o `cabecalhos`, que não pede coluna nenhuma.
+    """
+    return _amostrar(df, colunas, semente, TETO_DE_CADASTRO, "amostra_cadastro")
+
+
+def _amostrar(
+    df: pd.DataFrame,
+    colunas: Sequence[str],
+    semente: int,
+    teto: int,
+    tipo: str,
+) -> Dict[str, Any]:
+    """O sorteio, compartilhado pelos dois tetos. Não é público."""
+    if df.empty:
+        return _saida(df, colunas, tipo, teto)
+
+    quantas = min(teto, len(df))
     # `random_state` aceita int; o chamador já reduziu a semente a um inteiro
     # estável. `sample` sem reposição preserva as linhas como estão.
     sorteadas = df.sample(n=quantas, random_state=semente % (2**32))
-    return _saida(sorteadas, colunas, "amostra")
+    return _saida(sorteadas, colunas, tipo, teto)
 
 
 def semente_de(dataset_id: str, linhas: int) -> int:
@@ -130,5 +189,11 @@ def tipos_que_consomem_orcamento() -> List[str]:
 
     `agregado`, `serie`, `metadados` e `vocabulario` NÃO consomem — nenhum deles
     devolve linha, e cobrar por eles empurraria o planejador a agregar menos.
+
+    ⚠️ `amostra_cadastro` também NÃO está aqui, e isso é decisão, não descuido:
+    ele roda no cadastro da base, fora do chat, onde não há orçamento nem cota
+    de usuário para debitar. Quem o dispara é o dono da planilha conectando-a
+    pela primeira vez. Se um dia ele passar a ser alcançável pelo A3, entra
+    nesta lista no mesmo commit.
     """
     return ["registro", "amostra"]
