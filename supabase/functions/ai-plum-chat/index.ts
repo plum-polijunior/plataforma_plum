@@ -374,35 +374,34 @@ async function handleExecutePlan(
 }
 
 /**
- * `cabecalhos_da_planilha` — o primeiro passo do cadastro (B12).
+ * As quatro conferências de identidade do cadastro, num lugar só.
  *
- * ⭐ **É a única ação desta função que roda antes de existir permissão**, e por
- * isso a única que não pode se apoiar no `role_permissions`. A pergunta é
- * circular: quem quer saber quais colunas a planilha tem ainda não pode ter uma
- * lista de colunas autorizadas. O que ela devolve é justamente o insumo para
- * criar essa lista.
- *
- * ⚠️ **Então a autorização aqui é EXPLÍCITA, não herdada.** Todo o resto do
- * arquivo confere `allowed_columns` e deixa a RLS fazer o recorte de
- * organização; aqui não há `allowed_columns`, então é preciso conferir à mão:
- *
- *   1. sessão válida (JWT);
- *   2. perfil **ativo** e com organização;
- *   3. cargo **Admin** — quem cadastra base é quem administra a organização;
- *   4. a base pertence à organização do perfil.
- *
- * Sem o item 4 isto viraria um leitor de cabeçalho de planilha de qualquer
- * organização para quem soubesse um `datasetId` — a forma exata do I-01.
- *
- * ⚠️ E nenhuma célula de dado é lida: o executor responde com `sheets.get_meta`,
- * que busca só a linha 1. Nome de coluna não é dado do negócio; é o endereço
- * dele. Há um teste no Lambda garantindo que `load_columns` não é chamado.
+ * ⚠️ **O cadastro é o único contexto do sistema que roda antes de existir
+ * `allowed_columns`**, então ele não pode se apoiar no RBAC como o resto do
+ * arquivo faz. Confere à mão, e o item 4 é o que impede isto de virar leitor de
+ * planilha alheia para quem souber um uuid — a forma exata do I-01.
  */
-async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Response> {
+async function exigirAdminDaBase(
+  req: Request,
+  datasetId: unknown,
+): Promise<
+  | { erro: Response }
+  | {
+    supabase: ReturnType<typeof createClient>;
+    roleId: string;
+    dataset: {
+      id: string;
+      status: string | null;
+      google_sheet_id: string | null;
+      google_sheet_tab: string | null;
+      google_sheet_gid: number | null;
+    };
+  }
+> {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "sessao invalida" }, 401);
+  if (!authHeader) return { erro: json({ error: "sessao invalida" }, 401) };
   if (typeof datasetId !== "string" || !datasetId) {
-    return json({ error: "datasetId obrigatorio" }, 400);
+    return { erro: json({ error: "datasetId obrigatorio" }, 400) };
   }
 
   const supabase = createClient(
@@ -412,7 +411,7 @@ async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Respo
   );
 
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) return json({ error: "sessao invalida" }, 401);
+  if (!auth?.user) return { erro: json({ error: "sessao invalida" }, 401) };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -420,8 +419,8 @@ async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Respo
     .eq("id", auth.user.id)
     .single();
 
-  if (!profile?.organization_id) return json({ error: "perfil sem organizacao" }, 403);
-  if (profile.status !== "ativo") return json({ error: "perfil nao ativo" }, 403);
+  if (!profile?.organization_id) return { erro: json({ error: "perfil sem organizacao" }, 403) };
+  if (profile.status !== "ativo") return { erro: json({ error: "perfil nao ativo" }, 403) };
 
   // ⚠️ Admin por NOME do cargo, como o `DatabasePipeline` já faz ao conceder as
   // colunas. Não há flag booleana de admin no schema — se um dia houver, os dois
@@ -433,22 +432,124 @@ async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Respo
     .maybeSingle();
 
   if (!/^admin$/i.test(String(cargo?.name ?? ""))) {
-    return json({ error: "apenas administradores cadastram bases" }, 403);
+    return { erro: json({ error: "apenas administradores cadastram bases" }, 403) };
   }
 
-  // ⭐ O `.eq("organization_id", ...)` é o item 4, e é o que impede isto de virar
-  // leitor de planilha alheia para quem souber um uuid.
+  // ⭐ O `.eq("organization_id", ...)` é o item 4.
   const { data: dataset } = await supabase
     .from("datasets")
-    .select("id, google_sheet_id, google_sheet_tab, google_sheet_gid")
+    .select("id, status, google_sheet_id, google_sheet_tab, google_sheet_gid")
     .eq("id", datasetId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
 
-  if (!dataset) return json({ error: "base nao encontrada" }, 403);
+  if (!dataset) return { erro: json({ error: "base nao encontrada" }, 403) };
   if (!dataset.google_sheet_id) {
-    return json({ error: "Esta base ainda nao tem o link da planilha." }, 409);
+    return { erro: json({ error: "Esta base ainda nao tem o link da planilha." }, 409) };
   }
+
+  return { supabase, roleId: String(profile.role_id), dataset };
+}
+
+/**
+ * `amostra_do_cadastro` — até 20 linhas, e só enquanto a base está sendo criada.
+ *
+ * ⭐ **A trava que importa é `status = 'processing'`.** As 20 linhas do
+ * `TETO_DE_CADASTRO` existem porque o cadastro precisa ver mais que o chat; se
+ * essa porta continuasse aberta depois da base ficar `active`, seria um jeito de
+ * ler 20 linhas por chamada de qualquer base — quatro vezes o teto do B10, sem
+ * orçamento nenhum contando.
+ *
+ * ⚠️ Por isso o tipo `amostra_cadastro` **não é alcançável pela ação
+ * `execute_plan`**: se o front pudesse escolher o `tipo`, o teto de 5 do chat
+ * deixaria de existir na prática.
+ *
+ * ⚠️ E `allowed_columns` sai do `role_permissions`, não do que o front mandou —
+ * a concessão ao Admin já aconteceu no passo 1. Confiar na lista do cliente aqui
+ * seria escrever "RBAC" e não ter RBAC.
+ */
+async function handleAmostraDoCadastro(
+  req: Request,
+  datasetId: unknown,
+): Promise<Response> {
+  const acesso = await exigirAdminDaBase(req, datasetId);
+  if ("erro" in acesso) return acesso.erro;
+  const { supabase, roleId, dataset } = acesso;
+
+  if (dataset.status !== "processing") {
+    return json({
+      error: "Esta base ja foi finalizada; a amostra ampliada e so do cadastro.",
+    }, 409);
+  }
+
+  const { data: perm } = await supabase
+    .from("role_permissions")
+    .select("allowed_columns")
+    .eq("role_id", roleId)
+    .eq("dataset_id", dataset.id)
+    .maybeSingle();
+
+  const colunas: string[] = (perm?.allowed_columns ?? []).filter(Boolean);
+  if (!colunas.length) {
+    // Falha fechada: sem concessão não há amostra. O passo 1 do cadastro é quem
+    // concede — se chegou aqui sem ela, algo pulou o passo.
+    return json({ error: "Esta base ainda nao teve as colunas liberadas." }, 409);
+  }
+
+  try {
+    const corpo = await postarNoExecutor({
+      sheet_id: dataset.google_sheet_id,
+      tab: dataset.google_sheet_tab ?? "Sheet1",
+      tab_gid: dataset.google_sheet_gid ?? null,
+      plans: [{
+        card_id: "cadastro",
+        plan: { select: colunas },
+        resolved_columns: colunas,
+        tipo: "amostra_cadastro",
+      }],
+      allowed_columns: colunas,
+      formatting_rules: {},
+      issued_at: Math.floor(Date.now() / 1000),
+    });
+
+    const r = ((corpo.results ?? []) as Record<string, unknown>[])[0];
+    if (!r || r.status !== "ok") {
+      return json({
+        status: "erro",
+        mensagem: String(r?.error ?? "Não consegui ler as linhas da planilha."),
+      });
+    }
+
+    return json({ status: "ok", colunas: r.columns, linhas: r.rows });
+  } catch (err) {
+    console.error("[amostra-cadastro] executor indisponivel:", err);
+    return json({
+      status: "erro",
+      mensagem: "Não consegui ler a planilha agora. Tente novamente em instantes.",
+    });
+  }
+}
+
+/**
+ * `cabecalhos_da_planilha` — o primeiro passo do cadastro (B12).
+ *
+ * ⭐ **É a única ação desta função que roda antes de existir permissão**, e por
+ * isso a única que não pode se apoiar no `role_permissions`. A pergunta é
+ * circular: quem quer saber quais colunas a planilha tem ainda não pode ter uma
+ * lista de colunas autorizadas. O que ela devolve é justamente o insumo para
+ * criar essa lista.
+ *
+ * ⚠️ **Então a autorização aqui é EXPLÍCITA, não herdada** — ver
+ * `exigirAdminDaBase`, que faz as quatro conferências.
+ *
+ * ⚠️ E nenhuma célula de dado é lida: o executor responde com `sheets.get_meta`,
+ * que busca só a linha 1. Nome de coluna não é dado do negócio; é o endereço
+ * dele. Há um teste no Lambda garantindo que `load_columns` não é chamado.
+ */
+async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Response> {
+  const acesso = await exigirAdminDaBase(req, datasetId);
+  if ("erro" in acesso) return acesso.erro;
+  const { dataset } = acesso;
 
   try {
     const corpo = await postarNoExecutor({
@@ -1445,6 +1546,10 @@ Deno.serve(async (req: Request) => {
     // tabela que mede o chat.
     if (action === "cabecalhos_da_planilha") {
       return await handleCabecalhos(req, datasetId);
+    }
+
+    if (action === "amostra_do_cadastro") {
+      return await handleAmostraDoCadastro(req, datasetId);
     }
 
     if (action === "ad_hoc_reconhecer") {
