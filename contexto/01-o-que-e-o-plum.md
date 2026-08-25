@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: plataforma
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # O que é o Plum (a plataforma)
@@ -41,19 +41,28 @@ sustenta ticket de projeto. Ver `10-visao-comercial.md`.
 
 ## Como funciona hoje, ponta a ponta
 
-### 1. Onboarding da base (5 etapas)
+### 1. Onboarding da base (4 etapas)
 
-O usuário sobe um arquivo e conecta a planilha correspondente. As etapas:
+O usuário cola o link da própria planilha. **Não há upload** — a planilha é a fonte do cadastro
+desde a primeira tela, e é dela que sai tudo o que as etapas mostram. As etapas:
 
-1. **Upload invisível** — o arquivo é lido no **navegador** (`FileReader`); só **cabeçalho + 5
-   linhas** trafegam, nunca a base inteira.
-2. **Revisão de colunas** — nomes normalizados para `snake_case` sem acento.
-3. **Formatação** — a IA propõe regras de limpeza/tipagem e mostra antes-e-depois nas amostras.
-4. **Semântica** — a IA propõe a definição de negócio de cada coluna; **o humano revisa** (R-06).
-5. **Persistência** — o `schema_metadata` é salvo e a planilha é vinculada.
+0. **Conectar** — cola-se a URL; o Plum extrai `id` e `gid` e lê **só o cabeçalho** (uma
+   requisição, `ranges=['Aba'!1:1]`). Nenhuma célula de dado.
+1. **Revisão de colunas** — nomes normalizados para `snake_case` sem acento. Dois cabeçalhos que
+   normalizam para o mesmo nome **travam o avanço** aqui, em vez de fazer uma coluna sumir calada.
+2. **Formatação** — na entrada desta etapa o Plum lê **20 linhas** da planilha (a única leitura de
+   dado do cadastro). A IA propõe regras de limpeza/tipagem e mostra o **antes-e-depois nas 10
+   primeiras linhas**; **o humano revisa olhando o dado**, não só a explicação (D-048).
+3. **Semântica** — a IA propõe a definição de negócio de cada coluna, reusando aquelas 20 linhas;
+   **o humano revisa** (R-06). O `schema_metadata` é salvo no fim desta etapa.
 
-⚠️ **O pipeline nunca lê a planilha** — só o arquivo. Aba errada, planilha não compartilhada e
-cabeçalho divergente aparecem dias depois, no chat, como erro. Ver `31-incidentes-e-licoes.md` I-08.
+Os seis agentes do cadastro rodam no modelo de raciocínio, não no rápido: o que eles escrevem é
+permanente e o custo é por base, não por pergunta (D-047).
+
+⚠️ **Correção de 2026-08-25:** até o B13 esta seção descrevia **5** etapas, com a primeira lendo um
+**arquivo local** no navegador (`FileReader`, cabeçalho + 5 linhas) e a planilha sendo vinculada só
+no fim. Daí vinha o I-08: aba errada, planilha não compartilhada e cabeçalho divergente só
+apareciam dias depois, no chat. Hoje aparecem na etapa 0, com a pessoa olhando a tela.
 
 ### 2. Pergunta no chat
 

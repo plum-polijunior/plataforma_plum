@@ -1,7 +1,7 @@
 ---
 status: proposta
 camada: implementacao
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # Método — Onboarding de Dados
@@ -81,7 +81,7 @@ precisa cobrir.
 |---|---|---|
 | 1 | **Inventário** — quais planilhas/CSVs existem, quem mantém, com que frequência atualizam | lista de bases candidatas |
 | 2 | **Triagem** — quais entram agora. Comece pela que responde os 3 números da semana | escopo acordado |
-| 3 | **Onboarding pela plataforma** — as 5 etapas, camada 1 do dicionário | `schema_metadata` preenchido |
+| 3 | **Onboarding pela plataforma** — as 4 etapas, camada 1 do dicionário | `schema_metadata` preenchido |
 | 4 | ⚠️ **Verificação real** — ler a planilha de verdade e comparar o cabeçalho com o do arquivo | pega aba errada, base não compartilhada, cabeçalho divergente e coluna sem título **de uma vez** (I-08) |
 | 5 | **Descoberta** — a conversa acima, com quem conhece o negócio | rascunho das camadas 3 e 4 |
 | 6 | **Formalização** — escrever fórmulas, sinais, grão, proibições no formato do dicionário | `dicionario.md`, `regras.md`, `relacoes.md` |

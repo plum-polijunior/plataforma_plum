@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: plataforma
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # Pendências da plataforma
@@ -122,3 +122,5 @@ Registrado para que ninguém "conserte" de novo:
 | Privacidade diferencial contra ataque de diferenciação | 2026-08-08 | **moot** — caiu junto com o k-anonimato |
 | `ai-plum-chat` com cópia antiga de `query_plan.ts` | 2026-08-20 | exceção deliberada da Fase 5b, encerrada pelo deploy da Etapa 0 (D-028). Durou 8 dias |
 | Log estruturado no Supabase | 2026-08-18 | `plum_logs` — era o C1 desta lista |
+| O pipeline de importação não lia a planilha | 2026-08-25 | resolvido pelo B12/B13 **eliminando o arquivo local**, não validando-o contra a planilha (I-08) |
+| Formatação aprovada sem ver o dado | 2026-08-25 | a tabela antes-vs-depois passou a ser renderizada; era documentada e nunca existiu (D-048) |

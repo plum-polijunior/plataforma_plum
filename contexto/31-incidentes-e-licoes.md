@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # Incidentes e lições
@@ -198,9 +198,19 @@ depois, no chat, como erro.
 **Causa raiz:** ⭐ **o pipeline de importação nunca lê a planilha.** As 5 etapas leem o **arquivo**
 no navegador (`FileReader`); o Google Sheets só é lido na primeira pergunta ou no primeiro card.
 
-**Estado:** não corrigido — depende de decisão de produto sobre como aparecer na interface. Um
-passo de verificação no fim do pipeline (uma leitura real, comparando o cabeçalho da aba com o do
-arquivo) pegaria os quatro de uma vez.
+**Estado:** ✅ **corrigido pelo B12/B13, em 2026-08-25** — e não pelo passo de verificação que este
+incidente propunha. A saída foi mais radical: em vez de conferir o arquivo contra a planilha no
+fim, o arquivo **deixou de existir**. A planilha é a fonte desde a etapa 0, então não há mais duas
+versões da verdade para divergirem, e os quatro sintomas aparecem na hora de conectar —
+`cabecalhos_da_planilha` devolve `colisoes` e `colunas_sem_titulo`, e a etapa 1 trava.
+
+⚠️ **A causa raiz acima está preservada de propósito, mas não descreve mais o produto.** "O
+pipeline nunca lê a planilha" foi verdade até o B13 e é falso hoje; ver a linha invertida em
+`03-erros-comuns.md`.
+
+⭐ **A lição que sobrevive** é a que vale para a próxima vez: quando o caminho de escrita e o de
+leitura têm **fontes diferentes**, nenhuma validação no meio fecha a divergência — só unificar a
+fonte fecha. É o mesmo padrão que o `gid` descartado (I-04).
 
 ⭐ **Onde isso resolve sozinho:** a checagem de `requisitos` do catálogo de padrões (ver
 `21-melhorias-do-plum-vendido.md`) força uma leitura real no fim do onboarding — o problema morre

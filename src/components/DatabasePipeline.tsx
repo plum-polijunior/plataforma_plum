@@ -20,6 +20,17 @@ interface FormattingRule {
 
 const REGRA_SEM_FORMATACAO: FormattingRule = { type: "nenhuma", params: {}, explicacao: "" };
 
+/**
+ * Valor de célula como texto, para a tabela antes-vs-depois do passo 2.
+ *
+ * ⚠️ Célula vazia e célula ausente viram o mesmo travessão de propósito: quem
+ * revisa quer saber que ali não há valor, e distinguir `null` de `""` na tela
+ * não muda decisão nenhuma. O que NÃO pode virar travessão é o zero — `0` e
+ * `false` são valores, e um `if (!v)` os apagaria da revisão.
+ */
+const celulaEmTexto = (valor: unknown): string =>
+  valor === null || valor === undefined || valor === "" ? "—" : String(valor);
+
 export default function DatabasePipeline({ organizationId }: DatabasePipelineProps) {
   const { toast } = useToast();
   // 0: Conectar planilha · 1: Colunas · 2: Formatação · 3: Semântica
@@ -43,6 +54,20 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const [colisoes, setColisoes] = useState<Record<string, string[]>>({});
   const [colunasSemTitulo, setColunasSemTitulo] = useState(0);
   const [linhasDaGrade, setLinhasDaGrade] = useState(0);
+
+  // Saída dos agentes 3 / 3.1 (formatação) e 1 / 2 (semântica).
+  //
+  // ⚠️ **Estas cinco linhas foram restauradas em 2026-08-25** — o B13 as apagou
+  // sem apagar nenhum dos 20 usos, e o passo 2 morria com `ReferenceError:
+  // setFormattedDataSamples is not defined` na primeira resposta do Agente 3.
+  // Elas ficavam encostadas no fim do handler do `FileReader`, então sumiram
+  // junto com o upload; agora moram aqui, com os outros estados, onde não têm
+  // como sair de carona na remoção de um handler.
+  const [semanticDefinitions, setSemanticDefinitions] = useState<Record<string, string>>({});
+  const [formattedDataSamples, setFormattedDataSamples] = useState<any[]>([]);
+  const [formattingRules, setFormattingRules] = useState<Record<string, FormattingRule>>({});
+  const [formatQuery, setFormatQuery] = useState("");
+  const [isFormatRefining, setIsFormatRefining] = useState(false);
 
   // Helpers
   // Movido para `@/lib/colunas` em 2026-08-11. Esta normalizacao nao e
@@ -423,6 +448,12 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       const res = await supabase.functions.invoke('ai-agents', {
         body: {
           action: 'column_support',
+          // ⚠️ Só a pergunta, de propósito. O agente é **explicativo**: ele
+          // conta como o Plum lê a planilha e o que a planilha precisa ter, sem
+          // olhar esta base. Cheguei a mandar `colisoes`/`colunasSemTitulo` para
+          // ele diagnosticar a coluna específica, e é errado duas vezes: o passo
+          // 1 já mostra as duas coisas na tela, logo acima desta caixa, e
+          // diagnosticar não é o papel dele.
           prompt: supportQuery
         }
       });
@@ -754,7 +785,10 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
           <div className="space-y-6">
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2"><Code className="h-5 w-5 text-primary" /> Formatação de Dados (Agente 3)</h3>
-              <p className="text-sm text-muted-foreground mt-1">A IA analisou as primeiras 5 linhas da sua planilha e ajustou a formatação para o padrão de banco de dados.</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                A IA leu uma amostra da sua planilha e decidiu como cada coluna deve ser lida.
+                Confira as regras e o resultado nas linhas de exemplo abaixo.
+              </p>
               
               {Object.keys(formattingRules).length > 0 && (
                 <div className="mt-6 space-y-3">
@@ -773,6 +807,64 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                 </div>
               )}
             </div>
+
+            {/*
+              ⭐ A revisão humana do R-06 acontece AQUI, e até 2026-08-25 não
+              acontecia: o Agente 3 devolvia `formattedSamples` desde o primeiro
+              commit, o front guardava em estado e no `sketch`, e **nenhuma versão
+              do componente jamais renderizou** — conferido no histórico inteiro.
+              A tela mostrava só a frase de `explicacao`, então aprovar a
+              formatação era acreditar na descrição que a IA fez do próprio
+              trabalho, sem ver o dado. Regra que estraga a coluna (o caso do
+              `ano` virando 1905, no prompt do Agente 3) passa ilesa por uma
+              frase bem escrita.
+
+              ⚠️ Uma célula mostra DUAS linhas só quando o valor mudou. Repetir
+              antes e depois em toda célula dobra a largura da tabela e esconde a
+              mudança no meio do que ficou igual — o que se procura aqui é
+              justamente a diferença.
+            */}
+            {formattedDataSamples.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-sm mb-3">
+                  Antes e depois, nas {formattedDataSamples.length} primeiras linhas:
+                </h4>
+                <div className="border border-border rounded-xl overflow-auto bg-background max-h-[420px]">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border sticky top-0 z-10">
+                      <tr>
+                        {Object.values(normalizedColumns).map((col, idx) => (
+                          <th key={idx} className="px-4 py-3 font-medium font-mono whitespace-nowrap">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {formattedDataSamples.map((depois, idxLinha) => (
+                        <tr key={idxLinha} className="hover:bg-muted/20 transition-colors align-top">
+                          {Object.values(normalizedColumns).map((col, idxCol) => {
+                            const textoAntes = celulaEmTexto(dataSamples[idxLinha]?.[col]);
+                            const textoDepois = celulaEmTexto(depois?.[col]);
+                            const mudou = textoAntes !== textoDepois;
+                            return (
+                              <td key={idxCol} className="px-4 py-3 whitespace-nowrap">
+                                {mudou ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-xs text-muted-foreground line-through">{textoAntes}</span>
+                                    <span className="font-mono text-primary text-xs font-semibold">{textoDepois}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">{textoDepois}</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3 mt-4">
               <h4 className="text-sm font-semibold flex items-center gap-2">

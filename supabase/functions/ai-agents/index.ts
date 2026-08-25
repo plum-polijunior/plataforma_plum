@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { parseGeminiJson } from '../_shared/gemini_parsing.ts';
+import { MODELOS } from '../_shared/llm_core.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
@@ -18,6 +19,24 @@ const AGENT_LABELS: Record<string, string> = {
   refine_format: 'agent-3.1',
   column_support: 'agent-support',
 };
+
+/**
+ * ⭐ Quantas linhas o Agente 3 devolve TRANSFORMADAS — e por que o número não é
+ * o mesmo da amostra que ele recebe.
+ *
+ * Ele **vê** as 20 linhas de `amostra_do_cadastro` (`TETO_DE_CADASTRO`, em
+ * `query_engine/linhas.py`), porque é vendo variedade que se acerta a regra:
+ * cinco linhas de uma coluna de texto parecem iguais tendo ela 12 valores
+ * distintos ou 12.000. Mas quem revisa é humano, e uma tabela antes-vs-depois
+ * de 20 linhas não se lê — 10 é o que cabe na tela do passo 2.
+ *
+ * ⚠️ **O prompt dizia "5 linhas" cravado enquanto recebia 20**, desde que o B12
+ * subiu a amostra. Ninguém mexeu no texto, e o resultado era o agente devolver 5
+ * de 20 sem nada apontando a contradição. Por isso o número vive aqui, é
+ * interpolado no prompt, e a contagem real da amostra vai junto na mensagem: o
+ * prompt não tem como discordar da realidade sozinho.
+ */
+const LINHAS_NO_ANTES_DEPOIS = 10;
 
 // Enum fechado de `type` de formatação — espelha _FORMATTERS/TYPE_TO_ROLE em
 // query_engine/pandas_executor.py. Mudar um lado sem o outro quebra o
@@ -57,7 +76,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { action, prompt, columns, dataSamples } = await req.json();
+    const { action, prompt, columns, dataSamples, colisoes, colunasSemTitulo, aba } = await req.json();
 
     if (!GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY is not configured');
@@ -91,7 +110,7 @@ serve(async (req: Request) => {
     // AGENTE 3: FORMATAÇÃO DE DADOS
     // =========================================================================
     else if (action === 'format_data') {
-      systemInstruction = `Você é um Engenheiro de Dados Especialista. Sua tarefa é analisar amostras de dados (5 linhas) de uma planilha e formatá-las corretamente para um banco de dados relacional. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas, mantendo a estrutura de objetos originais) e 'formattingRules' (um objeto JSON onde a chave é o nome da coluna e o valor é OUTRO OBJETO com exatamente três campos: 'type', 'params' e 'explicacao'.
+      systemInstruction = `Você é um Engenheiro de Dados Especialista. Sua tarefa é analisar amostras de dados de uma planilha e formatá-las corretamente para um banco de dados relacional. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as PRIMEIRAS ${LINHAS_NO_ANTES_DEPOIS} linhas transformadas, na ordem em que chegaram e mantendo a estrutura de objetos originais — analise TODAS as linhas recebidas para decidir a regra, mas transforme somente essas ${LINHAS_NO_ANTES_DEPOIS}) e 'formattingRules' (um objeto JSON onde a chave é o nome da coluna e o valor é OUTRO OBJETO com exatamente três campos: 'type', 'params' e 'explicacao'.
 
 'type' DEVE ser EXATAMENTE um destes valores, e NUNCA outro: ${FORMATTING_TYPES.join(', ')}.
 - moeda_brl: valor monetário escrito como "R$ 1.234,56".
@@ -109,7 +128,7 @@ serve(async (req: Request) => {
 'explicacao' é uma frase curta em português explicando a regra para um humano revisor — é o único campo que ele vai ler.
 
 Exemplo de valor para uma coluna: {"type": "moeda_brl", "params": {}, "explicacao": "Remove 'R$', separador de milhar e converte vírgula decimal para número."}`;
-      userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nPor favor, formate os dados e retorne o JSON com as amostras e as regras aplicadas.`;
+      userPrompt = `Amostras de dados originais (${Array.isArray(dataSamples) ? dataSamples.length : 0} linhas): ${JSON.stringify(dataSamples)}\nUse TODAS elas para decidir as regras. Retorne 'formattingRules' para todas as colunas e 'formattedSamples' com as primeiras ${LINHAS_NO_ANTES_DEPOIS} linhas transformadas.`;
     }
     // =========================================================================
     // AGENTE 3.1: REFINAMENTO DE FORMATAÇÃO
@@ -119,7 +138,7 @@ Exemplo de valor para uma coluna: {"type": "moeda_brl", "params": {}, "explicaca
 
 'type' DEVE continuar sendo EXATAMENTE um destes valores, e NUNCA outro: ${FORMATTING_TYPES.join(', ')}. Se a alteração pedida não se encaixar em nenhum deles, use 'nenhuma' e explique o motivo em 'explicacao'.
 
-Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras de dados originais (dataSamples). Você DEVE retornar ESTRITAMENTE um JSON com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (o objeto completo, mesmo formato estruturado, com apenas a coluna solicitada modificada).`;
+Em seguida, aplique esse conjunto completo de regras atualizado às amostras de dados originais (dataSamples). Você DEVE retornar ESTRITAMENTE um JSON com duas chaves: 'formattedSamples' (uma array com as PRIMEIRAS ${LINHAS_NO_ANTES_DEPOIS} linhas transformadas, na ordem em que chegaram) e 'formattingRules' (o objeto completo, mesmo formato estruturado, com apenas a coluna solicitada modificada).`;
       // columns = regras de formatação atuais (formattingRules, formato estruturado), prompt = solicitação do usuário
       userPrompt = `Regras de Formatação Atuais (formattingRules): ${JSON.stringify(columns)}\nAmostras de Dados Originais (dataSamples): ${JSON.stringify(dataSamples)}\nSolicitação de Alteração do Usuário: "${prompt}"\nAltere APENAS o que o usuário solicitou nas regras e retorne o JSON com 'formattedSamples' e 'formattingRules'.`;
     }
@@ -127,16 +146,49 @@ Em seguida, aplique esse conjunto completo de regras atualizado às 5 amostras d
     // AGENTE DE SUPORTE (COLUNAS)
     // =========================================================================
     else if (action === 'column_support') {
-      systemInstruction = "Você é um Engenheiro de Dados Especialista. O usuário discordou da formatação anterior e enviou um feedback. Sua tarefa é pegar os dados originais, aplicar as regras de formatação antigas COM AS CORREÇÕES PEDIDAS PELO USUÁRIO. Você deve retornar um JSON ESTRITO com duas chaves: 'formattedSamples' (uma array com as 5 linhas transformadas) e 'formattingRules' (as regras atualizadas por coluna).";
-      // columns = regras antigas, prompt = feedback do usuário
-      userPrompt = `Amostras de dados originais: ${JSON.stringify(dataSamples)}\nRegras Anteriores: ${JSON.stringify(columns)}\nFeedback/Correção do Usuário: "${prompt}"\nPor favor, aplique a nova formatação e retorne o JSON solicitado.`;
+      // ⚠️ **Este agente NÃO tem ação executiva — ele só explica.** Ele não
+      // conserta a planilha, não relê a base, não cria coluna e não decide nada:
+      // devolve texto para uma pessoa ler. O `systemInstruction` daqui era, até
+      // 2026-08-25, cópia literal do Agente 3 ("o usuário discordou da
+      // formatação... retorne 'formattedSamples' e 'formattingRules'"), que é o
+      // papel de outro agente inteiro. Ele também é o único do arquivo fora de
+      // `isJsonResponse`, e é por isso: a resposta cai num parágrafo simples do
+      // passo 1, e JSON ali apareceria cru na tela.
+      systemInstruction = `Você explica, para quem está cadastrando uma base no Plum, como a planilha precisa estar organizada. A pergunta chega da caixa "Faltou alguma coluna?", no passo em que a pessoa vê a lista de colunas que o Plum encontrou.
+
+⭐ O que o Plum faz ao ler uma planilha, e é isto que você explica:
+- Ele lê **uma única aba** — a que o link aponta.
+- Nessa aba, ele lê **somente a primeira linha** para descobrir os nomes das colunas. Nada acima ou fora da primeira linha é cabeçalho: título de relatório, linha em branco, subtítulo ou célula mesclada no topo fazem o Plum tomar aquilo por nome de coluna.
+- Cada coluna precisa de um título **próprio e único** nessa primeira linha. Coluna sem título não pode ser consultada, porque não existe nome pelo qual pedir por ela. Dois títulos que só diferem em acento, espaço ou maiúscula viram o mesmo nome interno e colidem.
+- Os dados vêm **da segunda linha em diante**, uma linha por registro.
+
+Então o formato que o Plum entende é: primeira linha só com os nomes das colunas, um nome por coluna, todos preenchidos e distintos, e os dados começando na linha seguinte.
+
+⚠️ **Você não executa nada.** O Plum apenas lê a planilha, nunca escreve nela, e você não altera, não conserta e não relê base nenhuma. Quem edita a planilha é a pessoa, na conta dela; depois disso ela clica em "Reler" para o Plum ver o cabeçalho novo. Diga isso quando houver algo a arrumar.
+
+Como responder: em português, no máximo 3 frases curtas, em TEXTO CORRIDO. Sem JSON, sem lista, sem tabela, sem título, sem emoji — a resposta é exibida como um parágrafo simples. Explique a regra que responde a dúvida dela e o que fazer na planilha. Você não está vendo a planilha nem a lista de colunas: não afirme que uma coluna específica existe, falta ou colidiu, e não sugira calcular ou derivar valor (isso é assunto do chat, depois que a base estiver pronta).`;
+      userPrompt = `Dúvida de quem está cadastrando a base: "${prompt}"`;
     }
     else {
       throw new Error('Ação inválida.');
     }
 
-    // Chamada para a API do Gemini
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY?.trim()}`;
+    // Chamada para a API do Gemini.
+    //
+    // ⭐ **Os seis agentes do cadastro usam o modelo de raciocínio**, não o
+    // Flash, desde 2026-08-25. O que eles produzem — `type` de formatação e
+    // definição semântica — entra no `schema_metadata`, que é o cérebro do
+    // produto (CLAUDE.md §3): errar aqui não estraga uma resposta, estraga
+    // todas as respostas futuras sobre aquela coluna, e o custo é pago uma vez
+    // por base, não por pergunta. É o inverso do porteiro do chat, que roda
+    // sempre e vive no Flash.
+    //
+    // ⚠️ O ID vem de `MODELOS`, nunca cravado aqui. Antes era o literal
+    // `gemini-3.5-flash` nesta linha, invisível para a tabela que existe para
+    // ser o único lugar de subir versão — e por isso ficou duas versões atrás
+    // sem ninguém notar. Vale o aviso de lá: `-preview` faz parte do ID, e
+    // modelo em preview pode ser aposentado sem aviso.
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODELOS.RACIOCINIO}:generateContent?key=${GEMINI_API_KEY?.trim()}`;
 
     const isJsonResponse = ['predict_semantics', 'refine_semantics', 'format_data', 'refine_format'].includes(action);
 

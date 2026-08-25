@@ -1,7 +1,7 @@
 ---
 status: proposta
 camada: plataforma
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # Visão tecnológica — arquitetura-alvo
@@ -196,9 +196,14 @@ para tudo", que obrigava toda necessidade nova a se disfarçar de agregação.
 não encontrada" é o agente não sabendo o que existe. Deixá-lo **perguntar a forma da base antes de
 perguntar o número** custa quase nada e não expõe dado.
 
-**Por que `amostra` = 5:** é o que o pipeline de importação já trafega (cabeçalho + 5 linhas). 5
-basta para entender **forma**; **variedade** (quantos status existem) é melhor resolvida por
-`vocabulario`, com contagem e sem trafegar linha. (`30-decisoes.md` D-034.)
+**Por que `amostra` = 5:** 5 basta para entender **forma**; **variedade** (quantos status existem)
+é melhor resolvida por `vocabulario`, com contagem e sem trafegar linha. (`30-decisoes.md` D-034.)
+
+⚠️ **Correção de 2026-08-25:** este parágrafo justificava o 5 dizendo "é o que o pipeline de
+importação já trafega (cabeçalho + 5 linhas)". Esse precedente **não existe mais** — o cadastro
+trafega 20 desde o B12. O argumento próprio (forma vs. variedade) sustenta o 5 sozinho, e é só ele
+que vale agora; quem revisar o teto decide entre forma e variedade, não por analogia com o
+cadastro.  Ver D-034 e D-048.
 
 ### 3.2. O laço agêntico precisa de orçamento
 

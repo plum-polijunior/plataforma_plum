@@ -123,7 +123,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `src/pages/Cfgdatabase.tsx` | datasets + matriz de permissões (`?tab=permissoes`) + edição de schema |
 | `src/pages/Auth.tsx` | entrar / primeiro acesso / criar organização. Login pousa em **`/inicio`**, não em `/dashboard` (§7); "Entrar com Email" só **existe** quando e-mail e senha passam na validação local. Desde 2026-08-12, sem painel lateral decorativo — só o formulário, centralizado |
 | `src/pages/Index.tsx` (landing) | rota `/`. Desde 2026-08-12 roda no `:root` claro (sem `.dark`) — ver §7. Seções em `src/components/sections/`; `plum-chat`/`DataPlaygroundSection` ("Simule o Plum") foram removidos, não confundir com `ai-plum-chat` |
-| `src/components/DatabasePipeline.tsx` | pipeline de importação em 5 etapas; rascunhos em `datasets.sketch` |
+| `src/components/DatabasePipeline.tsx` | pipeline de importação em **4** etapas (eram 5 até o B13; não há mais upload de arquivo); a tabela antes-vs-depois do passo 2 nasceu em 2026-08-25 e é a revisão do R-06; rascunhos em `datasets.sketch` |
 | `src/components/ui/` | shadcn — preferir compor a editar |
 | `query_engine/security.py` | 4 barreiras: SigV4 (infra) + HMAC + frescor + RBAC de coluna |
 | `query_engine/sheets.py` | 1 `batchGet` por dataset; teto de linhas checado **antes** do parse; resolve `gid → nome da aba`; **normaliza o cabeçalho** (contraparte de `src/lib/colunas.ts`) |
@@ -307,15 +307,32 @@ executor Python (ver abaixo).
 | `guard` | 0 — Guardião | `PERMITIDO` / `BLOQUEADO`; barra prompt injection e off-topic |
 | `predict_semantics` | 1 | gera definição semântica por coluna a partir de cabeçalho + amostras |
 | `refine_semantics` | 2 | melhora as definições editadas pelo usuário para consumo por LLM |
-| `format_data` | 3 | gera `formattingRules` + `formattedSamples` (antes vs depois) |
+| `format_data` | 3 | gera `formattingRules` + `formattedSamples` (as **10** primeiras linhas transformadas, `LINHAS_NO_ANTES_DEPOIS`) |
 | `refine_format` | 3.1 | altera **apenas** a regra pedida, preserva as outras, re-aplica às amostras |
-| `column_support` | suporte | tira-dúvidas sobre colunas durante o upload |
+| `column_support` | suporte | ⭐ **explicativo, sem ação executiva.** O box "Faltou alguma coluna?" do passo 1: explica que o Plum lê **uma aba** e **só a primeira linha** como cabeçalho, e o formato que a planilha precisa ter. Recebe **só a pergunta** — não vê a base, não diagnostica coluna específica (o passo 1 já mostra colisões e colunas sem título na tela). Resposta em **texto corrido**: é o único agente fora de `isJsonResponse`, porque ela cai num parágrafo simples. ⚠️ Até 2026-08-25 o prompt era **cópia do Agente 3** ("o usuário discordou da formatação... retorne `formattedSamples`") |
 
-**Pipeline de 5 etapas:** (1) upload invisível — o arquivo é lido no navegador via
-`FileReader`; só **cabeçalho + 5 linhas** trafegam, nunca a base inteira. (2) revisão de
-colunas, normalização para `snake_case`. (3) formatação (agentes 3 / 3.1). (4) semântica
-(agentes 1 / 2). (5) persistência do `schema_metadata` + vínculo do Google Sheet.
-Rascunhos intermediários vivem em `datasets.sketch` e viram `NULL` na finalização.
+⚠️ **Todos os seis rodam no `MODELOS.RACIOCINIO`** (`gemini-3.1-pro-preview`) desde
+2026-08-25, não no Flash — o que eles escrevem entra no `schema_metadata` e vale para toda
+pergunta futura sobre a base, e o custo é por base, não por pergunta. O ID vem da tabela de
+`_shared/llm_core.ts`; antes era o literal `gemini-3.5-flash` cravado na URL, invisível para
+ela, e por isso ficou duas versões atrás.
+
+**Pipeline de 4 etapas** (⚠️ eram 5, e o upload sumiu no B13 — não há mais `FileReader`,
+`<input type="file">` nem parser de planilha no front): (0) **conectar** — cola-se a URL, e a
+Edge Function lê **só o cabeçalho** (`cabecalhos_da_planilha` → `sheets.get_meta`, `ranges=
+['Aba'!1:1]`); (1) revisão de colunas, normalização para `snake_case`, com as colisões
+barrando o avanço; (2) formatação (agentes 3 / 3.1), e é na entrada dela que as **20 linhas**
+de `amostra_do_cadastro` são lidas — a única leitura de dado do cadastro; (3) semântica
+(agentes 1 / 2), reusando aquelas mesmas 20 linhas. A persistência do `schema_metadata`
+acontece no fim de (3), não numa etapa própria. Rascunhos intermediários vivem em
+`datasets.sketch` e viram `NULL` na finalização.
+
+⭐ **A tabela antes-vs-depois do passo 2 passou a existir em 2026-08-25.** Esta seção dizia
+"(antes vs depois)" desde sempre, mas nenhuma versão do `DatabasePipeline.tsx` jamais
+renderizou `formattedDataSamples` — conferido em todo o histórico, do `3219def` em diante. O
+estado era escrito e salvo no `sketch` sem consumidor, e aprovar a formatação era acreditar na
+frase que a IA escreveu sobre o próprio trabalho. Hoje a tabela mostra as 10 linhas, com o
+valor antigo riscado **só nas células que mudaram**.
 
 ### `ai-plum-chat` — chat conversacional (`PlumChat.tsx`)
 
@@ -653,14 +670,13 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   deixa um dos dois vermelho. Diferente do Query Plan, divergência aqui **não vira bypass**:
   vira "coluna não encontrada", porque o RBAC já foi aplicado antes, sobre os nomes
   normalizados. Ao mexer em qualquer passo, mexa nos dois lugares e nas duas tabelas.
-- **O pipeline de importação nunca lê a planilha.** As 5 etapas leem o **arquivo** no navegador
-  (`FileReader`) e é de lá que saem cabeçalho e amostras; o Google Sheets só é lido depois, na
-  primeira pergunta ou no primeiro card. Consequência medida em 2026-08-10/11: aba errada,
-  planilha não compartilhada com a service account, cabeçalho divergente e coluna sem título
-  **não aparecem na hora de conectar** — aparecem dias depois, no chat, como erro. Um passo de
-  verificação no fim do pipeline (uma leitura real, comparando o cabeçalho da aba com o do
-  arquivo) pegaria os quatro de uma vez, com a pessoa olhando a tela. Não implementado:
-  depende de decisão de produto sobre como aparecer na interface.
+- ~~**O pipeline de importação nunca lê a planilha.**~~ — **RESOLVIDO pelo B12/B13**, e este
+  item ficou descrevendo o mundo anterior. Não há mais arquivo no navegador: a planilha é a
+  fonte desde o passo 0, e os quatro sintomas que o item previa (aba errada, planilha não
+  compartilhada, cabeçalho divergente, coluna sem título) aparecem agora **na hora de
+  conectar**, com a pessoa olhando a tela — é o que `cabecalhos_da_planilha` devolve em
+  `colisoes` e `colunas_sem_titulo`, e o que faz o passo 1 travar em vez de deixar a base
+  nascer com uma coluna a menos.
 - **O caminho de escrita descartava informação que o de leitura precisava** — duas vezes, pelo
   mesmo padrão. O `gid` da aba era jogado fora por `extrairSheetId` (corrigido em 2026-08-11,
   PR #6), e o mapa `cabeçalho original → nome normalizado` é jogado fora na finalização, porque

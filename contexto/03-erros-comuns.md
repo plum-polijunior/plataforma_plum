@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-18
+atualizado_em: 2026-08-25
 ---
 
 # Erros comuns — o que se acredita e é falso
@@ -38,7 +38,9 @@ atualizado_em: 2026-08-18
 | `google_sheet_tab` (o nome da aba) manda | O **`gid`** manda; o nome é fallback só quando o `gid` é nulo | `30-decisoes.md` D-016 |
 | `gid = 0` significa "sem aba definida" | `0` é a **primeira aba**, valor legítimo. `if (!gid)` quebra toda planilha | `31-incidentes-e-licoes.md` I-04 |
 | Joins entre planilhas são suportados | **Bloqueados** (R-11). O remake propõe cruzar **depois** da agregação, sem join | `30-decisoes.md` D-035 |
-| O pipeline de importação lê a planilha | **Não lê.** Lê o *arquivo* no navegador. O Sheets só é lido na primeira pergunta | `31-incidentes-e-licoes.md` I-08 |
+| O cadastro começa com um upload de arquivo | **Não existe upload** desde o B13. Cola-se o link, e a planilha é a fonte desde a etapa 0 — não há `FileReader` no front | `01-o-que-e-o-plum.md` |
+| O pipeline de importação não lê a planilha | **Lê, e desde a primeira tela** — cabeçalho na etapa 0, 20 linhas na etapa 2. Era verdade até o B13, e o I-08 nasceu disso | `31-incidentes-e-licoes.md` I-08 |
+| A tabela antes-vs-depois da formatação sempre existiu | Foi **documentada** desde sempre e **renderizada só em 2026-08-25**. Até então a revisão era só a frase da IA | `30-decisoes.md` D-048 |
 
 ## Sobre o executor
 

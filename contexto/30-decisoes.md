@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-18
+atualizado_em: 2026-08-25
 ---
 
 # Decisões
@@ -319,6 +319,12 @@ numa base e falha na outra.
 ### D-034 · 2026-08-14 · `amostra` = 5 linhas
 **Decisão:** o teto da amostra acompanha o que o pipeline de importação já trafega (cabeçalho + 5
 linhas).
+⚠️ **Correção de 2026-08-25: a premissa deixou de ser verdadeira.** O pipeline não trafega 5
+linhas — trafega **20** desde o B12 (`TETO_DE_CADASTRO`), e nunca leu arquivo local desde o B13. O
+"precedente" que esta decisão invoca era o de um cadastro que não existe mais. A **conclusão**
+continua defensável pelo argumento próprio dela (5 basta para forma; variedade é do `vocabulario`),
+e por isso o teto do chat segue 5 — mas quem quiser revisá-la não deve mais usar o cadastro como
+justificativa, e sim escolher entre forma e variedade de novo. Ver D-048.
 **Por quê:** 5 basta para entender **forma**. Para entender **variedade** (quantos status existem)
 o `vocabulario` resolve melhor, com contagem e sem trafegar linha.
 **Rejeitado:** os 20 propostos inicialmente — não havia razão para exceder o precedente.
@@ -456,4 +462,54 @@ maior que o remake, e que jogaria fora a customização já entregue.
 remake **perde o sinal de qualidade** que viria do uso (`presuncao_corrigida`, taxa de `inviavel`).
 O conjunto de 25–30 perguntas de avaliação deixa de ser insumo e vira o **único critério de parada**.
 Ver `zz_remake_implementation/PLANO-implementacao-remake_V3.md` §0-ter.
+**Status:** vigente.
+
+### D-047 · 2026-08-25 · Os seis agentes do cadastro vão para o modelo de raciocínio
+**Decisão:** `ai-agents` (agentes 0, 1, 2, 3, 3.1 e suporte) passa a chamar
+`MODELOS.RACIOCINIO` — hoje `gemini-3.1-pro-preview` — em vez do `gemini-3.5-flash` que estava
+cravado na URL. O ID vem da tabela de `supabase/functions/_shared/llm_core.ts`, que o `ai-agents`
+passa a importar.
+**Por quê:** dois motivos que se somam. **(a) O que esses agentes escrevem é permanente.** O
+`type` de formatação e a definição semântica entram no `schema_metadata`, que é o cérebro do
+produto: errar ali não estraga uma resposta, estraga toda resposta futura sobre aquela coluna —
+e o erro é silencioso, porque a base fica plausível. É o oposto do porteiro do chat, onde um erro
+aparece na hora e a próxima pergunta corrige. **(b) O custo é por base, não por pergunta.** Um
+cadastro roda seis chamadas uma vez na vida daquela planilha; o chat roda três por pergunta,
+para sempre. Pagar caro onde o volume é O(1) e barato onde é O(n) é a alocação certa.
+**Rejeitado:** (a) **manter o Flash** — era o *status quo* por inércia, não por escolha: o literal
+estava cravado na URL, fora da tabela que existe justamente para ser o único lugar de subir
+versão, e por isso ficou duas versões atrás (`3.5` quando o Flash da tabela já era `3.7`) sem
+ninguém notar; (b) **ler o modelo de um secret**, para trocar sem republicar — recusado pelo
+mesmo raciocínio já escrito em `llm_core.ts`: um erro de digitação derruba todo o cadastro,
+nenhum teste alcança o valor, e o que roda deixa de estar no repositório (a lição do I-03).
+⚠️ **Herda o risco do preview.** `-preview` faz parte do ID, e modelo em preview pode ser
+aposentado sem aviso — agora com o cadastro no mesmo barco que o planejador do remake. O sintoma
+seria 400 em toda geração de dicionário.
+**Status:** vigente.
+
+### D-048 · 2026-08-25 · ⭐ A revisão da formatação mostra o dado, não a frase
+**Decisão:** o Agente 3 **vê** as 20 linhas da amostra e **transforma as 10 primeiras**
+(`LINHAS_NO_ANTES_DEPOIS`, em `ai-agents/index.ts`), e o passo 2 do cadastro passa a **renderizar**
+essa tabela antes-vs-depois — com o valor antigo riscado só nas células que mudaram.
+**Por quê:** a etapa existia sem cumprir o R-06. O `formattedSamples` era produzido desde o
+primeiro commit e guardado em estado e no `sketch`, mas **nenhuma versão do
+`DatabasePipeline.tsx` jamais o renderizou** (conferido de `3219def` em diante). A tela mostrava
+só a frase de `explicacao` — de modo que aprovar a formatação era acreditar na descrição que a IA
+fez do próprio trabalho. Uma regra que estraga a coluna passa ilesa por uma frase bem escrita: o
+caso do `type: ano` é literal, `numero_inteiro` faz a data completa virar vazio e o registro sai
+das contagens, e nada disso aparece numa frase que diz "converte para número inteiro".
+**Por que 10, e por que ver ≠ transformar:** são duas necessidades diferentes na mesma chamada.
+Decidir a regra pede **variedade** — cinco linhas de uma coluna de texto parecem iguais tendo ela
+12 valores distintos ou 12.000 — e é o que as 20 linhas do B12 dão. Revisar pede **legibilidade**,
+e uma tabela de 20 linhas × N colunas não se lê. Separar os dois números no prompt custa uma
+frase e resolve os dois.
+**Rejeitado:** (a) **transformar as 20** — dobra a saída do agente e a altura da tabela para
+ganhar zero na revisão; (b) **manter 5** — era o número que o prompt pedia *cravado* enquanto
+recebia 20, desde que o B12 subiu a amostra e ninguém mexeu no texto; (c) **tirar
+`formattedSamples` do contrato**, que era a saída mais barata e a mais tentadora, já que o campo
+não tinha consumidor — recusada porque deixaria a revisão humana sendo só a frase, que é o
+problema, não a solução.
+⚠️ **O número mora numa constante e é interpolado no prompt, e a contagem real da amostra vai
+junto na mensagem.** Foi exatamente a divergência entre um literal no prompt e a realidade que
+produziu o item (b): prompt não tem como discordar da realidade sozinho.
 **Status:** vigente.

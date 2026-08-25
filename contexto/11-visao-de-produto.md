@@ -1,7 +1,7 @@
 ---
 status: proposta
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # Visão de produto
@@ -153,7 +153,7 @@ discordar — não recusa.
 
 ## Jornada do usuário
 
-**Novo cliente (plataforma):** cria organização → conecta a base pelas 5 etapas → pergunta no chat →
+**Novo cliente (plataforma):** cria organização → conecta a base pelas 4 etapas → pergunta no chat →
 salva um card → recebe convite para o onboarding pago quando a base mostrar limites.
 
 **Cliente implementado:** dicionário de 4 camadas preenchido no onboarding → chat responde

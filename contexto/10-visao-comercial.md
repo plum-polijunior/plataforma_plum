@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: negocio
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-25
 ---
 
 # Visão comercial
@@ -132,8 +132,13 @@ A tese *"a IA não lê seus dados"* é **fraca**, e o motivo é desconfortável 
 **o Google/a Anthropic são mais confiáveis, aos olhos do cliente, que a nossa equipe.** A equipe
 ler os dados gera incômodo; o Google ler gera indiferença.
 
-Além disso ela nunca foi 100% verdadeira: o onboarding já envia cabeçalho + 5 linhas para o LLM
+Além disso ela nunca foi 100% verdadeira: o onboarding já envia linha de dado para o LLM
 (`contexto/20-pendencias.md` D7 registra isso como violação da premissa P1.1).
+
+⚠️ **Correção de 2026-08-25 — e ela piora, não melhora, do lado comercial.** Este parágrafo dizia
+"cabeçalho + 5 linhas". São **20** desde o B12, e todas as 20 passam pelos agentes de formatação e
+de semântica. Não muda a conclusão (a tese fraca continua fraca, e a frase honesta abaixo continua
+sendo a certa), mas quem for citar o número numa conversa de venda tem de citar 20.
 
 **A frase honesta, e a que deve ser usada:**
 
