@@ -58,16 +58,31 @@ import {
   TETO_DE_LINHAS_BRUTAS,
 } from "../_shared/orcamento.ts";
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
-import { colunasComVocabularioUtil } from "../_shared/reconhecimento.ts";
+// ⭐ O A2 saiu do caminho no B15: quem diz o que a base significa agora é o
+// dicionário escrito no cadastro. `reconhecimento.ts` e `adhoc/reconhecedor.ts`
+// ficam no repositório, desligados — voltam na Etapa 3, quando escolher entre
+// PLANILHAS for problema de verdade (§A3 do plano da Etapa 2, D-005).
+import {
+  colunasComVocabulario,
+  lerDicionario,
+  normalizarDicionario,
+} from "../_shared/dicionario.ts";
+// ⭐ A mesma regra determinística que o `ai-agents` usa para sugerir
+// `vocabulario_util` ao Agente 1. Divergir faria o dicionário afirmar que uma
+// coluna tem vocabulário útil sem que ninguém tivesse visto os valores dela.
+import { colunasComVocabularioDoPerfil } from "../_shared/perfil.ts";
 import {
   aplicarLiterais,
   type Pedido,
   type Presuncao,
 } from "../_shared/pedidos.ts";
 import { resolverEntidade, type ValorDoVocabulario } from "../_shared/entidade.ts";
-import { lerVocabulario, planoDeVocabulario } from "../_shared/vocabulario.ts";
+import {
+  lerVocabulario,
+  planoDeVocabulario,
+  TETO_DE_VOCABULARIO,
+} from "../_shared/vocabulario.ts";
 import { passarPeloPorteiro } from "./adhoc/porteiro.ts";
-import { reconhecer } from "./adhoc/reconhecedor.ts";
 import { planejar } from "./adhoc/planejador.ts";
 import { interpretar, type ResultadoDePedido } from "./adhoc/interprete.ts";
 
@@ -97,6 +112,32 @@ interface ExecutorResult {
   row_count?: number;
   suppressed_groups?: number;
   error?: string;
+}
+
+/**
+ * O corpo que o Lambda devolve — sempre `results`, um item por `plans`.
+ *
+ * ⚠️ **`results` existe mesmo em falha**, e cada item tem o seu próprio
+ * `status`: o executor devolve card ruim com HTTP 200, porque "um card ruim não
+ * pode derrubar o dashboard inteiro" (`main.py`). Quem lê daqui confere o
+ * `status` de cada item, nunca só o HTTP — foi a confusão do B06.
+ *
+ * Era `Record<string, unknown>`, o que fazia `corpo.results[0]` não compilar.
+ * Ninguém viu porque nada typechecava esta pasta.
+ */
+/**
+ * O client do Supabase criado com o JWT do usuário.
+ *
+ * ⚠️ `ReturnType<typeof createClient>` sem argumento de tipo resolve para
+ * `SupabaseClient<unknown, never, …>`, que **não aceita** o client real
+ * (`<any, "public", any>`). Eram dois dos erros que apareceram no primeiro
+ * `deno check` desta pasta: a anotação existia e descrevia outro tipo.
+ */
+type ClienteSupabase = ReturnType<typeof createClient<any>>;
+
+interface RespostaDoExecutor {
+  results?: Record<string, unknown>[];
+  [chave: string]: unknown;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -353,7 +394,7 @@ async function handleExecutePlan(
       return json({ results: corpo.results ?? [], negados });
     }
 
-    const resultado: ExecutorResult = (corpo.results ?? [])[0] ?? {
+    const resultado: ExecutorResult = (corpo.results ?? [])[0] as unknown as ExecutorResult ?? {
       status: "error",
       error: "Executor não devolveu resultado.", // acentuada em 2026-08-11 (chega à bolha)
     };
@@ -387,7 +428,7 @@ async function exigirAdminDaBase(
 ): Promise<
   | { erro: Response }
   | {
-    supabase: ReturnType<typeof createClient>;
+    supabase: ClienteSupabase;
     roleId: string;
     dataset: {
       id: string;
@@ -395,6 +436,8 @@ async function exigirAdminDaBase(
       google_sheet_id: string | null;
       google_sheet_tab: string | null;
       google_sheet_gid: number | null;
+      /** `jsonb` — o rascunho do cadastro. `unknown` é o tipo honesto dele. */
+      sketch: unknown;
     };
   }
 > {
@@ -438,7 +481,9 @@ async function exigirAdminDaBase(
   // ⭐ O `.eq("organization_id", ...)` é o item 4.
   const { data: dataset } = await supabase
     .from("datasets")
-    .select("id, status, google_sheet_id, google_sheet_tab, google_sheet_gid")
+    // ⭐ `sketch` entra no B14: é de lá que o `perfil_do_cadastro` lê as regras
+    // de formatação decididas na etapa 3, sem ter de aceitá-las do cliente.
+    .select("id, status, google_sheet_id, google_sheet_tab, google_sheet_gid, sketch")
     .eq("id", datasetId)
     .eq("organization_id", profile.organization_id)
     .maybeSingle();
@@ -450,6 +495,165 @@ async function exigirAdminDaBase(
 
   return { supabase, roleId: String(profile.role_id), dataset };
 }
+
+/**
+ * `perfil_do_cadastro` — o perfil da base e o vocabulário, para a etapa 4 (B14).
+ *
+ * ⭐ **É o que torna o Agente 1 melhor que o A2 que ele substitui.** O A2 tinha
+ * só o `metadados`; a etapa 4 tem `metadados` **mais** 20 linhas **mais** o
+ * vocabulário das colunas de texto — e, diferente do A2, o que ela produz passa
+ * por uma pessoa antes de virar dicionário.
+ *
+ * ⚠️ **Nenhum dos dois pedidos daqui gasta orçamento de linha bruta**, e é
+ * deliberado: `metadados` devolve contagem (nunca linha) e `vocabulario` devolve
+ * valores distintos com contagem, os dois já com teto próprio no executor. O
+ * débito do B10 vive no `handleAdHocExecutar`, no caminho da PERGUNTA. Cadastrar
+ * a própria base não consome a cota de perguntar sobre ela — deixado explícito
+ * aqui para ninguém "consertar".
+ *
+ * ⚠️ **Falha parcial é resposta, não erro.** Perfil e vocabulário são evidência
+ * *a mais* para o modelo; se o executor recusar um deles, a etapa 4 segue com
+ * menos e o prompt diz que está com menos (`entradaDaSemantica`). Derrubar o
+ * cadastro porque o vocabulário de uma coluna não veio seria trocar um
+ * dicionário um pouco pior por nenhum dicionário.
+ */
+async function handlePerfilDoCadastro(
+  req: Request,
+  datasetId: unknown,
+): Promise<Response> {
+  const acesso = await exigirAdminDaBase(req, datasetId);
+  if ("erro" in acesso) return acesso.erro;
+  const { supabase, roleId, dataset } = acesso;
+
+  // Mesma trava do `amostra_do_cadastro`: só durante o cadastro. Base `active`
+  // já tem dicionário, e reperfilar é assunto da Etapa 5.
+  if (dataset.status !== "processing") {
+    return json({ error: "O perfil do cadastro e so durante o cadastro." }, 409);
+  }
+
+  const { data: perm } = await supabase
+    .from("role_permissions")
+    .select("allowed_columns")
+    .eq("role_id", roleId)
+    .eq("dataset_id", dataset.id)
+    .maybeSingle();
+
+  const colunas: string[] = ((perm?.allowed_columns ?? []) as string[]).filter(Boolean);
+  if (!colunas.length) {
+    return json({ error: "Esta base ainda nao teve as colunas liberadas." }, 409);
+  }
+
+  // ⭐ **As regras da etapa 3, lidas do `sketch`** — não recebidas do cliente.
+  //
+  // É o que dá sentido à ordem 3 → 4: o `papel` que o perfil devolve sai do
+  // `column_roles`, que vem da `formatting_rule`. Perfilar uma coluna de moeda
+  // como texto faria `min`/`max` sumirem dela (o `metadados` os recusa em
+  // texto), e o Agente 1 perderia justamente a evidência de que ela é medida.
+  //
+  // O front já grava `sketch.formattingRules` no fim da etapa 3, então o dado
+  // está no banco quando esta ação roda. Ler daqui em vez de aceitar do corpo
+  // não é sobre autorização — regra de formatação não autoriza nada — é sobre
+  // não ter duas versões da mesma decisão em trânsito.
+  const sketch = (dataset.sketch ?? null) as { formattingRules?: unknown } | null;
+  const regrasDoSketch = (sketch?.formattingRules ?? {}) as Record<
+    string,
+    { type?: string; params?: Record<string, unknown> }
+  >;
+  const formatting_rules: Record<string, { type: string; params: Record<string, unknown> }> = {};
+  for (const col of colunas) {
+    const r = regrasDoSketch[col];
+    formatting_rules[col] = { type: r?.type ?? "nenhuma", params: r?.params ?? {} };
+  }
+
+  const base = {
+    sheet_id: dataset.google_sheet_id,
+    tab: dataset.google_sheet_tab ?? "Sheet1",
+    tab_gid: dataset.google_sheet_gid ?? null,
+    allowed_columns: colunas,
+    formatting_rules,
+    // ⚠️ Este `caminho` é o do PAYLOAD DO EXECUTOR, não o do `plum_logs`. Ele
+    // liga o teto de cardinalidade do B02 (`aplicar_regras_adhoc` no
+    // `main.py`); "legado" deixaria o teto em modo observação, e o vocabulário
+    // de uma coluna com 5.000 valores voltaria inteiro. É trava, não rótulo.
+    caminho: "ad_hoc",
+    issued_at: Math.floor(Date.now() / 1000),
+  };
+
+  // ── 1 · O perfil (`metadados` do B03) ────────────────────────────────────
+  let perfil: Record<string, unknown> | null = null;
+  try {
+    const corpo = await postarNoExecutor({
+      ...base,
+      plans: [{
+        card_id: "cadastro",
+        plan: {},
+        resolved_columns: colunas,
+        tipo: "metadados",
+      }],
+    });
+    const r = ((corpo.results ?? []) as Record<string, unknown>[])[0];
+    // ⚠️ Conferir o STATUS do card, não só a ausência de exceção: o executor
+    // devolve falha por card com HTTP 200. Foi assim que um objeto de erro
+    // chegou ao A2 como se fosse a descrição da base, em 2026-08-20.
+    if (r?.status === "ok") perfil = r;
+    else console.error("[perfil-cadastro] metadados nao veio:", JSON.stringify(r));
+  } catch (err) {
+    console.error("[perfil-cadastro] executor indisponivel no metadados:", err);
+  }
+
+  // ── 2 · O vocabulário das candidatas ─────────────────────────────────────
+  // ⭐ Quem escolhe as colunas é o PERFIL, não um LLM: texto, dentro do teto de
+  // cardinalidade.
+  //
+  // ⚠️ **`vocabulario_exposto` NÃO é consultado aqui, de propósito.** A trava 2
+  // existe para o CHAT não listar valor de texto de uma base que ninguém
+  // liberou. No cadastro ela não protege nada: a etapa 3 já mostrou 20 linhas
+  // cruas de todas as colunas na tela da mesma pessoa, que é uma porta maior
+  // que a lista de distintos de uma coluna com no máximo 200 deles. Mesma
+  // justificativa do `TETO_DE_CADASTRO` (§B8): é o dono da base registrando a
+  // própria planilha, com todas as colunas concedidas. As travas 1
+  // (`allowed_columns`) e 3 (teto de cardinalidade) continuam valendo.
+  const vocabularios: Record<string, ValorDoVocabulario[]> = {};
+  const candidatas = colunasComVocabularioDoPerfil(perfil, colunas);
+
+  if (candidatas.length) {
+    try {
+      const corpo = await postarNoExecutor({
+        ...base,
+        plans: candidatas.slice(0, TETO_DE_VOCABULARIOS).map((col) => ({
+          card_id: col,
+          plan: planoDeVocabulario(col),
+          resolved_columns: [col],
+          tipo: "vocabulario",
+        })),
+      });
+      for (const res of (corpo.results ?? []) as Record<string, unknown>[]) {
+        // Coluna recusada pelo teto sai em silêncio: acima de 200 distintos ela
+        // é identificador, e a sugestão determinística já a marcou como tal.
+        if (res.status !== "ok") continue;
+        vocabularios[String(res.card_id)] = lerVocabulario(String(res.card_id), res.rows);
+      }
+    } catch (err) {
+      console.error("[perfil-cadastro] executor indisponivel no vocabulario:", err);
+    }
+  }
+
+  return json({ status: "ok", perfil, vocabularios });
+}
+
+/**
+ * Quantas colunas ganham vocabulário no cadastro.
+ *
+ * ⭐ Mais que as 4 do chat, e por um motivo: o chat pede vocabulário **por
+ * pergunta**, para resolver a entidade daquela pergunta; o cadastro pede **uma
+ * vez na vida da base**, e o que ele escreve vale para todas as perguntas
+ * futuras. Um teto apertado aqui economiza uma chamada e deixa colunas sem
+ * `vocabulario_util` conferido para sempre.
+ *
+ * ⚠️ Não é ilimitado porque um `batchGet` por coluna estouraria o limite de
+ * 60 req/min da API do Google numa base larga.
+ */
+const TETO_DE_VOCABULARIOS = 12;
 
 /**
  * `amostra_do_cadastro` — até 20 linhas, e só enquanto a base está sendo criada.
@@ -489,7 +693,7 @@ async function handleAmostraDoCadastro(
     .eq("dataset_id", dataset.id)
     .maybeSingle();
 
-  const colunas: string[] = (perm?.allowed_columns ?? []).filter(Boolean);
+  const colunas: string[] = ((perm?.allowed_columns ?? []) as string[]).filter(Boolean);
   if (!colunas.length) {
     // Falha fechada: sem concessão não há amostra. O passo 1 do cadastro é quem
     // concede — se chegou aqui sem ela, algo pulou o passo.
@@ -605,15 +809,18 @@ async function handleCabecalhos(req: Request, datasetId: unknown): Promise<Respo
  * ⚠️ Lança em vez de devolver erro. Quem chama sabe o que dizer ao usuário —
  * o chat degrada para uma frase, o cadastro precisa nomear a planilha.
  */
-async function postarNoExecutor(payload: unknown): Promise<Record<string, unknown>> {
+async function postarNoExecutor(payload: unknown): Promise<RespostaDoExecutor> {
   const raw = JSON.stringify(payload);
-  const assinatura = await signPayload(raw, EXECUTOR_HMAC_SECRET);
+  const assinatura = await signPayload(raw, EXECUTOR_HMAC_SECRET!);
 
   // SigV4 fecha o endpoint na infraestrutura (Function URL em AWS_IAM); o HMAC
   // acima usa outro segredo. Vazar um dos dois não basta para forjar payload.
   const aws = new AwsClient({
-    accessKeyId: AWS_ACCESS_KEY_ID,
-    secretAccessKey: AWS_SECRET_ACCESS_KEY,
+    // ⚠️ `!` porque o `Deno.env.get` devolve `string | undefined` e a ausência
+    // já é tratada: sem credencial a chamada falha no SigV4, com erro do
+    // provedor. Fingir um default aqui esconderia secret faltando.
+    accessKeyId: AWS_ACCESS_KEY_ID!,
+    secretAccessKey: AWS_SECRET_ACCESS_KEY!,
     region: AWS_REGION,
     service: "lambda",
   });
@@ -917,21 +1124,34 @@ PORTUGUÊS CORRETO:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ad_hoc_reconhecer — A1 → metadados → A2 → vocabulário.
+// ad_hoc_reconhecer — A1 → dicionário → vocabulário. **Um LLM só, desde o B15.**
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * ⭐ **Este é o primeiro consumidor da chave `remake_habilitado`** — a coluna
- * criada na Etapa 0 e deliberadamente deixada sem leitor, porque não havia o que
- * gatear. Agora há.
+ * ⭐ **O A2 saiu daqui no B15, e o `metadados` saiu com ele.**
  *
- * ⚠️ **O bloco NÃO responde perguntas ainda.** Ele vai até o reconhecimento e
- * para: quem transforma reconhecimento em pedidos é o A3, que nasce no B07. Por
- * isso o front chama isto em **modo sombra** — roda ao lado do caminho legado,
- * alimenta o log, e a resposta continua vindo de onde sempre veio.
+ * Era `A1 → metadados → A2 → vocabulário`: uma ida ao Lambda para descrever a
+ * base e uma chamada de LLM para interpretar a descrição, em toda pergunta de
+ * base fria. Agora é `A1 → ler o dicionário → vocabulário` — a descrição já
+ * existe, escrita no cadastro e **conferida por uma pessoa**, e ler o
+ * `schema_metadata` é uma query.
  *
- * É o mesmo formato do modo observação do B02, e pela mesma razão: sem ele, A1 e
- * A2 ficariam mais duas semanas sem nenhum sinal de realidade.
+ * O turno encurtou de `porteiro → metadados → A2 → vocabulário → A3 → executor
+ * → A4` para `porteiro → vocabulário → A3 → executor → A4`.
+ *
+ * ⚠️ **`etapa: "reconhecedor"` não aparece mais nos turnos `ad_hoc`.** Ela fica
+ * no tipo e no CHECK porque o `plum_logs` tem linhas históricas com ela — e a
+ * taxa de `cache_hit_a2` congela onde estava, porque não há mais A2 para
+ * cachear. O `MANUAL.md` do B07 lista a sequência antiga; foi corrigido junto.
+ *
+ * ⚠️ **Um sinal se perde, e não é em silêncio (§B5).** O `metadados` era quem
+ * devolvia `existe: false` para coluna que desapareceu da planilha. Agora isso
+ * vira `MissingColumnError` do executor, que é **erro visível** na resposta — e
+ * o dicionário passa a ser um retrato do dia do cadastro. Reperfilar é Etapa 5.
+ *
+ * ⚠️ A defasagem do `vocabulario_util` já está coberta: se a coluna passou de
+ * 200 distintos depois do cadastro, o executor recusa o vocabulário e o A3
+ * planeja sem ele — degradado, não errado.
  */
 async function handleAdHocReconhecer(
   req: Request,
@@ -992,125 +1212,37 @@ async function handleAdHocReconhecer(
     return json({ habilitado: true, status: "bloqueado", mensagem: porteiro.mensagem });
   }
 
-  // ── metadados (B03) ──────────────────────────────────────────────────────
-  const t1 = Date.now();
-  const resposta = await handleExecutePlan(req, datasetId, {}, {
-    tipo: "metadados",
-    caminho: "ad_hoc",
-  });
-  const corpo = await resposta.json().catch(() => null);
-  const descricao = (corpo as { result?: Record<string, unknown> } | null)?.result;
-
-  // ⚠️⚠️ **Conferir o STATUS DO CARD, não só o HTTP.** O executor devolve falha
-  // por card com HTTP **200** — é o desenho dele (`main.py`: "um card ruim não
-  // pode derrubar o dashboard inteiro"), e o `handleExecutePlan` repassa isso
-  // como `{ result: { status: "error", error: … } }`, também 200.
-  //
-  // ⭐ Em 2026-08-20 este trecho conferia só `resposta.ok`, e o objeto de erro
-  // chegou ao A2 como se fosse a descrição da base. Ele relatou fielmente o que
-  // leu — "a leitura falhou, renomeie uma coluna" — e o resultado parecia
-  // opinião do modelo sobre a planilha quando era mensagem do `sheets.py`.
-  // Erro de infraestrutura vestido de julgamento de agente é o tipo de coisa
-  // que faz alguém ajustar o prompt errado por uma semana.
-  const colunas = (descricao?.colunas ?? null) as Record<string, unknown> | null;
-  const descricaoValida =
-    resposta.ok &&
-    descricao?.status === "ok" &&
-    colunas !== null &&
-    Object.keys(colunas).length > 0;
-
-  // ⚠️ Um código por CAUSA, não um código para "deu ruim". A primeira coisa que
-  // alguém faz ao investigar é `group by codigo_erro`; com um código só, isso
-  // não separa "o executor recusou" de "veio ok e vazio", e a diferença entre
-  // as duas é a diferença entre mexer na planilha e mexer no código.
-  const codigoDoErro = () => {
-    if (!resposta.ok) return `metadados_http_${resposta.status}`;
-    if (descricao?.status !== "ok") return "metadados_executor";
-    return "metadados_vazio";
-  };
-
-  // ⚠️ `executor`, NÃO `reconhecedor`. Esta chamada é uma ida ao Lambda, e
-  // rotulá-la com o nome do agente seguinte produzia DUAS linhas `reconhecedor`
-  // no mesmo turno — o que corrompe exatamente as medições que a etapa existe
-  // para dar: `group by etapa` conta em dobro, a latência do Lambda entra no
-  // custo do A2, e a taxa de `cache_hit_a2` sai diluída por linhas que nunca
-  // tiveram cache. Visto no primeiro teste real do B06, em 2026-08-21.
-  await registrar({
-    etapa: "executor",
-    status: descricaoValida ? "ok" : "erro",
-    codigoErro: descricaoValida ? null : codigoDoErro(),
-    latenciaMs: Date.now() - t1,
-    // Quantas linhas a base tem. É o que o `linhas_origem` sempre quis dizer, e
-    // o `metadados` é o único lugar do caminho que sabe isso de graça.
-    linhasOrigem: typeof descricao?.n_linhas === "number" ? descricao.n_linhas : null,
-    // O erro do executor vai para cá, que é onde ele sempre deveria ter ido —
-    // e não para dentro do reconhecimento, onde parecia opinião do modelo.
-    respostaAgente: descricaoValida ? null : descricao ?? null,
-  });
-
-  if (!descricaoValida) {
-    // ⚠️ Devolve 200 com `erro`, não um código de falha: em modo sombra, um erro
-    // aqui não é um erro da PERGUNTA — ela vai ser respondida pelo caminho
-    // legado de qualquer jeito. Status HTTP de erro faria o front tratar como
-    // falha do chat.
-    return json({
-      habilitado: true,
-      status: "erro",
-      etapa: "metadados",
-      erro: descricao?.error ?? null,
-    });
-  }
-
-  // ── A2 · Reconhecedor (com cache) ────────────────────────────────────────
+  // ── O dicionário, do banco ───────────────────────────────────────────────
   const { data: dataset } = await supabase
     .from("datasets")
     .select("schema_metadata, vocabulario_exposto")
     .eq("id", datasetId)
     .maybeSingle();
 
-  const colunasReais = Object.keys(colunas);
+  const dicionario = lerDicionario(dataset?.schema_metadata ?? null);
 
-  const t2 = Date.now();
-  const r = await reconhecer(
-    supabase as never,
-    datasetId,
-    dataset?.schema_metadata ?? null,
-    descricao,
-    colunasReais,
-  );
-
-  // ⚠️ `codigo_erro` numa linha `ok` não é contradição: o turno funcionou e algo
-  // está errado mesmo assim. `cache_nao_gravou` é o caso — a pergunta foi
-  // respondida, mas o próximo turno vai pagar o A2 de novo, e sem esta linha o
-  // sintoma ("o cache nunca acerta") só existiria no console da função.
-  await registrar({
-    etapa: "reconhecedor",
-    status: Object.keys(r.reconhecimento.colunas).length ? "ok" : "erro",
-    codigoErro: r.llm?.erro?.codigo ?? (r.erroDeCache ? "cache_nao_gravou" : null),
-    modelo: r.llm?.modelo ?? null,
-    provedor: r.llm?.provedor ?? null,
-    tokensEntrada: r.llm?.tokens.entrada ?? null,
-    tokensSaida: r.llm?.tokens.saida ?? null,
-    latenciaMs: Date.now() - t2,
-    // ⭐ O critério de pronto do V7 §8 item 4 sai desta coluna: a 2ª pergunta na
-    // mesma base tem de vir `true`.
-    cacheHitA2: r.cacheHit,
-    respostaAgente: r.erroDeCache
-      ? { reconhecimento: r.reconhecimento, erro_de_cache: r.erroDeCache }
-      : r.reconhecimento,
-  });
-
-  if (!Object.keys(r.reconhecimento.colunas).length) {
-    return json({ habilitado: true, status: "erro", etapa: "reconhecedor" });
+  // ⚠️ Base sem coluna descrita nenhuma para o turno, e é o único caso em que
+  // esta etapa falha. `lerDicionario` nunca lança e sempre devolve forma
+  // completa, então zero coluna significa `schema_metadata` vazio de verdade —
+  // base em rascunho, ou base cujo cadastro não terminou. O A3 não tem o que
+  // planejar sem nome de coluna.
+  if (!Object.keys(dicionario.colunas).length) {
+    await registrar({
+      etapa: "planejador",
+      status: "erro",
+      codigoErro: "dicionario_vazio",
+      latenciaMs: 0,
+    });
+    return json({ habilitado: true, status: "erro", etapa: "dicionario" });
   }
 
   // ── Coleta determinística: vocabulário (B04) ─────────────────────────────
-  // Sem LLM. As colunas vêm do que o A2 marcou como `vocabulario_util`, e as
+  // Sem LLM. As colunas vêm do que o DICIONÁRIO marcou — antes era o A2 — e as
   // três travas do B04 continuam valendo: `allowed_columns` (conferido pedido a
   // pedido no `handleExecutePlan`), a flag da base, e o teto de cardinalidade
   // que o executor aplica.
   const vocabularios: Record<string, ValorDoVocabulario[]> = {};
-  const querVocabulario = colunasComVocabularioUtil(r.reconhecimento);
+  const querVocabulario = colunasComVocabulario(dicionario);
 
   if (dataset?.vocabulario_exposto && querVocabulario.length) {
     const t3 = Date.now();
@@ -1146,11 +1278,14 @@ async function handleAdHocReconhecer(
   return json({
     habilitado: true,
     status: "ok",
-    cacheHit: r.cacheHit,
-    reconhecimento: r.reconhecimento,
+    // ⚠️ `cacheHit` continua no corpo, sempre `false`: não há mais A2 para
+    // cachear, e o front ainda lê o campo. Removê-lo é limpeza de outro bloco.
+    cacheHit: false,
+    dicionario,
     vocabularios,
   });
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ad_hoc_planejar — só o A3. A invocação que existe por causa do relógio.
@@ -1178,25 +1313,27 @@ async function handleAdHocReconhecer(
 async function handleAdHocPlanejar(
   req: Request,
   pergunta: unknown,
-  reconhecimento: unknown,
+  dicionarioCru: unknown,
   vocabularios: unknown,
   turno: Partial<DadosDoTurno>,
 ): Promise<Response> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return json({ error: "sem credencial" }, 401);
-  if (typeof pergunta !== "string" || !pergunta.trim() || !reconhecimento) {
-    return json({ error: "prompt e reconhecimento obrigatorios" }, 400);
+  if (typeof pergunta !== "string" || !pergunta.trim() || !dicionarioCru) {
+    return json({ error: "prompt e dicionario obrigatorios" }, 400);
   }
 
   const registrar = criarRegistrador(authHeader, turno, "ad_hoc");
   const voc = (vocabularios ?? {}) as Record<string, ValorDoVocabulario[]>;
 
   const t0 = Date.now();
-  const { plano, llm: llmA3 } = await planejar({
-    pergunta,
-    reconhecimento: reconhecimento as Reconhecimento,
-    vocabularios: voc,
-  });
+  // ⚠️ Passa por `lerDicionario` de novo, e não é redundante: o dicionário faz
+  // uma volta pelo cliente entre as duas invocações (ver o cabeçalho), então o
+  // que chega aqui é JSON de fora. Normalizar na entrada é o que garante que
+  // `paraPrompt` receba a forma completa — e `lerDicionario` nunca lança.
+  const dicionario = normalizarDicionario(dicionarioCru);
+
+  const { plano, llm: llmA3 } = await planejar({ pergunta, dicionario, vocabularios: voc });
 
   const registrarA3 = async (status: StatusLog) => {
     await registrar({
@@ -1209,7 +1346,20 @@ async function handleAdHocPlanejar(
       tokensSaida: llmA3.tokens.saida,
       latenciaMs: Date.now() - t0,
       presuncoesQtd: plano.presuncoes.length,
-      respostaAgente: plano,
+      // ⭐ `_dicionario` é metadado da ENTRADA, não saída do agente, e está aqui
+      // de propósito: `presuncoes_qtd` só é interpretável sabendo se o
+      // dicionário tinha passado por gente. Um dicionário `versao: 1` faz o A3
+      // presumir mais **por instrução** (ver `paraPrompt`), então sem esta chave
+      // uma queda de presunções não se distingue de uma amostra de bases já
+      // conferidas. Prefixo `_` marca que não veio do modelo.
+      respostaAgente: {
+        ...plano,
+        _dicionario: {
+          versao: dicionario.versao,
+          conferido: dicionario.conferido,
+          colunas: Object.keys(dicionario.colunas).length,
+        },
+      },
     });
   };
 
@@ -1452,7 +1602,7 @@ const TETO_POR_PEDIDO = 5;
  * desde a Etapa 0 na migration, no `log.ts` e no `PlumChat.tsx`.
  */
 async function saldoDaJanela(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ClienteSupabase,
   datasetId: string | null | undefined,
 ): Promise<Gasto> {
   try {
@@ -1496,7 +1646,7 @@ Deno.serve(async (req: Request) => {
       // motivo que o `plan` acima: o `authorizePlan` roda no servidor para cada
       // pedido e a barreira 4 do Lambda reconfere. Plano é candidato, nunca
       // verdade (§4 regra 1).
-      pedidos, presuncoes, reconhecimento, vocabularios,
+      pedidos, presuncoes, dicionario, vocabularios,
       // Identificam a conversa e a pergunta, para o log costurar as etapas.
       // Gerados no cliente — ver `20260818110000_plum_logs.sql`. Opcionais de
       // propósito: front antigo continua funcionando, só sem registro.
@@ -1548,6 +1698,9 @@ Deno.serve(async (req: Request) => {
       return await handleCabecalhos(req, datasetId);
     }
 
+    if (action === "perfil_do_cadastro") {
+      return await handlePerfilDoCadastro(req, datasetId);
+    }
     if (action === "amostra_do_cadastro") {
       return await handleAmostraDoCadastro(req, datasetId);
     }
@@ -1556,7 +1709,7 @@ Deno.serve(async (req: Request) => {
       return await handleAdHocReconhecer(req, prompt, datasetId, turno);
     }
     if (action === "ad_hoc_planejar") {
-      return await handleAdHocPlanejar(req, prompt, reconhecimento, vocabularios, turno);
+      return await handleAdHocPlanejar(req, prompt, dicionario, vocabularios, turno);
     }
     if (action === "ad_hoc_executar") {
       return await handleAdHocExecutar(

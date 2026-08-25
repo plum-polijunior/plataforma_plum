@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:py": "cd query_engine && python -m pytest"
+    "test:py": "cd query_engine && python -m pytest",
+    "avaliacao": "vitest run --config vitest.avaliacao.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

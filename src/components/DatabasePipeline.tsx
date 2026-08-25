@@ -21,6 +21,30 @@ interface FormattingRule {
 const REGRA_SEM_FORMATACAO: FormattingRule = { type: "nenhuma", params: {}, explicacao: "" };
 
 /**
+ * ⭐ A versão do dicionário que este cadastro escreve.
+ *
+ * ⚠️ **`versao` não é enfeite: ela é o que diz ao chat se houve gente no meio.**
+ * O A3 lê `conferido = versao >= 2` e calibra presunção por base — dicionário v1
+ * nunca passou por humano, então os conceitos ali são palpite de modelo. Ver
+ * `supabase/functions/_shared/dicionario.ts`.
+ *
+ * ⛔ As bases v1 **não são migradas** e conviverão para sempre: recadastrar cria
+ * uuid novo e órfã os cards da base (CASCADE em `dashboard_cards`). O leitor
+ * tolera as duas formas por requisito, não por gentileza.
+ */
+const VERSAO_DO_DICIONARIO = 2;
+
+type PapelAnalitico = "medida" | "dimensao" | "identificador" | "temporal";
+
+/** O rótulo de cada papel na tela, e o que ele significa para quem revisa. */
+const PAPEIS: { valor: PapelAnalitico; rotulo: string; ajuda: string }[] = [
+  { valor: "medida", rotulo: "Medida", ajuda: "serve para somar ou tirar média" },
+  { valor: "dimensao", rotulo: "Dimensão", ajuda: "serve para agrupar ou filtrar" },
+  { valor: "identificador", rotulo: "Identificador", ajuda: "aponta uma linha específica" },
+  { valor: "temporal", rotulo: "Temporal", ajuda: "data, mês ou ano" },
+];
+
+/**
  * Valor de célula como texto, para a tabela antes-vs-depois do passo 2.
  *
  * ⚠️ Célula vazia e célula ausente viram o mesmo travessão de propósito: quem
@@ -68,6 +92,15 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const [formattingRules, setFormattingRules] = useState<Record<string, FormattingRule>>({});
   const [formatQuery, setFormatQuery] = useState("");
   const [isFormatRefining, setIsFormatRefining] = useState(false);
+
+  // ⭐ **O dicionário v2, do B14 — os campos que o A2 do chat produzia e ninguém
+  // conferia.** `grao` e `observacoes` descrevem a base; `papel_analitico` e
+  // `vocabulario_util` descrevem cada coluna. Todos editáveis na etapa 4, porque
+  // é a revisão humana que os torna melhores que a dedução do A2 (§B2).
+  const [grao, setGrao] = useState("");
+  const [observacoes, setObservacoes] = useState<string[]>([]);
+  const [papeis, setPapeis] = useState<Record<string, PapelAnalitico>>({});
+  const [querVocabulario, setQuerVocabulario] = useState<Record<string, boolean>>({});
 
   // Helpers
   // Movido para `@/lib/colunas` em 2026-08-11. Esta normalizacao nao e
@@ -485,34 +518,65 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         throw new Error(`Operação Bloqueada pelo Guardião: O conteúdo parece fora do escopo do Plum. (${guardResult})`);
       }
 
-      // 2. Chama o Agente 1 (Previsão Semântica)
-      toast({ title: "Agente 1 operando...", description: "A IA está prevendo as definições semânticas. Isso pode levar alguns segundos." });
+      // 2. ⭐ O PERFIL DA BASE — o insumo que o B14 acrescenta, e o que torna
+      // este agente melhor que o A2 que ele substituiu. Ele conta a base
+      // inteira (cardinalidade, vazios, min/max) e lista o vocabulário das
+      // colunas de texto, sem trafegar linha nenhuma além das 20 já lidas.
+      //
+      // ⚠️ **Falha aqui NÃO derruba o cadastro.** Perfil é evidência a mais; sem
+      // ele o Agente 1 escreve definições piores, e o prompt diz a ele que está
+      // com menos. Perder o cadastro inteiro porque o executor piscou seria
+      // trocar um dicionário mais fraco por nenhum dicionário.
+      toast({ title: "Lendo o perfil da base...", description: "Contando valores e vazios por coluna." });
+      const perfilRes = await supabase.functions.invoke('ai-plum-chat', {
+        body: { action: 'perfil_do_cadastro', datasetId },
+      });
+      if (perfilRes.error || perfilRes.data?.status !== 'ok') {
+        console.error("Perfil do cadastro nao veio:", perfilRes.error ?? perfilRes.data);
+      }
+
+      // 3. Chama o Agente 1 (Semântica — e o A2 do chat, absorvido)
+      toast({ title: "Agente 1 operando...", description: "A IA está descrevendo as colunas e o grão da base." });
 
       const predictRes = await supabase.functions.invoke('ai-agents', {
         body: {
           action: 'predict_semantics',
           columns: finalColumns,
-          dataSamples: dataSamples
+          dataSamples,
+          perfil: perfilRes.data?.perfil ?? null,
+          vocabularios: perfilRes.data?.vocabularios ?? {},
+          // ⛔ As sugestões determinísticas de papel/vocabulário NÃO são enviadas
+          // daqui: o `ai-agents` as calcula do perfil, com a regra que vive em
+          // `_shared/perfil.ts`. Mandá-las do front deixaria uma versão antiga
+          // da tela decidindo papel de coluna.
         }
       });
 
       if (predictRes.error) throw new Error(predictRes.error.message || "Erro na IA de Semântica");
 
-      let definitionsJSON = predictRes.data?.result;
-      if (typeof definitionsJSON === "string") {
-        try {
-          const cleaned = definitionsJSON.replace(/```json\n?|\n?```/g, "").trim();
-          definitionsJSON = JSON.parse(cleaned);
-        } catch (e) {
-          console.error("Falha ao analisar JSON retornado:", e);
-        }
-      }
-      if (!definitionsJSON || typeof definitionsJSON !== "object") {
-        throw new Error("A IA não retornou as definições semânticas em um formato válido.");
+      const dicionario = predictRes.data?.result;
+      if (!dicionario || typeof dicionario !== "object" || !dicionario.columns) {
+        throw new Error("A IA não retornou o dicionário da base em um formato válido.");
       }
 
-      setSemanticDefinitions(definitionsJSON);
-      saveSketch(3, { semanticDefinitions: definitionsJSON });
+      // A saída já vem normalizada pelo `ai-agents` (toda coluna presente, papel
+      // dentro do enum), então aqui é só espalhar pelos estados que a tela edita.
+      const definicoes: Record<string, string> = {};
+      const novosPapeis: Record<string, PapelAnalitico> = {};
+      const novoVocabulario: Record<string, boolean> = {};
+      for (const col of finalColumns) {
+        const c = dicionario.columns[col] ?? {};
+        definicoes[col] = c.semantic_definition ?? "";
+        novosPapeis[col] = c.papel_analitico ?? "dimensao";
+        novoVocabulario[col] = Boolean(c.vocabulario_util);
+      }
+
+      setSemanticDefinitions(definicoes);
+      setPapeis(novosPapeis);
+      setQuerVocabulario(novoVocabulario);
+      setGrao(dicionario.grao ?? "");
+      setObservacoes(Array.isArray(dicionario.observacoes) ? dicionario.observacoes : []);
+      saveSketch(3, { semanticDefinitions: definicoes });
       setStep(3);
 
     } catch (error: any) {
@@ -541,11 +605,20 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
     setIsProcessing(true);
     try {
+      // ⭐ **O dicionário v2** (B14). `versao`, `grao` e `observacoes` são novos,
+      // e por coluna entram `papel_analitico` e `vocabulario_util`. Tudo o que
+      // está aqui passou pela tela da etapa 4 — é o que diferencia este
+      // dicionário do reconhecimento que o A2 deduzia sozinho (§B2).
       const schemaMetadata = {
+        versao: VERSAO_DO_DICIONARIO,
+        grao: grao.trim(),
+        observacoes: observacoes.map((o) => o.trim()).filter(Boolean),
         columns: Object.values(normalizedColumns).reduce((acc: any, col) => {
           acc[col] = {
             semantic_definition: semanticDefinitions[col] || "",
-            formatting_rule: formattingRules[col] || REGRA_SEM_FORMATACAO
+            formatting_rule: formattingRules[col] || REGRA_SEM_FORMATACAO,
+            papel_analitico: papeis[col] || "dimensao",
+            vocabulario_util: Boolean(querVocabulario[col]),
           };
           return acc;
         }, {})
@@ -577,6 +650,10 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       setDataSamples([]);
       setSemanticDefinitions({});
       setFormattingRules({});
+      setGrao("");
+      setObservacoes([]);
+      setPapeis({});
+      setQuerVocabulario({});
       setSheetUrl("");
       setColisoes({});
       setColunasSemTitulo(0);
@@ -899,17 +976,82 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /> Definições Semânticas (Agente 1)</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                A IA analisou suas colunas e tentou prever o significado delas para o Chatbot.
-                Edite as descrições para adicionar contexto de negócio específico (ex: "lucro não inclui impostos").
+                A IA leu o perfil da base — quantos valores cada coluna tem, o que está vazio — e
+                descreveu cada uma. <strong>Corrija o que ela não podia saber</strong>: só você
+                conhece regras como "lucro não inclui impostos".
               </p>
+            </div>
+
+            {/*
+              ⭐ **O GRÃO E AS OBSERVAÇÕES — os campos que o A2 do chat produzia
+              e ninguém nunca conferiu.** Até o B14 eles eram deduzidos a cada
+              pergunta, por um modelo que não via nenhuma linha, e iam direto
+              para o planejador. Agora nascem aqui, com o perfil e 20 linhas na
+              mesa, e passam por gente antes de valer.
+
+              ⚠️ O grão é o campo que mais muda resposta e o que a IA mais erra:
+              "uma venda" e "um dia por loja" fazem a mesma soma significar
+              coisas diferentes, e o modelo só consegue inferir isso da razão
+              entre linhas e valores distintos.
+            */}
+            <div className="border border-border rounded-xl bg-background p-4 space-y-4">
+              <div>
+                <Label htmlFor="grao-da-base" className="text-sm font-semibold">
+                  O que UMA LINHA da planilha representa?
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                  É o grão da base. Ex.: "uma venda", "um dia por loja", "um atendimento".
+                </p>
+                <Input
+                  id="grao-da-base"
+                  value={grao}
+                  onChange={(e) => setGrao(e.target.value)}
+                  placeholder="Ex: uma venda"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-semibold">Observações sobre a base</Label>
+                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                  O que muda a leitura de um número — coluna muito vazia, duas colunas parecidas.
+                  Apague o que não fizer sentido.
+                </p>
+                {observacoes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    A IA não apontou nenhuma observação.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {observacoes.map((obs, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <Input
+                          value={obs}
+                          onChange={(e) =>
+                            setObservacoes((antes) =>
+                              antes.map((o, i) => (i === idx ? e.target.value : o))
+                            )}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setObservacoes((antes) => antes.filter((_, i) => i !== idx))}
+                        >
+                          Remover
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="border border-border rounded-xl overflow-hidden bg-background max-h-[500px] overflow-y-auto">
               <table className="w-full text-sm text-left">
                 <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-3 font-medium w-1/4">Coluna</th>
+                    <th className="px-6 py-3 font-medium w-1/5">Coluna</th>
                     <th className="px-6 py-3 font-medium">Definição para a Inteligência Artificial</th>
+                    <th className="px-6 py-3 font-medium w-44">Papel</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -923,6 +1065,51 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                           className="w-full bg-transparent border border-border rounded-md p-2 text-sm min-h-[60px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 resize-y"
                           placeholder="Ex: Representa o lucro líquido..."
                         />
+                      </td>
+                      {/*
+                        ⭐ `papel_analitico` decide o que o planejador PODE fazer
+                        com a coluna: medida entra em soma, dimensão entra em
+                        agrupamento, identificador não entra em nenhum dos dois.
+                        Marcar um identificador como dimensão faz o chat tentar
+                        agrupar por CPF e devolver uma linha por pessoa.
+
+                        ⚠️ A caixa de vocabulário só aparece em dimensão, porque é
+                        a única em que faz sentido: é a lista de valores que
+                        permite casar "joão silva" com o literal da base. Em
+                        medida ou data não há lista a consultar.
+                      */}
+                      <td className="px-6 py-4 align-top">
+                        <select
+                          value={papeis[col] || 'dimensao'}
+                          onChange={(e) =>
+                            setPapeis((antes) => ({
+                              ...antes,
+                              [col]: e.target.value as PapelAnalitico,
+                            }))}
+                          className="w-full bg-background border border-border rounded-md p-1.5 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+                        >
+                          {PAPEIS.map((papel) => (
+                            <option key={papel.valor} value={papel.valor}>{papel.rotulo}</option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                          {PAPEIS.find((papel) => papel.valor === (papeis[col] || 'dimensao'))?.ajuda}
+                        </p>
+                        {(papeis[col] || 'dimensao') === 'dimensao' && (
+                          <label className="flex items-start gap-1.5 mt-2 text-[11px] text-muted-foreground cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(querVocabulario[col])}
+                              onChange={(e) =>
+                                setQuerVocabulario((antes) => ({
+                                  ...antes,
+                                  [col]: e.target.checked,
+                                }))}
+                              className="mt-0.5"
+                            />
+                            <span>O chat pode consultar a lista de valores desta coluna</span>
+                          </label>
+                        )}
                       </td>
                     </tr>
                   ))}

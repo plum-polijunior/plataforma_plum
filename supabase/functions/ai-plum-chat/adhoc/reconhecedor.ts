@@ -1,3 +1,21 @@
+/**
+ * ⛔⛔ **DESLIGADO NO B15 — VOLTA NA ETAPA 3. NÃO APAGAR.**
+ *
+ * Este módulo não é mais chamado por ninguém. Quem diz o que a base significa
+ * passou a ser o **dicionário** escrito no cadastro (`_shared/dicionario.ts`),
+ * conferido por uma pessoa antes de ser salvo.
+ *
+ * ⭐ **Por que fica no repositório:** com UMA planilha, o trabalho que o V7 dá
+ * ao A2 é vazio — *"que tabelas importam"* é constante, *"que colunas importam"*
+ * o A3 resolve melhor porque é ele que tem a pergunta, e *"de quais preciso
+ * vocabulário"* é determinístico. Na Etapa 3, com várias planilhas, escolher
+ * entre elas volta a ser problema de verdade, e é este agente que o resolve.
+ * Apagar seria jogar fora um bloco inteiro já testado para reescrevê-lo igual.
+ *
+ * Ver §A3 do `zz_remake_implementation/PLANO-etapa-2.md` e `30-decisoes.md`
+ * D-005. A tabela `plum_reconhecimento` fica pelo mesmo motivo.
+ */
+
 import { chamar, type RespostaLLM } from "../../_shared/llm.ts";
 import { parseGeminiJson } from "../../_shared/gemini_parsing.ts";
 import {

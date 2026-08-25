@@ -301,3 +301,71 @@ de uma vez:
 | ⚠️ **Teoria antes do stack trace** | I-10 | eu tenho o traceback, ou só a mensagem? |
 | **Erro só aparece longe da causa** | I-08, I-03 | esse erro tinha como aparecer antes, com alguém olhando a tela? |
 | **Falsy usado onde zero é legítimo** | I-04 | `0` é um valor válido aqui? |
+
+---
+
+## I-11 · 2026-08-25 · ⭐⭐ Nada neste repositório typechecava — e um `ReferenceError` chegou à tela
+
+**O que aconteceu:** o passo 2 do cadastro morreu com `setFormattedDataSamples is not defined` na
+primeira resposta do Agente 3. `setFormattedDataSamples`, `setFormattingRules`,
+`setSemanticDefinitions`, `formatQuery` e `isFormatRefining` eram usados em **20 lugares** de
+`DatabasePipeline.tsx` e declarados em **nenhum**.
+
+**Causa imediata:** as cinco linhas de `useState` ficavam encostadas no fim do handler do
+`FileReader`. O B13 removeu o upload de arquivo e levou-as de carona, sem tocar em nenhum dos usos.
+
+**⭐ Causa raiz, e é ela que importa: os três comandos de verificação do projeto são cegos para
+isso.**
+
+| comando | o que se acreditava | o que ele faz |
+|---|---|---|
+| `npm run build` | "typecheck + build" (CLAUDE.md §1) | é `vite build`. **esbuild só REMOVE tipos**, não os checa |
+| `npx tsc --noEmit` | "só tipagem" (CLAUDE.md §1) | checa **ZERO arquivos**: o `tsconfig.json` da raiz tem `"files": []` e só *references* |
+| `npm test` | vitest | cobre módulos puros; nenhum componente de React |
+
+⇒ Eu rodei `npm run build` e `npm test` depois de **cada** alteração daquela sessão e reportei
+"verde" três vezes. Os dois passavam com 40 identificadores inexistentes no arquivo.
+
+**E havia mais escondido atrás disso.** Na primeira vez que alguém rodou `deno check` no
+`ai-plum-chat`, apareceram **19 erros** — 18 pré-existentes. O maior grupo: `EtapaLog` listava só as
+quatro etapas do caminho legado, enquanto o código gravava `porteiro`, `reconhecedor`, `planejador`,
+`interprete` e `executor` desde o B06.
+
+**As regras:**
+
+1. ⭐ **Os comandos que enxergam são `npx tsc -p tsconfig.app.json --noEmit` (para `src/`) e
+   `deno check <arquivo>` (para `supabase/functions/`).** Nenhum dos dois está no CI.
+2. ⛔ **"O build passou" não é evidência de nada neste repositório.** Antes de dizer isso, confira o
+   que o comando faz — o `package.json`, não a documentação.
+3. ⚠️ **`tsconfig.json` com `"files": []` e só *references* não checa nada sem `--build`.** Silêncio
+   do `tsc` não é aprovação; pode ser lista vazia.
+4. **Código que vive encostado no que vai ser apagado é apagado junto.** Estado de componente mora
+   com o outro estado, no topo — não no fim do handler que por acaso o introduziu.
+
+---
+
+## I-12 · 2026-08-25 · A métrica do critério de pronto nunca foi gravada
+
+**O que aconteceu:** `plum_logs.presuncoes_qtd` era `NULL` em **toda** linha, desde o B07.
+
+**Causa:** a coluna existe na migration, e o `handleAdHocPlanejar` sempre passou
+`presuncoesQtd: plano.presuncoes.length`. Mas `LinhaDeLog` **não declarava** o campo e `montarLinha`
+**não o mapeava** para a coluna. O objeto literal do chamador era, portanto, um erro de tipo — que
+nada checava (ver I-11).
+
+**⭐ Por que dói:** o critério de pronto do B15, escrito no plano, é *"efeito esperado, e vale medir:
+menos presunções. Se o número não cair, o dicionário não está sendo lido de verdade."* O número não
+estava sendo gravado — o critério **não tinha como ser avaliado**, e ninguém teria descoberto isso
+olhando a tela.
+
+⚠️ **A linha de base não é recuperável.** "Quantas presunções o A3 declarava antes do dicionário" não
+existe em lugar nenhum. O B15 começa a medir sem ter com o que comparar.
+
+**As regras:**
+
+1. ⭐ **Métrica que sustenta um critério de pronto é conferida no BANCO antes de o bloco começar**,
+   com um `select` de verdade. O comentário do próprio `montarLinha` já avisava — *"um nome de coluna
+   errado aqui vira `null` silencioso no banco em vez de erro"* — e o caso aconteceu por **omissão**,
+   não por typo, que é pior: um typo aparece na revisão, uma ausência não.
+2. **Campo novo em `LinhaDeLog` anda com o mapeamento em `montarLinha` e com um caso em
+   `log_core.test.ts`.** O teste de mapeamento existia e não cobria este campo; agora cobre.

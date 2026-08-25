@@ -49,6 +49,24 @@ atualizado_em: 2026-08-25
 | C12 | ⚠️ **`allowed_columns` nunca é revalidado contra o cabeçalho da planilha** | Achado em 2026-08-20 pelo caminho `ad_hoc`. A matriz de permissões é curada à mão e **não** é refeita ao recadastrar a base — então ela envelhece em silêncio até alguém pedir a coluna que sumiu. Uma pergunta normal pede 2–3 colunas e não percebe; o pedido `metadados` pede **todas** e percebia derrubando tudo (consertado). ⭐ O `metadados` é justamente a peça que tornaria a verificação barata: desde o conserto ele devolve `{"existe": false}` por coluna, ou seja, **já sabe dizer quais colunas permitidas sumiram da planilha**. Casa com o C4 |
 | C13 | ⛔ **Não há como reconferir uma base ativa: recadastrar cria uuid novo e órfã os cards** | Achado em 2026-08-21 ao planejar a Etapa 2. O onboarding só recupera rascunho com `status = 'processing'` (`DatabasePipeline.tsx:85-89`); base **ativa** cai no `insert` e vira linha nova. ⚠️ E **deletar** a antiga é pior: `dashboard_cards` e `role_permissions` têm `ON DELETE CASCADE` (`20260806230000_dashboard_cards.sql:33`, `create_role_permissions_table.sql:13`), então some junto **todo card daquela base e a matriz de permissões curada à mão** — sem aviso. `plum_chat` e `plum_logs` são `SET NULL` e ficam órfãos, o que faz a referência do caminho legado (R$ 224.042,24 de 2026-08-20) perder o vínculo. ⭐ O conserto é uma entrada "reconferir esta base" que preserve o `id` e rode só o perfil + auditor. Ficou **fora do escopo da Etapa 2 por decisão** (👤 optou por recadastrar só a `plum_base_suja`), não por esquecimento — mas enquanto não existir, base da demo só ganha dicionário v2 ao custo dos cards, ou seja, não ganha. Ver `PLANO-etapa-2.md` §B6 |
 
+### ⚠️ Ligar o typecheck de verdade no `npm run build`
+
+`npm run build` é `vite build` — esbuild, que só remove tipos — e `npx tsc --noEmit` na raiz checa
+**zero arquivos** (I-11). Um `ReferenceError` chegou à tela por isso.
+
+**O que fazer:** `"build": "tsc -p tsconfig.app.json --noEmit && vite build"`, e `deno check` das
+Edge Functions no CI.
+
+⚠️ **Por que não foi feito junto:** sobra **um** erro pré-existente, `src/pages/PlumChat.tsx:331`
+(`Type 'unknown' is not assignable to type 'Json'`). Ligar o typecheck antes de resolvê-lo quebra o
+build de todo mundo. É meia hora de trabalho, não um projeto — só não é uma linha.
+
+### As 25–30 perguntas da suíte de avaliação
+
+O arnês existe e roda (`npm run avaliacao`), com **14** perguntas. ⛔ **Não é trabalho de código:**
+completar inventando pergunta plausível mede a coisa errada com confiança (D-052). Precisa de quem
+usa a base. ⭐ O que rende mais são as perguntas que já se viu o chat errar.
+
 ## 🟠 Projeto
 
 | # | O quê | Nota |
@@ -124,3 +142,6 @@ Registrado para que ninguém "conserte" de novo:
 | Log estruturado no Supabase | 2026-08-18 | `plum_logs` — era o C1 desta lista |
 | O pipeline de importação não lia a planilha | 2026-08-25 | resolvido pelo B12/B13 **eliminando o arquivo local**, não validando-o contra a planilha (I-08) |
 | Formatação aprovada sem ver o dado | 2026-08-25 | a tabela antes-vs-depois passou a ser renderizada; era documentada e nunca existiu (D-048) |
+| **C2** — abstração de provedor de LLM | 2026-08-25 | o `ai-agents` entrou nela no B14. Sobra o `dashboard-agent`, fora de escopo por decisão |
+| A definição semântica do usuário não chegava ao chat | 2026-08-25 | o A3 lê o dicionário (D-049). Era só o hash da chave do cache do A2 |
+| `plum_logs.presuncoes_qtd` sempre `NULL` | 2026-08-25 | mapeamento que faltava em `montarLinha`, com regressão (I-12). ⚠️ Sem linha de base recuperável |

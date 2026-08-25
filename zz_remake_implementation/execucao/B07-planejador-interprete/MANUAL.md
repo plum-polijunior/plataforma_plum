@@ -53,8 +53,21 @@ where turno_id = (select turno_id from plum_logs order by created_at desc limit 
 order by created_at;
 ```
 
-Esperado, tudo com `caminho = 'ad_hoc'`: `porteiro` → `executor` (metadados) → `reconhecedor` →
-[`executor` (vocabulário)] → `planejador` → `executor` → `interprete`.
+Esperado, tudo com `caminho = 'ad_hoc'`: `porteiro` → [`executor` (vocabulário)] →
+`planejador` → `executor` → `interprete`.
+
+⚠️ **Correção de 2026-08-25 (B15).** Esta linha dizia `porteiro` → `executor` (metadados) →
+`reconhecedor` → … As duas etapas do meio **saíram**: o A2 foi absorvido pela etapa 4 do cadastro,
+e com ele saiu a ida ao Lambda que existia só para alimentá-lo. Quem diz o que a base significa
+agora é o dicionário lido do `schema_metadata` — uma query, não uma etapa.
+
+⇒ `reconhecedor` e `cache_hit_a2` **não aparecem mais** em turno novo. Se aparecerem, a função
+implantada é anterior ao B15 (e é exatamente o I-03: confira o `ezbr_sha256` antes de investigar o
+prompt). As linhas históricas com `reconhecedor` continuam no `plum_logs`, de propósito.
+
+⭐ E o `presuncoes_qtd` da consulta acima **passou a ser gravado** no B15. Antes ele era `NULL` em
+toda linha: a coluna existia, o código a passava, e `montarLinha` não a mapeava. Turno anterior a
+2026-08-25 tem `NULL` ali — não é a sua consulta que está errada.
 
 ⭐ **Olhe a `latencia_ms` do `planejador`.** Ele agora tem uma invocação só para ele, então esse
 número é limpo — e é o que diz se o modelo de raciocínio cabe no orçamento de tempo. Se passar de

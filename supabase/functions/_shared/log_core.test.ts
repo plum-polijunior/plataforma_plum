@@ -126,6 +126,7 @@ describe("montarLinha", () => {
       tokensSaida: 340,
       latenciaMs: 812,
       cacheHitA2: true,
+      presuncoesQtd: 2,
       respostaAgente: { from: "producao" },
     });
 
@@ -140,6 +141,11 @@ describe("montarLinha", () => {
       tokens_saida: 340,
       latencia_ms: 812,
       cache_hit_a2: true,
+      // ⚠️ Esta linha é a regressão que faltava: a coluna existe no banco desde
+      // o B07, o chamador sempre a passou, e `montarLinha` não a mapeava —
+      // `presuncoes_qtd` era NULL em toda linha do `plum_logs`. É a métrica do
+      // critério de pronto do B15, então o critério não tinha como ser medido.
+      presuncoes_qtd: 2,
       resposta_agente: { from: "producao" },
     });
   });

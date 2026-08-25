@@ -134,6 +134,21 @@ describe("resolução de papel", () => {
     }
   });
 
+  it("⭐ a cadeia do cadastro roda INTEIRA no modelo de raciocínio", () => {
+    // O que estes seis escrevem entra no `schema_metadata` e vale para toda
+    // pergunta futura sobre a base. Derrubar um deles para Flash economizaria
+    // centavos numa chamada que roda uma vez por base, e o sintoma seria um
+    // dicionário pior — invisível, porque base ruim continua respondendo.
+    const cadastro: Papel[] = ["guardiao", "formatador", "semantico", "suporte"];
+
+    for (const papel of cadastro) {
+      expect(resolver(papel, true), papel).toMatchObject({
+        provedor: "google",
+        modelo: MODELOS.RACIOCINIO,
+      });
+    }
+  });
+
   it("nenhum identificador de modelo aparece solto na tabela", () => {
     // ⚠️ O literal `gemini-3.5-flash` aparecia cinco vezes aqui, e subir de
     // versão era cinco edições com quatro chances de esquecer uma. Este teste

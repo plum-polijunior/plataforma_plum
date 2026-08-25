@@ -13,9 +13,10 @@
  * agente do remake precisa deles.
  *
  * ⚠️ **Ela consolida UM ponto de chamada, não quatro.** A URL do Gemini aparece
- * em 4 lugares de 3 funções, mas `dashboard-agent` e `ai-agents` estão fora do
- * escopo da Etapa 1. Só o `ai-plum-chat` adota. E como `_shared/` é empacotado
- * por função, adotar nos outros depois exige republicar cada um.
+ * em 4 lugares de 3 funções. Na Etapa 1 só o `ai-plum-chat` adotou; **o
+ * `ai-agents` entrou no B14** (item C2), e sobra o `dashboard-agent`, que segue
+ * fora de escopo por decisão. E como `_shared/` é empacotado por função, cada
+ * adoção exige republicar aquela função.
  */
 
 export type Provedor = "google" | "anthropic";
@@ -35,7 +36,19 @@ export type Papel =
   | "porteiro"
   | "reconhecedor"
   | "planejador"
-  | "interprete";
+  | "interprete"
+  // ⭐ A terceira cadeia, do B14: os seis agentes do cadastro (`ai-agents`).
+  // Ela não responde pergunta — ela **escreve o dicionário** que as outras duas
+  // leem, e é por isso que existe separada em vez de reaproveitar `guard` e
+  // companhia: mesmo nome de papel com propósito diferente faria a tabela
+  // abaixo mentir sobre quem paga o quê.
+  //
+  // ⚠️ `guardiao` é o Agente 0 do cadastro; `guard` é o Agente Z do chat
+  // legado. Os dois filtram escopo, em cadeias diferentes.
+  | "guardiao"
+  | "formatador"
+  | "semantico"
+  | "suporte";
 
 export interface Destino {
   provedor: Provedor;
@@ -113,6 +126,21 @@ export const MODELO_POR_PAPEL: Readonly<Record<Papel, Destino>> = {
   // continua no repositório e passa a ser inalcançável — ver `llm/claude.ts`.
   planejador: { provedor: "google", modelo: MODELOS.RACIOCINIO },
   interprete: { provedor: "google", modelo: MODELOS.RACIOCINIO },
+
+  // ⭐ **A cadeia do cadastro vai INTEIRA para o raciocínio, e é a exceção da
+  // regra "classificador é Flash".** O que estes seis escrevem entra no
+  // `schema_metadata` e vale para toda pergunta futura sobre a base; errar aqui
+  // não estraga uma resposta, estraga todas, e em silêncio, porque a base fica
+  // plausível. E o custo é O(1) por base — um cadastro roda seis chamadas uma
+  // vez na vida daquela planilha, contra três por pergunta, para sempre.
+  //
+  // ⚠️ O plano do B14 subia só `formatador` e `semantico` (as etapas 3 e 4).
+  // Subir também `guardiao` e `suporte` foi decisão do 👤 em 2026-08-25 —
+  // "todos os agentes das 4 etapas" — registrada como D-047.
+  guardiao: { provedor: "google", modelo: MODELOS.RACIOCINIO },
+  formatador: { provedor: "google", modelo: MODELOS.RACIOCINIO },
+  semantico: { provedor: "google", modelo: MODELOS.RACIOCINIO },
+  suporte: { provedor: "google", modelo: MODELOS.RACIOCINIO },
 };
 
 export interface PedidoLLM {

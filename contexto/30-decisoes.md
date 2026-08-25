@@ -513,3 +513,81 @@ problema, não a solução.
 junto na mensagem.** Foi exatamente a divergência entre um literal no prompt e a realidade que
 produziu o item (b): prompt não tem como discordar da realidade sozinho.
 **Status:** vigente.
+
+### D-049 · 2026-08-25 · ⭐ O A2 Reconhecedor é ABSORVIDO pelo cadastro — e adiado, não apagado
+**Decisão:** o Agente 1 do cadastro passa a produzir `grao`, `observacoes`, `papel_analitico` e
+`vocabulario_util`, revisados por uma pessoa na etapa 4; o A3 do chat lê o **dicionário** em vez do
+reconhecimento do A2. `adhoc/reconhecedor.ts`, `_shared/reconhecimento.ts` e a tabela
+`plum_reconhecimento` ficam no repositório, **desligados**, com o motivo escrito no topo de cada um.
+**Por quê:** os dois agentes descreviam a mesma planilha e **só um tinha gente olhando**. O A2 rodava
+no caminho da pergunta, deduzia sem ver nenhuma linha, e o resultado ia direto para o A3 — ninguém
+nunca leu um. O Agente 1 vê 20 linhas, o perfil da base inteira e o vocabulário, e a pessoa confere
+campo por campo antes de salvar. ⭐ E o trabalho que o V7 dava ao A2 esvazia com **uma** planilha:
+"que tabelas importam" é constante, "que colunas importam" o A3 resolve melhor porque é ele que tem a
+pergunta, e "de quais preciso vocabulário" é determinístico.
+⇒ Fecha a dívida que motivou a Etapa 2: a `semantic_definition` que a pessoa escreve — *"lucro não
+inclui impostos"* — **nunca chegava a nenhum agente do `ad_hoc`**. Era buscada do banco e servia só
+para calcular o hash da chave do cache do A2, enquanto o caminho legado a usava nos três prompts. O
+remake havia regredido nisso sem ninguém notar, porque a saída continuou plausível.
+**Rejeitado:** (a) **apagar o A2** — na Etapa 3, com várias planilhas, escolher entre elas volta a
+ser problema de verdade, e é este agente que o resolve; apagar seria jogar fora um bloco testado
+para reescrevê-lo igual; (b) **manter os dois**, com o A2 relendo o que o cadastro já escreveu —
+duas descrições da mesma base divergindo, e a autoritativa sendo a que ninguém revisou.
+⚠️ **Consequência medida:** o turno encurtou de 7 para 5 etapas (saíram uma chamada de LLM e uma ida
+ao Lambda). E o `metadados` saiu do caminho da pergunta, então **o dicionário passa a ser um retrato
+do dia do cadastro** — coluna que sumiu da planilha vira `MissingColumnError` visível, não `existe:
+false` silencioso. Reperfilar é Etapa 5.
+⛔ E `confianca` deixou de existir: ela era o A2 declarando onde tinha chutado. O que ela informava
+sobe de granularidade — `schema_metadata.versao >= 2` diz que houve humano no meio, e o A3 calibra
+presunção **por base**, não por coluna.
+**Status:** vigente.
+
+### D-050 · 2026-08-25 · O cadastro ignora `vocabulario_exposto`, e as outras duas travas ficam
+**Decisão:** a ação `perfil_do_cadastro` pede o vocabulário das colunas candidatas **sem consultar**
+`datasets.vocabulario_exposto`.
+**Por quê:** aquela flag existe para o **chat** não listar valor de texto de uma base que ninguém
+liberou. No cadastro ela não protege nada: a etapa 3 já mostrou **20 linhas cruas de todas as
+colunas** na tela da mesma pessoa, que é uma porta maior que a lista de distintos de uma coluna com
+no máximo 200 deles. É a mesma justificativa do `TETO_DE_CADASTRO`: o dono da base registrando a
+própria planilha, com todas as colunas concedidas.
+**Rejeitado:** **respeitar a flag** — ela nasce `false`, então o Agente 1 nunca veria vocabulário
+nenhum, e `vocabulario_util` voltaria a ser palpite sobre coluna cujos valores ninguém viu. Era
+segurança de fachada: negava o menor acesso mantendo o maior aberto ao lado.
+⚠️ As travas **1** (`allowed_columns`, lido do `role_permissions` no servidor) e **3** (teto de
+cardinalidade, aplicado pelo executor) continuam valendo, e são elas que fazem o trabalho.
+**Status:** vigente.
+
+### D-051 · 2026-08-25 · O `ad_hoc` vira padrão ANTES da suíte de avaliação
+**Decisão:** `organizations.remake_habilitado` passa a nascer `true` e todas as organizações
+existentes são ligadas, **antes** de a suíte de avaliação existir. A chave troca de papel: era
+conveniência de desenvolvimento, vira **escape hatch de emergência**.
+**Por quê:** decisão do 👤. O risco de apontar o chat para um caminho que ninguém mediu é real e vale
+ser dito sem enfeite — o que o limita é o custo de desfazer ser próximo de zero: `update
+organizations set remake_habilitado = false`, **sem deploy, efeito imediato**.
+**Rejeitado:** **suíte primeiro** — teria adiado o padrão por tempo indeterminado, porque a suíte
+depende de uma lista de perguntas que ainda não existe (ver D-052) e que não é trabalho de código.
+⚠️ **A pré-condição real é o dicionário v1 ser tolerado, não o B15.** As bases da demo continuam em
+`versao: 1` e não serão recadastradas (recadastrar cria uuid novo e órfã os cards — C13). Se o leitor
+único não tolerasse a v1, virar o padrão transformaria toda base esquecida em **chat quebrado**.
+⚠️⚠️ Isto **não alcança os quatro clientes pagantes**: eles usam a 🔧 implementação, deploy separado.
+**Status:** vigente. Migration `20260825120000_adhoc_como_padrao.sql` escrita e **não aplicada**.
+
+### D-052 · 2026-08-25 · A suíte de avaliação fica pela metade, de propósito
+**Decisão:** o arnês de avaliação foi escrito e roda (`npm run avaliacao`), com **14** perguntas onde
+o plano pede 25–30. A lista **não** foi completada.
+**Por quê:** as 14 cobrem as verificações mecânicas que o plano nomeia e as regras do prompt do A3
+que já custaram caro, mas dependem de suposições sobre as colunas da base — se uma suposição estiver
+errada, o teste **mede a coisa errada e passa**. Uma suíte cheia de perguntas que ninguém faria mede
+a coisa errada com confiança, que é pior que medir pouco. O que falta é conversa com quem usa a
+base, não mais linhas no arquivo.
+**Rejeitado:** (a) **gerar 25–30 perguntas plausíveis** para bater a meta do plano — número de
+perguntas não é a métrica; (b) **automatizar a metade de julgamento** ("a resposta está boa?") — um
+`expect` sobre prosa mediria presença de palavra-chave, e daria verde para uma resposta errada bem
+escrita. O julgamento fica humano, e o runner imprime tudo o que ele precisa ler.
+⛔ Ela roda **fora do `npm test`**, por dois mecanismos independentes (config própria e extensão
+`*.eval.ts`): chama modelo de verdade, e no CI ficaria cara e instável — o I-10 mostrou que um teste
+que falha por motivo alheio ao código destrói a confiança na suíte inteira, não só nele.
+**Status:** vigente, incompleta por decisão. ⭐ O que rende mais para completá-la são as perguntas
+que o 👤 **já viu o chat errar**.
+
+

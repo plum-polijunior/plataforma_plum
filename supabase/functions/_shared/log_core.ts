@@ -46,12 +46,36 @@
  * simplesmente não precisa existir.
  */
 
-/** As etapas do caminho atual. O remake acrescenta as suas ao CHECK da tabela. */
+/**
+ * As etapas das duas cadeias. Ambas já estão no CHECK da tabela.
+ *
+ * ⚠️ **As cinco do remake faltavam aqui desde o B06**, e ninguém viu porque
+ * `supabase/functions/` nunca foi typechecado: `deno check` não roda no CI, o
+ * `npm run build` é `vite build` (esbuild, que só remove tipos) e o
+ * `tsconfig.app.json` cobre só `src/`. Eram 9 dos 19 erros que apareceram na
+ * primeira vez que alguém rodou `deno check` neste arquivo, em 2026-08-25.
+ *
+ * ⭐ Elas são a sequência de um turno `ad_hoc`, em ordem: `porteiro` →
+ * (`executor` para o vocabulário) → `planejador` → `executor` → `interprete`.
+ * `reconhecedor` saiu do caminho no B15 e fica no tipo de propósito — o
+ * `plum_logs` tem linhas históricas com ela, e um tipo que não as descreve
+ * mentiria sobre o que existe na tabela.
+ */
 export type EtapaLog =
+  // O caminho legado (Agente Z/A/C).
   | "guard"
   | "plan_query"
   | "execute_plan"
-  | "synthesize_answer";
+  | "synthesize_answer"
+  // O remake (`ad_hoc`).
+  | "porteiro"
+  | "reconhecedor"
+  | "planejador"
+  | "interprete"
+  /** Ida ao Lambda. ⚠️ NUNCA rotular com o nome do agente seguinte: rotular a
+   *  leitura de `metadados` como `reconhecedor` produzia duas linhas do mesmo
+   *  agente no turno e contava o custo em dobro (visto no B06). */
+  | "executor";
 
 export type StatusLog =
   | "ok"
@@ -83,6 +107,24 @@ export interface LinhaDeLog {
   linhasOrigem?: number | null;
   linhasBrutasEntregues?: number | null;
   cacheHitA2?: boolean | null;
+  /**
+   * ⭐ Quantas presunções o A3 declarou naquele turno.
+   *
+   * ⚠️ **Ela era escrita pelo chamador, existia no banco e NÃO era mapeada** —
+   * `presuncoes_qtd` ficou `NULL` em toda linha desde o B07. Achado em
+   * 2026-08-25, na primeira vez que alguém rodou `deno check` nesta pasta: o
+   * campo nem estava nesta interface, então o objeto literal do
+   * `handleAdHocPlanejar` era um erro de tipo que nada checava.
+   *
+   * ⭐ E é justamente a métrica do critério de pronto do B15: *"efeito esperado,
+   * e vale medir: menos presunções. Se o número não cair, o dicionário não está
+   * sendo lido de verdade."* O número não estava sendo gravado — o critério não
+   * teria como ser avaliado.
+   *
+   * É exatamente o modo de falha que o comentário do `montarLinha` avisa, por
+   * omissão em vez de por typo: coluna que ninguém mapeia vira `NULL` calado.
+   */
+  presuncoesQtd?: number | null;
   /**
    * ⭐ O que o agente devolveu naquela etapa: o veredito do Z, o Query Plan do
    * A, o texto do C. É o que responde *"por que a resposta ficou ruim?"* — a
@@ -139,6 +181,7 @@ export function montarLinha(
     linhas_origem: linha.linhasOrigem ?? null,
     linhas_brutas_entregues: linha.linhasBrutasEntregues ?? null,
     cache_hit_a2: linha.cacheHitA2 ?? null,
+    presuncoes_qtd: linha.presuncoesQtd ?? null,
     resposta_agente: linha.respostaAgente ?? null,
   };
 }

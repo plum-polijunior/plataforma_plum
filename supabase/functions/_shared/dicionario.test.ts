@@ -8,7 +8,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { colunasComVocabulario, lerDicionario, paraPrompt } from "./dicionario.ts";
+import {
+  colunasComVocabulario,
+  lerDicionario,
+  normalizarDicionario,
+  paraPrompt,
+} from "./dicionario.ts";
 
 /** O formato que está gravado hoje, exatamente como o cadastro o escreve. */
 const V1 = {
@@ -191,5 +196,77 @@ describe("paraPrompt", () => {
     expect(comGrao).toContain("GRÃO");
     expect(comGrao).toContain("uma venda");
     expect(comGrao).toContain("OBSERVAÇÕES");
+  });
+});
+
+describe("normalizarDicionario — o dicionário que voltou do cliente (B15)", () => {
+  it("⭐ ida e volta preserva tudo", () => {
+    // O `ad_hoc` é duas invocações e o dicionário atravessa o cliente entre
+    // elas. Se esta identidade quebrar, o A3 recebe menos do que o cadastro
+    // escreveu — e a perda é silenciosa, porque `lerDicionario` tem default
+    // para tudo e o prompt sai plausível de qualquer jeito.
+    const original = lerDicionario({
+      versao: 2,
+      grao: "uma venda",
+      observacoes: ["custo_produto tem 40% vazio"],
+      columns: {
+        faturamento: {
+          semantic_definition: "receita líquida da venda",
+          formatting_rule: { type: "moeda_brl", params: {} },
+          papel_analitico: "medida",
+          vocabulario_util: false,
+        },
+        regiao: {
+          semantic_definition: "região comercial",
+          formatting_rule: { type: "texto_trim_maiusculas", params: {} },
+          papel_analitico: "dimensao",
+          vocabulario_util: true,
+        },
+      },
+    });
+
+    // JSON.parse(JSON.stringify(...)) é o que a rede faz de verdade.
+    const voltou = normalizarDicionario(JSON.parse(JSON.stringify(original)));
+    expect(voltou).toEqual(original);
+  });
+
+  it("preserva `versao` — é ela que decide se o A3 desconfia de tudo", () => {
+    // ⚠️ Perder a `versao` na volta seria o pior caso possível: um dicionário
+    // v1 chegaria ao A3 como conferido, e ele pararia de declarar as presunções
+    // que a base não conferida exige. `lerDicionario` trata ausente como 1, e é
+    // por isso que o erro cairia para o lado seguro — mas cairia calado.
+    const v1 = normalizarDicionario({ versao: 1, colunas: {} });
+    expect(v1.versao).toBe(1);
+    expect(v1.conferido).toBe(false);
+
+    const v2 = normalizarDicionario({ versao: 2, colunas: {} });
+    expect(v2.conferido).toBe(true);
+  });
+
+  it("não lança com nada — nem null, nem lixo, nem forma errada", () => {
+    // Mesma exigência do `lerDicionario`: isto roda no caminho da pergunta, e
+    // um corpo estranho tem de virar dicionário pobre, não turno perdido.
+    for (const lixo of [null, undefined, {}, [], "texto", 42, { colunas: "nao" }]) {
+      expect(() => normalizarDicionario(lixo), JSON.stringify(lixo) ?? "undefined")
+        .not.toThrow();
+    }
+    expect(normalizarDicionario(null).colunas).toEqual({});
+  });
+
+  it("papel inválido vindo do cliente cai no default, não passa", () => {
+    // O cliente não decide papel. Um valor fora do enum tem de cair na regra do
+    // leitor (pelo formato), nunca entrar no prompt como se fosse declarado.
+    const d = normalizarDicionario({
+      versao: 2,
+      colunas: {
+        faturamento: {
+          conceito: "receita",
+          papel_analitico: "inventado",
+          vocabulario_util: false,
+          formatacao: "moeda_brl",
+        },
+      },
+    });
+    expect(d.colunas.faturamento.papel_analitico).toBe("medida");
   });
 });

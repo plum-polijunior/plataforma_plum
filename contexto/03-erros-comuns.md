@@ -41,6 +41,11 @@ atualizado_em: 2026-08-25
 | O cadastro começa com um upload de arquivo | **Não existe upload** desde o B13. Cola-se o link, e a planilha é a fonte desde a etapa 0 — não há `FileReader` no front | `01-o-que-e-o-plum.md` |
 | O pipeline de importação não lê a planilha | **Lê, e desde a primeira tela** — cabeçalho na etapa 0, 20 linhas na etapa 2. Era verdade até o B13, e o I-08 nasceu disso | `31-incidentes-e-licoes.md` I-08 |
 | A tabela antes-vs-depois da formatação sempre existiu | Foi **documentada** desde sempre e **renderizada só em 2026-08-25**. Até então a revisão era só a frase da IA | `30-decisoes.md` D-048 |
+| `npm run build` faz typecheck | ⛔ **Não faz.** É `vite build` — esbuild só REMOVE tipos. E `npx tsc --noEmit` na raiz checa **zero arquivos** (`"files": []`). Os que enxergam: `npx tsc -p tsconfig.app.json --noEmit` e `deno check` | `31-incidentes-e-licoes.md` I-11 |
+| "O build passou" significa que compila | Significa que o esbuild não reclamou. Um `ReferenceError` de 40 identificadores inexistentes passou por ele | `31-incidentes-e-licoes.md` I-11 |
+| `plum_logs.presuncoes_qtd` tem dado histórico | Era **`NULL` em toda linha** até 2026-08-25: a coluna existia, o código a passava, o mapeamento não a incluía | `31-incidentes-e-licoes.md` I-12 |
+| O A2 Reconhecedor roda no chat | **Saiu do caminho em 2026-08-25.** O A3 lê o dicionário escrito no cadastro; `reconhecedor` não aparece em turno novo | `30-decisoes.md` D-049 |
+| A definição semântica que o usuário escreve chega ao chat | Só desde 2026-08-25. Antes ela era **apenas o hash** da chave do cache do A2 — o remake havia regredido nisso | `30-decisoes.md` D-049 |
 
 ## Sobre o executor
 

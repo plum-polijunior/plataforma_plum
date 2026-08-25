@@ -53,8 +53,17 @@ desde a primeira tela, e é dela que sai tudo o que as etapas mostram. As etapas
 2. **Formatação** — na entrada desta etapa o Plum lê **20 linhas** da planilha (a única leitura de
    dado do cadastro). A IA propõe regras de limpeza/tipagem e mostra o **antes-e-depois nas 10
    primeiras linhas**; **o humano revisa olhando o dado**, não só a explicação (D-048).
-3. **Semântica** — a IA propõe a definição de negócio de cada coluna, reusando aquelas 20 linhas;
-   **o humano revisa** (R-06). O `schema_metadata` é salvo no fim desta etapa.
+3. **Semântica** — a IA recebe o **perfil da base inteira** (cardinalidade, vazios, min/max), as 20
+   linhas e o **vocabulário** das colunas de texto, e propõe: a definição de negócio de cada coluna,
+   o **grão** (o que uma linha representa), até três **observações**, e por coluna o **papel
+   analítico** e se o chat pode consultar a lista de valores dela. **O humano revisa tudo** (R-06) —
+   é essa revisão que separa este dicionário de uma dedução automática. O `schema_metadata` é salvo
+   no fim, com `versao: 2`.
+
+⭐ **Desde 2026-08-25 o cadastro é o único lugar onde a base é descrita.** O chat tinha um agente
+próprio para isso (o Reconhecedor), que deduzia as mesmas coisas em toda pergunta, sem ver nenhuma
+linha e sem ninguém conferir. Ele foi absorvido por esta etapa e adiado para quando houver várias
+planilhas. Ver `30-decisoes.md` D-049.
 
 Os seis agentes do cadastro rodam no modelo de raciocínio, não no rápido: o que eles escrevem é
 permanente e o custo é por base, não por pergunta (D-047).

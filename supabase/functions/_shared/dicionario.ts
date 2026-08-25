@@ -193,6 +193,50 @@ export function lerDicionario(schemaMetadata: unknown): Dicionario {
 }
 
 /**
+ * Normaliza um dicionário que **voltou do cliente**, entre as duas invocações.
+ *
+ * ⭐ Por que existe: o `ad_hoc` é dividido em duas invocações (o turno inteiro
+ * numa só encadeava cinco idas à rede e a função morria antes de responder), e o
+ * dicionário atravessa o cliente no meio. O que chega em `ad_hoc_planejar` é
+ * JSON de fora — pode vir truncado, editado ou de uma versão anterior do front.
+ *
+ * ⚠️ **Isso é seguro pela mesma razão que os `pedidos`: nada aqui é decisão de
+ * autorização.** O `authorizePlan` roda no servidor sobre o plano final e a
+ * barreira 4 do Lambda reconfere contra o `allowed_columns` lido com o JWT.
+ * Dicionário adulterado muda o que o A3 *acredita* sobre a base, não o que ele
+ * *pode ler* — no pior caso a pessoa recebe uma resposta ruim sobre a própria
+ * base, com as colunas que ela já podia ver.
+ *
+ * A implementação é um adaptador de forma: reescreve `Dicionario` de volta no
+ * formato do `schema_metadata` e reusa `lerDicionario`, para os defaults ficarem
+ * num lugar só. Duplicá-los aqui seria criar o segundo interpretador que este
+ * arquivo existe para não ter.
+ */
+export function normalizarDicionario(cru: unknown): Dicionario {
+  const d = (cru ?? {}) as Partial<Dicionario>;
+  const colunas = (d.colunas && typeof d.colunas === "object" && !Array.isArray(d.colunas)
+    ? d.colunas
+    : {}) as Record<string, Partial<ColunaDoDicionario>>;
+
+  const columns: Record<string, unknown> = {};
+  for (const [nome, c] of Object.entries(colunas)) {
+    columns[nome] = {
+      semantic_definition: c?.conceito,
+      papel_analitico: c?.papel_analitico,
+      vocabulario_util: c?.vocabulario_util,
+      formatting_rule: { type: c?.formatacao },
+    };
+  }
+
+  return lerDicionario({
+    versao: d.versao,
+    grao: d.grao,
+    observacoes: d.observacoes,
+    columns,
+  });
+}
+
+/**
  * As colunas cujo vocabulário vale buscar, em ordem estável.
  *
  * Espelha `colunasComVocabularioUtil` de `reconhecimento.ts`, que sai de cena

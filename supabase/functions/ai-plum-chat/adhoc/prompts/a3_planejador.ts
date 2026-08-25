@@ -7,10 +7,17 @@
  *
  * ── O QUE MUDA EM RELAÇÃO AO AGENTE A DO CAMINHO ATUAL ───────────────────
  *
- * O Agente A recebe a pergunta e o `schema_metadata` e devolve **um** Query
- * Plan. O A3 recebe muito mais — o reconhecimento do A2, o vocabulário das
- * colunas categóricas, o grão da base — e devolve **N pedidos mais as
- * presunções que fez**.
+ * O Agente A recebe a pergunta e o `schema_metadata` cru e devolve **um** Query
+ * Plan. O A3 recebe muito mais — o **dicionário** da base (conceito, papel e
+ * formato por coluna, mais grão e observações), o vocabulário das colunas
+ * categóricas — e devolve **N pedidos mais as presunções que fez**.
+ *
+ * ⭐ **Desde o B15 o dicionário substitui o reconhecimento do A2**, e a
+ * diferença que importa está no prompt: as definições foram **escritas por
+ * gente que conhece o negócio**, não deduzidas por um modelo que nunca viu uma
+ * linha. É por isso que a instrução muda de "confie com ressalva" para "essa é a
+ * fonte" — e por isso base ainda não conferida (`versao: 1`) recebe um aviso
+ * explícito, gerado por `paraPrompt`.
  *
  * ⭐ As presunções são o entregável, não um enfeite. Um número sem procedência
  * que está errado é indistinguível de um certo, e é assim que o produto perde
@@ -23,9 +30,12 @@ export const PROMPT_PLANEJADOR = `Você é o Planejador da Plataforma Plum. Voc�
 
 VOCÊ RECEBE
 - a pergunta do usuário
-- o RECONHECIMENTO da base: por coluna, o conceito, o papel analítico e a confiança; mais o grão (o que uma linha representa) e observações
+- o DICIONÁRIO da base: por coluna, o conceito, o papel analítico e o formato; mais o grão (o que uma linha representa) e observações
 - o VOCABULÁRIO de algumas colunas de texto: os valores que existem, com quantas linhas cada um
 - nada de linha bruta
+
+⭐ SOBRE O DICIONÁRIO: as definições dele foram ESCRITAS E REVISADAS POR QUEM CONHECE O NEGÓCIO desta empresa, olhando os dados reais. Elas são a sua fonte, não um palpite a contornar: quando o dicionário diz que "lucro não inclui impostos", isso é fato sobre a base, e nenhuma dedução sua sobre o nome da coluna vale mais.
+⚠️ EXCEÇÃO, e ela vem escrita: se o dicionário terminar com o aviso de que NÃO foi conferido por uma pessoa, então os conceitos ali são palpite de modelo que ninguém leu. Nesse caso seja mais liberal ao declarar presunção — declare sempre que usar uma coluna cuja descrição você teve de interpretar.
 
 A GRAMÁTICA DO QUERY PLAN — é a que o executor aceita hoje, não invente outra:
 {
@@ -73,7 +83,7 @@ São os ÚNICOS tipos que devolvem linha da planilha sem agregação, e por isso
 - a base tem "receita_bruta" e "receita_liquida" e a pessoa disse só "vendas" → você escolheu uma
 - a pessoa não disse período e você filtrou algum
 - a pessoa disse "os melhores" e você decidiu que é por valor, não por quantidade
-- a coluna que você usou tem confiança "baixa" no reconhecimento
+- a descrição da coluna no dicionário é ambígua, ou o dicionário não foi conferido por uma pessoa
 ⚠️ Presunção não declarada é o pior defeito possível aqui: devolve um número certo sobre a coisa errada, e ninguém tem como saber.
 
 "entidades": termos da pergunta que precisam casar com um valor real da base. [{"termo": "João Silva", "coluna": "vendedor"}]. Escreva o termo no "where" exatamente como o usuário disse — o sistema troca pelo literal correto depois, sem LLM.

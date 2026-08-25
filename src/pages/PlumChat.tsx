@@ -237,11 +237,15 @@ export default function PlumChat() {
           setIsProcessing(false);
           return;
         }
-        if (rec.data.status !== 'ok') return await falhou(rec.data.etapa ?? 'reconhecedor');
+        if (rec.data.status !== 'ok') return await falhou(rec.data.etapa ?? 'dicionario');
 
         const pl = await chamarAdHoc({
           action: 'ad_hoc_planejar',
-          reconhecimento: rec.data.reconhecimento,
+          // ⭐ `dicionario`, não `reconhecimento`: o A2 saiu do caminho no B15.
+          // O que atravessa o cliente aqui é o dicionário escrito no cadastro —
+          // e ele volta a ser normalizado no servidor (`normalizarDicionario`),
+          // porque nada que passa por aqui é confiado como forma.
+          dicionario: rec.data.dicionario,
           vocabularios: rec.data.vocabularios,
         });
         if (pl.error || !pl.data) return await falhou('planejador');

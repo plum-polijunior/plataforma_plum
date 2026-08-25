@@ -33,10 +33,31 @@ ECR → Lambda, via OIDC (`infra/aws/`).
 ```sh
 npm install
 npm run dev          # Vite em http://localhost:8080 (host "::")
-npm run build        # typecheck + build de produção — use como verificação
+npm run build        # ⚠️ SÓ BUILD, sem typecheck — ver abaixo
 npm run lint         # eslint
-npx tsc --noEmit     # só tipagem
 ```
+
+⚠️⚠️ **NÃO EXISTE TYPECHECK NO CAMINHO PADRÃO, e as duas linhas que este arquivo tinha aqui eram
+falsas** (corrigido em 2026-08-25, depois de um `ReferenceError` chegar à tela do usuário):
+
+| comando | o que ele NÃO faz |
+|---|---|
+| `npm run build` | é `vite build`. **esbuild só REMOVE tipos**, não os checa. Passa com identificador inexistente |
+| `npx tsc --noEmit` | checa **ZERO arquivos**: o `tsconfig.json` da raiz tem `"files": []` e só *references*. Silêncio dele é lista vazia, não aprovação |
+
+⭐ **Os comandos que enxergam de verdade:**
+
+```sh
+npx tsc -p tsconfig.app.json --noEmit    # o front (src/)
+npx --yes deno check supabase/functions/<nome>/index.ts   # uma Edge Function
+```
+
+⚠️ O `deno check` precisa de `nodeModulesDir: "auto"` num `deno.json` (o `_shared/llm/claude.ts`
+importa o SDK da Anthropic de `npm:`). Nenhum dos dois está no CI —
+`contexto/20-pendencias.md` tem o item, e `31-incidentes-e-licoes.md` I-11 tem a história.
+
+⛔ **"O build passou" não é evidência de nada neste repositório.** Antes de escrever essa frase,
+rode um dos dois comandos acima.
 
 Testes automatizados, em três frentes:
 
@@ -138,6 +159,11 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `supabase/functions/dashboard-agent/` | ⚠️ criar card a partir de pergunta (`gerar_card`) + `executar_previa`. **Dois** agentes dentro de `gerar_card`: Z-dash (escopo) e Tarsila do Amaral (planejador) — §5. Prompt de planejamento **próprio**, separado do Agente A do chat (decisão D1) — mexeu na gramática do plano? mexeu aqui também. Ficou **em produção sem existir em commit nenhum** até 2026-08-11 |
 | `supabase/functions/ai-agents/` | pipeline de importação (agentes 0/1/2/3/3.1) |
 | `supabase/functions/_shared/query_plan.ts` | ⭐ **único** interpretador de Query Plan (extrai colunas p/ RBAC) |
+| `supabase/functions/_shared/dicionario.ts` | ⭐ **único** leitor do `schema_metadata`. Tolera v1 e v2 para sempre, nunca lança. `paraPrompt` é o que o A3 recebe |
+| `supabase/functions/_shared/perfil.ts` | ⭐ as regras determinísticas de `papel_analitico`/`vocabulario_util`. **Dois** consumidores (`ai-agents` e `ai-plum-chat`) precisam concordar — divergir faz o dicionário afirmar o que ninguém conferiu |
+| `supabase/functions/_shared/llm_core.ts` | ⭐ a tabela papel→modelo. **Todo ID de modelo mora aqui**, e só aqui |
+| `supabase/functions/ai-agents/prompts/` | um arquivo por agente do cadastro, desde o B14 |
+| `testes/avaliacao/` | a suíte que chama modelo de verdade. `npm run avaliacao`, **fora** do `npm test` |
 | `infra/aws/PASSO-A-PASSO.md` | ⭐ fonte única de verdade do executor — **não duplicar** |
 | `testes/chat/` | roteiros de validação **manual** — não roda no CI (ver README lá) |
 | o PRD antigo (apagado em 2026-08-14) | visão/roadmap — **NÃO** é o schema real (§3) |
@@ -305,7 +331,7 @@ executor Python (ver abaixo).
 | `action` | Agente | Função |
 |---|---|---|
 | `guard` | 0 — Guardião | `PERMITIDO` / `BLOQUEADO`; barra prompt injection e off-topic |
-| `predict_semantics` | 1 | gera definição semântica por coluna a partir de cabeçalho + amostras |
+| `predict_semantics` | 1 | ⭐ **o dicionário v2 inteiro**: definição semântica, `papel_analitico` e `vocabulario_util` por coluna, mais `grao` e `observacoes` da base. Recebe perfil + 20 linhas + vocabulário. **Absorveu o A2 do chat** (D-049) |
 | `refine_semantics` | 2 | melhora as definições editadas pelo usuário para consumo por LLM |
 | `format_data` | 3 | gera `formattingRules` + `formattedSamples` (as **10** primeiras linhas transformadas, `LINHAS_NO_ANTES_DEPOIS`) |
 | `refine_format` | 3.1 | altera **apenas** a regra pedida, preserva as outras, re-aplica às amostras |
@@ -313,9 +339,14 @@ executor Python (ver abaixo).
 
 ⚠️ **Todos os seis rodam no `MODELOS.RACIOCINIO`** (`gemini-3.1-pro-preview`) desde
 2026-08-25, não no Flash — o que eles escrevem entra no `schema_metadata` e vale para toda
-pergunta futura sobre a base, e o custo é por base, não por pergunta. O ID vem da tabela de
-`_shared/llm_core.ts`; antes era o literal `gemini-3.5-flash` cravado na URL, invisível para
-ela, e por isso ficou duas versões atrás.
+pergunta futura sobre a base, e o custo é por base, não por pergunta (D-047). Papéis:
+`guardiao`, `formatador`, `semantico`, `suporte`.
+
+⭐ **Desde o B14 os prompts vivem em `ai-agents/prompts/`, um por agente, e toda chamada passa por
+`_shared/llm.ts`** — o `ai-agents` era a última função de produção fora da abstração de provedor
+(item C2; sobra o `dashboard-agent`, fora de escopo). Antes o modelo era o literal
+`gemini-3.5-flash` cravado na URL, invisível para a tabela que existe para ser o único lugar de
+subir versão — e por isso ficou duas versões atrás sem ninguém notar.
 
 **Pipeline de 4 etapas** (⚠️ eram 5, e o upload sumiu no B13 — não há mais `FileReader`,
 `<input type="file">` nem parser de planilha no front): (0) **conectar** — cola-se a URL, e a
@@ -699,7 +730,10 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 
 ## 9. Antes de terminar qualquer alteração
 
-- [ ] `npm run build` passa (typecheck incluído).
+- [ ] ⚠️ **Typecheck de verdade**, porque `npm run build` NÃO faz (§1):
+      `npx tsc -p tsconfig.app.json --noEmit` (front) e
+      `npx --yes deno check supabase/functions/<mexida>/index.ts` (Edge Function).
+      `npm run build` e `npm test` também, mas nenhum dos dois pega identificador inexistente.
 - [ ] Mexeu no schema? Migration idempotente + `types.ts` atualizado + bloco de verificação.
 - [ ] Mexeu em RLS/policy? Checou `organization_id = current_org_id()` **e** status;
       rodou `supabase/tests/*.sql`.
