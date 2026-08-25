@@ -67,14 +67,26 @@ registrar o uso desta consulta"* em vez da resposta.
 ### 3. Veja o saldo consumido
 
 ```sql
-select sum(linhas_brutas_entregues) as gasto_24h
+select
+  user_id,
+  dataset_id,
+  coalesce(sum(linhas_brutas_entregues), 0) as gasto_24h
 from plum_logs
-where user_id = auth.uid()
-  and dataset_id = '<o id da base que você usou>'
-  and created_at > now() - interval '24 hours';
+where caminho = 'ad_hoc'
+  and linhas_brutas_entregues > 0
+  and created_at > now() - interval '24 hours'
+group by user_id, dataset_id
+order by gasto_24h desc;
 ```
 
-Este número é o seu orçamento gasto. O teto é **200**.
+Uma linha por **pessoa × base** — que é exatamente a chave do orçamento. A sua é a do seu `user_id`
+(`select id, email from auth.users where email = 'seu@email'` se precisar dele). O teto é **200**.
+
+⛔ **Não use `auth.uid()` aqui.** No SQL Editor você entra como `postgres`, sem JWT na sessão, então
+`auth.uid()` devolve `NULL` — `user_id = NULL` não casa com nada e a soma volta `NULL`. É um
+resultado enganoso: parece "não gastei nada" e na verdade é "a consulta não achou linha nenhuma".
+O `coalesce` acima existe para essa distinção: `0` é gasto zero, e a **ausência de linha** é a base
+não aparecer na lista.
 
 ⚠️ **Ele é por pessoa, por base.** Um colega gastando a cota dele não mexe na sua, e outra base tem
 saldo próprio. Se você quiser zerar para testar de novo, use outra base — ⛔ **não apague linha do

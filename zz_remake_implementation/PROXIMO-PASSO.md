@@ -53,12 +53,32 @@ quebrado pra remake habilitado"*). Falha agora aparece na tela, nomeando a etapa
 
 ## 🤖 O que fica engatilhado para mim
 
-**A Etapa 1 está escrita inteira.** Não há próximo bloco.
+**A Etapa 1 está escrita inteira.** O próximo bloco é o **B11**, da Etapa 2 — o plano está em
+`zz_remake_implementation/PLANO-etapa-2.md`.
 
-⚠️ **O que falta para fechá-la não é código:** a suíte de **25–30 perguntas de avaliação** (V3 §6).
-Sem usuário real, é o único critério de parada que o remake tem, e o prompt do A3 — *o artefato mais
-importante da etapa* (V7 §9) — continua sem ninguém dizendo se ele planeja **bem**. Os blocos
-conferem a **forma** do que ele devolve, nunca a qualidade. Continua sem responsável nomeado.
+⭐ **A Etapa 2 mudou de conteúdo em relação ao V3.** O achado que a motiva: a `semantic_definition`
+que o usuário escreve no cadastro **nunca chega a nenhum agente do `ad_hoc`** — ela só é hasheada
+para a chave do cache do A2, enquanto o caminho legado a usa nos três prompts. O remake regrediu
+nisso sem ninguém notar.
+
+⭐⭐ **E uma mudança maior, decidida em 2026-08-21: a URL da planilha vira a etapa 1 do cadastro e o
+upload de arquivo é removido.** Hoje o cadastro descreve um `.xlsx` e o chat consulta um Google
+Sheets, sem nada garantindo que sejam a mesma planilha — **C11 e C12 são as duas faces disso**. Com
+uma fonte só, elas deixam de ser possíveis em vez de serem consertadas, e a **C4** vira
+desnecessária.
+
+Sete blocos: **B11** ✅ dicionário v2 + leitor único · **B12** ler a planilha antes de existir permissão
+(`cabecalhos` no Lambda + `TETO_DE_CADASTRO = 20`) · **B13** a inversão do cadastro, que passa a ter
+**4 passos** · **B14** `ai-agents` reorganizado e as etapas 3 e 4 em raciocínio, com a 4 absorvendo o
+A2 · **B15** o A3 recebe o dicionário e o A2 sai do chat · **B16** `ad_hoc` como padrão · **B17** a
+suíte de avaliação.
+
+⚠️ **B12 antes de B13, sem exceção** — o cadastro invertido não funciona sem quem leia a planilha.
+E **`confianca` sai**: com a etapa 4 assistida, não sobra campo deduzido sem humano olhando.
+
+⚠️ **A suíte de avaliação vem DEPOIS do padrão** (decisão do 👤). O risco de apontar o chat para um
+caminho não medido é real; o que o limita é o B15 manter a chave como escape hatch — voltar é um
+`UPDATE`, sem deploy.
 
 ⭐ **O que resta do B08 é uma decisão, não código:** ligar ou não o teto de cardinalidade no caminho
 legado, com o dado que o modo observação do B02 vem acumulando (`[adhoc-observacao]` no CloudWatch).
@@ -72,7 +92,8 @@ legado, com o dado que o modo observação do B02 vem acumulando (`[adhoc-observ
   B09 e B10 commitados, esperando o deploy do `ai-plum-chat`**.
 - ⭐ **Com a chave ligada, só o `ad_hoc` responde** — sem queda para o legado. Falha vira mensagem na
   tela nomeando a etapa.
-- **Testes:** 374 Python, 286 TypeScript, `tsc` limpo, lint na baseline.
+- **Etapa 2:** **B11 feito** (leitor do dicionário, sem consumidor ainda). Próximo: **B12**.
+- **Testes:** 374 Python, 313 TypeScript, `tsc` limpo, lint na baseline.
 - **Bloqueante da etapa, sem dono:** as **25–30 perguntas de avaliação**. Não bloqueia nenhum bloco.
 
 ## Pontas soltas

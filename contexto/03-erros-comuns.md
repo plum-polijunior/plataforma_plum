@@ -66,6 +66,8 @@ atualizado_em: 2026-08-18
 | `version` provando que o deploy subiu | `version` sobe em mudança de secret, sem código novo. Só `ezbr_sha256` prova | `31-incidentes-e-licoes.md` I-03 |
 | ⭐ **RLS substituindo GRANT** | ⚠️ São camadas independentes. Sem `GRANT`, o Postgres recusa antes de olhar policy, com `permission denied for table` — que **não parece** erro de RLS. Cinco vezes neste projeto | `supabase/migrations/CLAUDE.md` |
 | ⭐ Teste verde significando artefato certo | ⚠️ Os testes rodam contra o **repositório**, não contra a imagem nem contra o bundle. Um `COPY` faltando no Dockerfile passa por toda a suíte e derruba o Lambda | `31-incidentes-e-licoes.md` I-09 |
+| ⭐ Deletar um dataset apaga só o dataset | ⛔ **`dashboard_cards` e `role_permissions` são `ON DELETE CASCADE`**: somem junto todos os cards daquela base e a matriz de permissões curada à mão. `plum_chat` e `plum_logs` são `SET NULL` e ficam órfãos. E recadastrar sem deletar gera **uuid novo**, que órfã os cards do mesmo jeito | `20-pendencias.md` C13 |
+| ⭐ `auth.uid()` funcionando no SQL Editor | ⚠️ Lá a sessão é `postgres`, **sem JWT** — `auth.uid()` devolve `NULL`, `user_id = NULL` não casa com nada e `sum()` sobre zero linhas volta `NULL`. Parece "gastei zero" e é "não achei linha". SQL de conferência não pode depender de token | `execucao/B10-registro-amostra/MANUAL.md` |
 
 ## Sobre front e segurança
 
