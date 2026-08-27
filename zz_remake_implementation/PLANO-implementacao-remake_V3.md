@@ -482,6 +482,17 @@ aceitou várias tabelas. É `main.py:164-169`, que monta `{"producao": df}` e **
 tabela inexistente em vez de **levantar** — alinhar com `MissingColumnError`, senão `from` errado
 vira card vazio em silêncio; (c) cruzamento acontece **depois** da agregação e exige grão declarado.
 
+adições à etapa 3:
+o usuário poderá colocar "observações" em minha base de dados como contexto adicional para o gemini (Ex: considere apenas vendas faturadas para a receita)
+
+ao clicar em refinar semântica, na etapa 4, ele refina a semântica de TODOS os itens, até mesmo os que já estavam certos. mudar pra refinar a semântica somente dos que sofreram alterações do usuário. ou seja, o agente 3.1 só refina a semântica dos contextos que o usuário editou do agente 3
+
+cenário: cadastro uma planilha (concluo as 4 etaps) e ela aparece em "minha base de dados". Agora, clico em "conectar planilha", cadastro a MESMA planilha, e o banco de dados segue como se nada tivesse acontecido. deveria aparecer "planilha já cadastrada" ou "já existe um rascunho dessa planilha". para isso, como os links dos sheets podem ser diferentes, faça um método de análise para bloquear o cadastro de planilhas já cadastradas, ou com rascunho, analisando se elas possuem as mesmas colunas, por exemplo
+
+ao cadastrar uma planilha (concluir as 4 etaps), clicar em "conectar nova planilha" e recadastrá-la, o banco de dados não armazena os dados da nova planilha. deveria aparecer "planilha já cadastrada" ou "já existe um rascunho dessa planilha"
+
+ao cadastrar uma planilha, e mudar uma coluna dela ou adicionar uma coluna no google sheets, tem que recadastrá-la. por isso, permita que em "editar esquema" em minha base de dados, edite o nome da coluna a adicionar uma coluna manualmente (sem ia para essa etapa)
+
 ## Etapa 4 — ⭐ a morte do Tarsila · 2 semanas
 
 Criar card deixa de ser "descreva o que você quer" e vira **"salvar esta resposta como card"** — o
@@ -491,6 +502,9 @@ card nasce de uma resposta que o usuário **já conferiu**. `dashboard-agent` é
 passa a ter dois consumidores.
 ⚠️ **Só depois da Etapa 2** — se o `ad_hoc` não se provar na avaliação, o produto fica sem criar
 cards.
+
+adições à etapa 4:
+entre o agente a1_porteiro e o agente a3_reconhecedor existe um espaço para um a2. e esse será o a2_encaminhador. ele encaminhará o prompt do usuário para o a3_reconhecedor (que é um agente pau pra toda obra) ou para outro agente mais específico (por exemplo, um agente que está conectado à um lambda que plota e estrapola gráficos para predição). por mais que ainda não exista nenhum outro agente para reconhecimento além do a3 em produção, é bom deixar a arquitetura pronta. o a2 deverá conhecer a função de todos os agentes e ser gemini-3.7.
 
 ## Etapa 5 — dicionário camadas 3 e 4 + memória · 3–4 semanas
 

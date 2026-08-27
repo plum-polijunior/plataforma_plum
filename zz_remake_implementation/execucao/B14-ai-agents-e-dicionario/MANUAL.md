@@ -33,6 +33,20 @@ npx supabase functions list --project-ref rjwidarrsykufuifzunu
 
 O front sai no push da Vercel.
 
+⚠️⚠️ **FRONT E `ai-agents` SÃO PAR INDIVISÍVEL — e o sintoma da metade é silencioso.**
+
+O `predict_semantics` mudou de forma: devolvia `{coluna: "definição"}` e passou a devolver
+`{columns: {...}, grao, observacoes}`. Front **antigo** com função **nova** guarda o objeto inteiro
+onde esperava o mapa, e o resultado é: **todas as caixas de definição em branco**, sem grão, sem
+papel e sem o interruptor de vocabulário — sem erro nenhum na tela.
+
+⇒ **Depois do deploy, recarregue a página com cache limpo** (Ctrl+Shift+R) e confirme que a etapa 4
+mostra o campo *"O que UMA LINHA da planilha representa?"*. Se não mostrar, o bundle é antigo — não
+adianta investigar o agente.
+
+⭐ Desde 2026-08-25 o front avisa: se nenhuma coluna vier descrita, aparece *"As definições vieram
+vazias"*. O perigo não era a tela vazia, era **salvar** por cima dela.
+
 ## Depois — cadastre a `plum_base_suja` de novo
 
 ⚠️ **Não delete a base anterior.** Cadastre como nova; deletar levaria os cards e a matriz de

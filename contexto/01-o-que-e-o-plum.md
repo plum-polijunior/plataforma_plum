@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: plataforma
-atualizado_em: 2026-08-25
+atualizado_em: 2026-08-26
 ---
 
 # O que é o Plum (a plataforma)
@@ -59,6 +59,14 @@ desde a primeira tela, e é dela que sai tudo o que as etapas mostram. As etapas
    analítico** e se o chat pode consultar a lista de valores dela. **O humano revisa tudo** (R-06) —
    é essa revisão que separa este dicionário de uma dedução automática. O `schema_metadata` é salvo
    no fim, com `versao: 2`.
+
+⭐ **As observações não são decoração — elas viram presunção declarada na resposta.** Se o plano usa
+uma coluna sobre a qual o dicionário observou alguma coisa, o A3 é obrigado a declará-la; observação
+sobre coluna que o plano não toca, ele ignora. Elas descrevem defeitos que **mudam o número sem
+mudar nada na tela**: coluna meio vazia produz média enganosa, valor de texto com variantes de
+grafia (*"Faturado"*, *"FATURADO"*) conta como duas categorias, e número escrito como texto
+(`"R$ 2.239,06"`) **some calado** de soma, média, mediana e percentil — o total sai menor sem
+nenhum aviso.
 
 ⭐ **Desde 2026-08-25 o cadastro é o único lugar onde a base é descrita.** O chat tinha um agente
 próprio para isso (o Reconhecedor), que deduzia as mesmas coisas em toda pergunta, sem ver nenhuma

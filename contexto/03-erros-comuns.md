@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-25
+atualizado_em: 2026-08-26
 ---
 
 # Erros comuns — o que se acredita e é falso
@@ -58,6 +58,8 @@ atualizado_em: 2026-08-25
 | k-anonimato protege as respostas | **Removido em 2026-08-08.** `suppressed_groups` continua no retorno, sempre `0`. `dashboard_k_min` é vestigial | `30-decisoes.md` D-012 |
 | `limit` no plano protege contra base grande | Corta a **saída**. A entrada é protegida por checagem antes do parse (`RowLimitExceeded`) | `30-decisoes.md` D-015 |
 | Coluna não carregada faz o filtro ser ignorado | É **erro** (`MissingColumnError`). Ignorar daria o total da base com o rótulo do recorte | `30-decisoes.md` D-014 |
+| O executor não sabe lidar com várias tabelas | ⭐ **Sabe desde sempre** — `execute_plan(plan, tables)` resolve `plan["from"]` contra o dicionário de tabelas. Quem não sabe é o `main.py`, que monta `{"producao": df}` e **sobrescreve** `plano["from"] = "producao"`, descartando o `from` do planejador. ⚠️ Esse caminho nunca executou em produção: compila, não rodou | `20-pendencias.md` T8 |
+| O executor sempre avisa quando algo falta | ⛔ Para **tabela** inexistente ele devolve `{"error": …}` em vez de levantar, ao contrário de coluna. Com multi-planilha isso vira card vazio em silêncio | `20-pendencias.md` T8 |
 
 ## Sobre chat, agentes e deploy
 
@@ -75,6 +77,10 @@ atualizado_em: 2026-08-25
 | ⭐ Teste verde significando artefato certo | ⚠️ Os testes rodam contra o **repositório**, não contra a imagem nem contra o bundle. Um `COPY` faltando no Dockerfile passa por toda a suíte e derruba o Lambda | `31-incidentes-e-licoes.md` I-09 |
 | ⭐ Deletar um dataset apaga só o dataset | ⛔ **`dashboard_cards` e `role_permissions` são `ON DELETE CASCADE`**: somem junto todos os cards daquela base e a matriz de permissões curada à mão. `plum_chat` e `plum_logs` são `SET NULL` e ficam órfãos. E recadastrar sem deletar gera **uuid novo**, que órfã os cards do mesmo jeito | `20-pendencias.md` C13 |
 | ⭐ `auth.uid()` funcionando no SQL Editor | ⚠️ Lá a sessão é `postgres`, **sem JWT** — `auth.uid()` devolve `NULL`, `user_id = NULL` não casa com nada e `sum()` sobre zero linhas volta `NULL`. Parece "gastei zero" e é "não achei linha". SQL de conferência não pode depender de token | `execucao/B10-registro-amostra/MANUAL.md` |
+| ⭐⭐ `new Date().toISOString().slice(0,10)` dá "hoje" | ⛔ Dá **hoje em UTC**, e o Brasil é UTC−3: das 21h à meia-noite é o dia seguinte, o chat filtra amanhã e *"quanto vendi hoje"* responde **zero** — que parece um fato. Use `dataDeHoje()` de `_shared/hoje.ts`, **por requisição**, nunca no escopo do módulo | `30-decisoes.md` D-053 |
+| O executor entende "este mês" | ⛔ Só entende **literal**. Quem traduz período relativo em intervalo absoluto no `where` é o A3, com a data de hoje que recebe no prompt — e o intervalo traduzido vira **presunção declarada** | `30-decisoes.md` D-053 |
+| A regra de data do card é a mesma do chat | ⚠️ É o **oposto**. O card fica salvo e é reexecutado por meses: "últimos 30 dias" em datas fixas **congela a janela** e ninguém percebe. No card, prefira não filtrar por data ou agrupar com `trunc` | `30-decisoes.md` D-053 |
+| ⚠️ Publicar só a Edge Function (ou só o front) é seguro | ⛔ Quando a **forma** do retorno muda, os dois são par indivisível — e o sintoma é silencioso. Front antigo com `ai-agents` novo deixa **todas** as definições do cadastro em branco, sem erro na tela; o perigo não é a tela vazia, é **salvar** por cima dela | `execucao/B14-ai-agents-e-dicionario/MANUAL.md` |
 
 ## Sobre front e segurança
 
@@ -86,6 +92,8 @@ atualizado_em: 2026-08-25
 | A migration é aplicada pelo CI | **Manual**, colada no SQL Editor do painel, de propósito | `30-decisoes.md` D-005 |
 | Segurança é problema da implementação | **Mecanismo** é da plataforma; **política de sensibilidade** é da implementação | `30-decisoes.md` D-039 |
 | `join_mode = 'share_id'` no banco | O SQL versionado diz `'share_id'`, o dump de produção diz `'codigo'`. Importe as constantes de `src/lib/organizacao.ts`, **nunca** inline | `CLAUDE.md` §8 |
+| O rascunho do cadastro sempre foi retomado | Até 2026-08-25 ele restaurava o estado e caía no **passo 1** de qualquer jeito: o toast prometia *"recuperamos o seu progresso"* e a pessoa refazia tudo, pagando de novo os agentes 1 e 3 | `src/components/DatabasePipeline.tsx` |
+| O rascunho guarda o cabeçalho da planilha | ⚠️ **Não, e é de propósito.** O cabeçalho vem **sempre da planilha**, que pode ter mudado entre sessões — o rascunho devolve só o que foi **decidido** (regras, definições, papéis, grão, observações). Coluna que sumiu some da tela; coluna nova aparece vazia | `30-decisoes.md` D-049 |
 
 ---
 
@@ -94,6 +102,8 @@ atualizado_em: 2026-08-25
 | ❌ Crença errada | ✅ Verdade |
 |---|---|
 | `zz_remake/V1`, `V2`, `V3` são especificação | São a **conversa** do remake, com propostas que se contradizem de propósito ao longo das versões. A conclusão está em `contexto/` |
+| ⭐⭐ "V3 é conversa, então posso ignorar" | ⛔ **Existem DOIS documentos chamados V3, em pastas diferentes.** `zz_remake/V3` é conversa e se ignora. `zz_remake_implementation/PLANO-implementacao-remake_V3.md` é o **plano de execução autoritativo** — ele substitui o V2, e é citado por `02-plataforma-vs-implementacao.md` e por `30-decisoes.md` D-046. ⭐ **Distinga pela pasta, nunca pelo número:** `zz_remake/` = tese; `zz_remake_implementation/` = execução |
+| O V2 do plano de implementação ainda vale | **Superado pelo V3**, que tirou o remake do ambiente paralelo e o pôs direto em produção — cai a Etapa 0 inteira da V2 (Supabase novo, Lambda de dev, service account nova). A V2 fica marcada, não apagada (D-041), como plano B; a branch `newnew_plum` está parada em `1a0b67e` |
 | `contexto/12-visao-tecnologica.md` descreve o que está no ar | Descreve **para onde vamos**. O que está no ar é o `CLAUDE.md` |
 | Existe uma pasta de arquivo histórico | Existia (`docs/`, `contexto/90-arquivo/`) e foi **apagada em 2026-08-14**. O porquê ficou em `30-decisoes.md`; a narrativa, só no `git log` |
 

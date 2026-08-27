@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: plataforma
-atualizado_em: 2026-08-25
+atualizado_em: 2026-08-26
 ---
 
 # Pendências da plataforma
@@ -27,8 +27,9 @@ atualizado_em: 2026-08-25
 | T3 | ~~Corrigir o passo-a-passo de migration~~ — **resolvido por remoção**: o arquivo foi apagado e o procedimento ficou em `supabase/migrations/CLAUDE.md` |
 | T4 | `query_engine/.pytest_cache/` no `.gitignore` | Arquivo gerado versionado |
 | T5 | ~~Marcar o PRD do query engine como superado no ponto do cache~~ — **resolvido por remoção** (arquivo apagado em 2026-08-14) |
-| T6 | Dividir `12-visao-tecnologica.md` (429 linhas) em `12a-arquiteto` / `12b-contrato` / `12c-dados` | Estourou o teto de 400 da regra 4 do `contexto/CLAUDE.md`. `30-decisoes` e `31-incidentes` têm exceção declarada; este não |
+| T6 | Dividir `12-visao-tecnologica.md` (**434** linhas) em `12a-arquiteto` / `12b-contrato` / `12c-dados` | Estourou o teto de 400 da regra 4 do `contexto/CLAUDE.md`. `30-decisoes` e `31-incidentes` têm exceção declarada; este não. ⚠️ Cresceu 5 linhas desde que este item foi aberto — não encolhe sozinho |
 | T7 | ⚠️ **Apagar a Edge Function órfã `plum-chat`** | ⭐ Ver a linha nova em "Dívidas conhecidas". `ACTIVE`, sem código no repositório, `verify_jwt: false`. O comando é `DELETE /v1/projects/{ref}/functions/plum-chat` |
+| T8 | ⚠️ **Tabela inexistente devolve `{"error": …}` em vez de levantar** | `pandas_executor.py:654` destoa do resto do executor, que levanta `MissingColumnError`, `RawRowsBlocked`, `RowLimitExceeded`. Com **uma** tabela isso nunca apareceu, porque o `main.py` sobrescrevia o `from`; com multi-planilha vira o modo de falha mais provável — planejador erra o nome da planilha e o card fica **vazio em silêncio**, enquanto `MissingColumnError` apareceria. Ver `PLANO-etapa-3.md` §A2 |
 
 ## 🔵 Claro — sabe-se o que fazer
 
@@ -38,7 +39,7 @@ atualizado_em: 2026-08-25
 | C2 | ⭐ **Abstração de provedor de LLM** | Hoje a URL do Gemini está em **4 lugares** em 3 funções. Com 4 call sites é meio dia; com 20 é refatoração. ⚠️ É o B05 da Etapa 1 — e só o `ai-plum-chat` vai adotar, porque `dashboard-agent` e `ai-agents` estão fora do escopo do remake |
 | C3 | Renomear a rota `/dashboard` (que é "Minha Organização") | Já custou tempo de leitura mais de uma vez. Vários lugares mudam juntos |
 | C4 | Passo de verificação no fim do onboarding — ler a planilha de verdade | Pega aba errada, base não compartilhada, cabeçalho divergente e coluna sem título **de uma vez**, com a pessoa olhando a tela (I-08) |
-| C4b | ⚠️ **O smoke test do Lambda roda DEPOIS do `update-function-code`** | `query-engine.yml`: a imagem quebrada substitui a boa e o teste só avisa depois — não há janela em que o deploy seja verificado antes de valer. Derrubou o executor em 2026-08-21 (I-09). O conserto é publicar versão → invocar → promover alias, que é mudança de infra |
+| C4b | ⚠️ **O smoke test do Lambda roda DEPOIS do `update-function-code`** | `query-engine.yml`: a imagem quebrada substitui a boa e o teste só avisa depois — não há janela em que o deploy seja verificado antes de valer. Derrubou o executor em 2026-08-21 (I-09). O conserto é publicar versão → invocar → promover alias, que é mudança de infra. ⛔ **E há um segundo furo, de branch:** o `if:` que exige `refs/heads/plataforma` protege o `push`, mas **`workflow_dispatch` o ignora** — apertar "Run workflow" de dentro de qualquer branch publica no Lambda de **produção**, porque `LAMBDA_FUNCTION: plum-query-engine` é fixo no `env:`. Enquanto não houver variante de dev, a regra é: **não usar o botão** |
 | C5 | Testes E2E (Playwright) dos 6 fluxos que cruzam camadas | Revogação de coluna surtindo efeito e POST direto no executor retornando 401 só se provam ponta a ponta |
 | C6 | Eval do Agente A contra perguntas reais | Transforma "o chat parece que piorou" num número. É o único jeito de mexer no prompt com confiança |
 | C7 | Escala do percentual: 0–1 nativo vs 0–100 em texto | Aberto desde 2026-08-11. A mesma coluna sai em duas escalas conforme a origem da célula |
@@ -48,6 +49,10 @@ atualizado_em: 2026-08-25
 | C11 | ⚠️ **Dois cabeçalhos que normalizam igual: uma coluna some na IMPORTAÇÃO** | ⭐ Investigado em 2026-08-20, e é mais estreito do que parecia. O **executor já recusa**, deliberadamente e com mensagem boa (`sheets.py`: *"não dá para saber qual usar… renomeie uma delas"*). O furo silencioso é só no `DatabasePipeline.tsx`, que monta `obj[normMap[h]] = row[i]` — a segunda coluna some do `schema_metadata`, e por tabela do `allowed_columns`. ⚠️ **Consertar só o `sheets.py` piora**: geraria uma coluna carregável e não autorizável, falhando com "coluna fora da permissão do cargo", que aponta para o lugar errado. O conserto nasce no **Agente 3** (onboarding), que já vê a amostra e nomeia conceitos — ele propõe dois nomes distintos e a pessoa confirma uma vez por base; casa com o C4. ⛔ Sufixo por ordem de coluna (`_2`) foi **recusado**: reordenar a planilha trocaria o sufixo de dono e o `allowed_columns` apontaria para a coluna errada — mesma classe de falha que o `google_sheet_gid` evita |
 | C12 | ⚠️ **`allowed_columns` nunca é revalidado contra o cabeçalho da planilha** | Achado em 2026-08-20 pelo caminho `ad_hoc`. A matriz de permissões é curada à mão e **não** é refeita ao recadastrar a base — então ela envelhece em silêncio até alguém pedir a coluna que sumiu. Uma pergunta normal pede 2–3 colunas e não percebe; o pedido `metadados` pede **todas** e percebia derrubando tudo (consertado). ⭐ O `metadados` é justamente a peça que tornaria a verificação barata: desde o conserto ele devolve `{"existe": false}` por coluna, ou seja, **já sabe dizer quais colunas permitidas sumiram da planilha**. Casa com o C4 |
 | C13 | ⛔ **Não há como reconferir uma base ativa: recadastrar cria uuid novo e órfã os cards** | Achado em 2026-08-21 ao planejar a Etapa 2. O onboarding só recupera rascunho com `status = 'processing'` (`DatabasePipeline.tsx:85-89`); base **ativa** cai no `insert` e vira linha nova. ⚠️ E **deletar** a antiga é pior: `dashboard_cards` e `role_permissions` têm `ON DELETE CASCADE` (`20260806230000_dashboard_cards.sql:33`, `create_role_permissions_table.sql:13`), então some junto **todo card daquela base e a matriz de permissões curada à mão** — sem aviso. `plum_chat` e `plum_logs` são `SET NULL` e ficam órfãos, o que faz a referência do caminho legado (R$ 224.042,24 de 2026-08-20) perder o vínculo. ⭐ O conserto é uma entrada "reconferir esta base" que preserve o `id` e rode só o perfil + auditor. Ficou **fora do escopo da Etapa 2 por decisão** (👤 optou por recadastrar só a `plum_base_suja`), não por esquecimento — mas enquanto não existir, base da demo só ganha dicionário v2 ao custo dos cards, ou seja, não ganha. Ver `PLANO-etapa-2.md` §B6 |
+| C14 | ⛔ **Cadastrar a mesma planilha de novo não avisa nada — e não grava** | Levantado pelo 👤 em 2026-08-25. Concluído o cadastro, "conectar nova planilha" com a **mesma** planilha passa pelas etapas e o banco segue como se nada tivesse acontecido: nem grava, nem diz *"planilha já cadastrada"* ou *"já existe um rascunho dessa planilha"*. ⚠️ A detecção **não pode ser pela URL** — o mesmo Sheets tem vários links válidos; tem de ser pelo conteúdo, p. ex. o conjunto de cabeçalhos. ⭐ É a outra ponta do **C13**: lá o problema é não haver como reconferir uma base ativa, aqui é o caminho que sobra fazer isso errado. Ver `PLANO-etapa-3.md` |
+| C15 | ⚠️ **Mudar ou acrescentar uma coluna no Sheets obriga a refazer o cadastro inteiro** | Não há como editar o esquema de uma base já ativa. O conserto pedido pelo 👤 é edição **manual** em "minha base de dados" — renomear coluna e acrescentar coluna, **sem IA nessa etapa**. Vizinho de C12 (`allowed_columns` nunca é revalidado contra o cabeçalho) e de C13, e os três se resolvem pela mesma porta. Ver `PLANO-etapa-3.md` |
+| C16 | "Refinar semântica" refina **todas** as colunas, inclusive as que já estavam certas | Etapa 4 do cadastro. O refinamento deveria alcançar só as colunas que a pessoa **editou** — um agente 3.1 sobre o que o usuário mudou na saída do agente 3. Hoje se paga LLM para reescrever definição que ninguém tocou, e se corre o risco de piorar a que já estava boa |
+| C17 | Campo de **observações da base**, escrito pelo usuário, em "minha base de dados" | Contexto adicional ao dicionário, em prosa: *"considere apenas vendas faturadas para a receita"*. ⭐ O caminho de leitura **já existe** — o A3 recebe as observações e é obrigado a transformá-las em presunção declarada quando usa a coluna (ver `01-o-que-e-o-plum.md`). O que falta é a pessoa poder escrevê-las depois do cadastro |
 
 ### ⚠️ Ligar o typecheck de verdade no `npm run build`
 
@@ -115,10 +120,6 @@ regressão.
 | `plum_chat.assunto` vestigial | Mantida de propósito: é o registro de que a ideia existe e continua boa (D-026) |
 | Migrations aplicadas à mão | Decisão consciente (D-005) |
 | ⚠️ **Existem funções publicadas que não estão no repositório** | Medido em 2026-08-20: a Management API lista **seis** funções e o repositório tem **cinco**. A sexta (`plum-chat`, da primeira PRD) está em T7. ⭐ A lição fica mesmo depois de apagá-la: **`ls supabase/functions/` não é a lista do que está no ar** — a lista real vem da API. Já tinha acontecido com o `dashboard-agent` em 2026-08-11 (I-03) |
-ao cadastrar uma planilha, e mudar uma coluna dela, tem que recadastrá-la
-ao clicar em refinar semântica, ele refina a semântica de TODOS os itens, até mesmo os que já estavam certos. mudar pra refinar a semântica somente dos que sofreram alterações
-ao cadastrar uma planilha (concluir as 5 etaps), clicar em "conectar nova planilha" e recadastrá-la, o banco de dados não armazena os dados da nova planilha. deveria aparecer "planilha já cadastrada" ou "já existe um rascunho dessa planilha"
-cadastrar a planilha via google sheets ANTES do onboardign e não NO FIM DELE.
 ---
 
 ## Já resolvido — não reabrir
@@ -142,6 +143,6 @@ Registrado para que ninguém "conserte" de novo:
 | Log estruturado no Supabase | 2026-08-18 | `plum_logs` — era o C1 desta lista |
 | O pipeline de importação não lia a planilha | 2026-08-25 | resolvido pelo B12/B13 **eliminando o arquivo local**, não validando-o contra a planilha (I-08) |
 | Formatação aprovada sem ver o dado | 2026-08-25 | a tabela antes-vs-depois passou a ser renderizada; era documentada e nunca existiu (D-048) |
-| **C2** — abstração de provedor de LLM | 2026-08-25 | o `ai-agents` entrou nela no B14. Sobra o `dashboard-agent`, fora de escopo por decisão |
+| **C2** — abstração de provedor de LLM | 2026-08-25 | o `ai-agents` entrou nela no B14. Sobra o `dashboard-agent`, fora de escopo por decisão. ⚠️ **"Fora do escopo" não quer dizer intocado:** em 2026-08-26 ele adotou `_shared/hoje.ts` (D-053). O que continua verdade é o estreito — ele **não** usa `_shared/llm.ts`, e a URL do Gemini segue inline lá |
 | A definição semântica do usuário não chegava ao chat | 2026-08-25 | o A3 lê o dicionário (D-049). Era só o hash da chave do cache do A2 |
 | `plum_logs.presuncoes_qtd` sempre `NULL` | 2026-08-25 | mapeamento que faltava em `montarLinha`, com regressão (I-12). ⚠️ Sem linha de base recuperável |

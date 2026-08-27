@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-25
+atualizado_em: 2026-08-26
 ---
 
 # Decisões
@@ -589,5 +589,49 @@ escrita. O julgamento fica humano, e o runner imprime tudo o que ele precisa ler
 que falha por motivo alheio ao código destrói a confiança na suíte inteira, não só nele.
 **Status:** vigente, incompleta por decisão. ⭐ O que rende mais para completá-la são as perguntas
 que o 👤 **já viu o chat errar**.
+⭐ **A primeira execução real, em 2026-08-25, provou o ponto pelo avesso:** uma pergunta **passou**
+com uma resposta circular, porque o critério mecânico só conferia se a agregação certa estava no
+plano. Ver I-13. Medir a presença da ferramenta não é medir a validade do raciocínio.
+
+### D-053 · 2026-08-26 · A data de hoje vem de `_shared/hoje.ts`, no fuso de São Paulo, por requisição
+**Decisão:** existe **um** lugar que sabe que dia é hoje — `supabase/functions/_shared/hoje.ts` —,
+ele devolve `YYYY-MM-DD` no fuso fixo `America/Sao_Paulo`, é chamado **por requisição**, e a data
+entra no prompt do **A3 planejador**, do **Agente A** e do **Tarsila** (`dashboard-agent`).
+Período relativo (*"este mês"*, *"últimos 3 meses"*, *"ano passado"*) é traduzido pelo modelo para
+intervalo absoluto no `where`, porque o executor só entende literal; e o intervalo traduzido vira
+**presunção declarada** — *"este mês"* no dia 3 são três dias de dados, e quase ninguém quer isso
+sem saber.
+
+**Por quê:** `new Date().toISOString()` devolve **UTC**, e o Brasil é UTC−3. Às 21h30 de 25/08 em
+São Paulo o `toISOString()` já diz `2026-08-26`: o planejador filtrava o **dia seguinte**, e
+*"quanto vendi hoje"* — das perguntas mais comuns deste produto — respondia **zero** durante as
+últimas três horas de todo dia. ⚠️ Zero parece um fato, não um erro de fuso; ninguém abre um
+chamado por causa dele.
+
+**Rejeitado:**
+(a) **fuso por organização** — o Brasil tem quatro fusos e o Acre está a UTC−5, mas não existe
+coluna `timezone` em `organizations` hoje. São Paulo é a referência comercial do país e cobre a
+maioria dos clientes; quando alguém do Acre reclamar de um dia de diferença, a correção é uma
+coluna e **um** arquivo, porque o fuso vive num lugar só.
+(b) **deduzir o fuso pelo IP** — erraria sem deixar rastro, que é a pior classe de erro para este
+produto.
+(c) **`const HOJE = dataDeHoje()` no escopo do módulo** — o *isolate* da Edge Function é
+reaproveitado entre invocações por horas ou dias; a data congelaria no cold start e a defasagem
+cresceria em silêncio até alguém republicar. ⚠️ **Nenhum teste pegaria isso**, porque em teste o
+processo é sempre novo.
+(d) **montar a string com `getFullYear`/`getMonth`** — traria de volta o UTC que a função existe
+para evitar. O `Intl.DateTimeFormat("en-CA")` é usado porque `en-CA` é a *locale* comum cujo
+formato curto já é ISO; `pt-BR` daria `25/08/2026`, que o executor não entende.
+
+⭐⭐ **E a regra do CARD é o oposto da regra do CHAT — não uniformize.** O Tarsila também recebe a
+data de hoje, mas é instruído a **pensar duas vezes antes de fixar um intervalo**: diferente de uma
+resposta de chat, o card **fica salvo** e é reexecutado por meses. *"Últimos 30 dias"* traduzido
+para datas fixas **congela a janela** — daqui a um ano o card ainda mostra este mês, com o mesmo
+título, e ninguém percebe. Quando a janela deve acompanhar o tempo, ele não filtra por data ou
+agrupa com `trunc`; só fixa quando o recorte é declaradamente histórico (*"vendas de 2025"*).
+Se a data não chegar, ambos devolvem erro em vez de inventar uma.
+
+**Status:** vigente. ⚠️ O `dashboard-agent` está fora do escopo do remake (C2) e ainda assim entrou
+nesta — a exceção é deliberada, porque o defeito não tinha como respeitar o recorte do remake.
 
 

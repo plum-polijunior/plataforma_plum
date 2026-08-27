@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-26
 ---
 
 # LEIA PRIMEIRO
@@ -35,6 +35,15 @@ atualizado_em: 2026-08-14
 | Não leia | Por quê |
 |---|---|
 | `zz_remake/` | Rascunhos da discussão do remake (V1 a V4 e os comentários). ⚠️ **Contêm propostas contraditórias entre si, de propósito** — são a conversa, não a conclusão. A conclusão está em `contexto/` |
+
+⭐⭐ **`zz_remake_implementation/` é o oposto: leia.** É onde vive o plano de execução autoritativo
+(`PLANO-implementacao-remake_V3.md`, que **substitui a V2**), o `PLANO-etapa-3.md` e os `MANUAL.md`
+de cada bloco executado (B10..B17) — que registram armadilha de deploy que não está em mais lugar
+nenhum.
+
+⛔ **Distinga as duas pastas pelo caminho, nunca pelo número da versão.** Existem dois documentos
+chamados "V3": o de `zz_remake/` é conversa, o de `zz_remake_implementation/` é o plano. Ver
+`03-erros-comuns.md`.
 
 ⚠️ **`docs/` e `contexto/90-arquivo/` não existem mais** — foram apagados em 2026-08-14, depois de o
 **fato** e o **porquê** de cada coisa terem sido extraídos para `30-decisoes.md` e

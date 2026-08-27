@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-25
+atualizado_em: 2026-08-26
 ---
 
 # Incidentes e lições
@@ -369,3 +369,41 @@ existe em lugar nenhum. O B15 começa a medir sem ter com o que comparar.
    não por typo, que é pior: um typo aparece na revisão, uma ausência não.
 2. **Campo novo em `LinhaDeLog` anda com o mapeamento em `montarLinha` e com um caso em
    `log_core.test.ts`.** O teste de mapeamento existia e não cobria este campo; agora cobre.
+
+---
+
+## I-13 · 2026-08-25 · ⭐⭐ A suíte aprovou uma resposta circular na primeira execução real
+
+**O que aconteceu:** rodada a primeira vez de verdade, a suíte de avaliação deu **verde** para a
+pergunta *"tem alguma venda muito fora do padrão?"*. A resposta do chat foi:
+
+> *"99% das vendas vão até R$ 2.668 e a maior foi R$ 3.347, logo ela é um extremo."*
+
+**Causa:** o critério mecânico daquela entrada exigia apenas que `std` estivesse no plano — e
+estava. Mas ⛔ **o máximo é sempre maior que qualquer percentil**, em toda distribuição e em todo
+conjunto de dados. A frase é verdadeira até numa base perfeitamente uniforme, onde não há extremo
+nenhum. O teste mediu a **presença da ferramenta**, não a **validade do raciocínio** — e as duas
+coisas parecem a mesma quando se olha só o Query Plan.
+
+**⭐ Por que dói:** este é o modo de falha que a suíte existia para pegar, e ela o produziu. Um
+critério que confere "a agregação certa está no plano?" dá verde a uma resposta errada bem
+construída, que é exatamente o defeito que a D-052 rejeitava automatizar do outro lado ("a resposta
+está boa?"). ⚠️ Não foi um bug do arnês: foi o **critério** estar uma camada acima do que precisava
+medir.
+
+**As regras:**
+
+1. ⭐ **"Fora do padrão" exige um limiar DECLARADO, e comparar o máximo com um percentil não é um.**
+   O plano escolhe o limiar (acima do p99, mais de 3 desvios acima da média), **declara-o como
+   presunção**, e pede junto o que permita julgá-lo — quantas linhas passam dele, ou os quartis,
+   para mostrar a forma da distribuição em vez do máximo sozinho.
+2. ⚠️ **Mediana pede quartil, não desvio padrão.** Se `median` foi escolhida porque a base tem
+   extremos, a dispersão correspondente é `quantile` em 0.25 e 0.75. `std` é calculado em torno da
+   **média**, que é justamente a medida que `median` descartou — apresentar as duas juntas como
+   "típico e variação" mistura duas réguas e engana quem lê. Virou o critério
+   `proibeMedianaComDesvio` no arnês, e ele confere a **combinação**, não cada agregação isolada.
+3. ⭐ **Entrada de suíte que passa com resposta ruim é apertada, não removida.** A pergunta
+   `dispersao-std` virou `dispersao-criterio`, com o porquê da mudança escrito dentro dela — o
+   registro de que ela já foi frouxa vale mais que a entrada limpa.
+4. ⚠️ **Um verde só significa o que o critério mediu.** Antes de confiar num item da suíte, leia o
+   que ele confere — não o que o nome dele promete.

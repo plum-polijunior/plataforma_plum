@@ -1,7 +1,7 @@
 ---
 status: proposta
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-26
 ---
 
 # Planos futuros — Etapa 2
@@ -163,6 +163,7 @@ de verdade.
 | ⚠️ **O valor migrar para fora** | Se qualquer agente consome o motor, o valor migra para quem tem o **dicionário e o catálogo**, não para quem tem o executor. Um executor pandas com HMAC se refaz em duas semanas; um dicionário revisado e 12 padrões validados, não. ⭐ Trate o dicionário e o catálogo como o ativo, e o motor como encanamento |
 | **Integração nativa SAP/Totvs/Databricks** | Fase 2 explícita. Espelho de dados até lá |
 | **Métricas de ROI antes/depois por cliente** | Começar à mão, com poucos clientes |
+| ⭐ **A2 encaminhador — o lugar vago entre o porteiro e o planejador** | Levantado pelo 👤 em 2026-08-25, para a Etapa 4. Entre o `a1_porteiro` e o `a3_planejador` (que é pau pra toda obra) cabe um **roteador**: ele conhece a função de cada agente e manda a pergunta para o A3 ou para um especialista — por exemplo, um ligado a um Lambda que plota e extrapola gráficos para predição. ⚠️ **Nenhum especialista existe hoje**, e o ponto é esse: o valor agora é deixar a arquitetura pronta, não o roteamento. Modelo previsto: `gemini-3.7`. ⛔ Não confundir com o **A2 Reconhecedor**, que é outra coisa e volta na Etapa 3 (D-049) |
 
 ---
 
