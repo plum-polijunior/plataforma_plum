@@ -52,6 +52,7 @@ import {
   type QueryPlan,
 } from "../_shared/query_plan.ts";
 import { parseGeminiJson } from "../_shared/gemini_parsing.ts";
+import { dataDeHoje } from "../_shared/hoje.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -294,6 +295,24 @@ REGRAS QUE NÃO PODEM SER QUEBRADAS:
    coluna de data, "por mês" é impossível: devolva {"erro": "..."} dizendo que
    falta uma coluna de data. Não tente derivar período de texto.
 
+3.1 ⚠️⚠️ PERÍODO RELATIVO VIRA DATA ABSOLUTA, E VOCÊ USA A DATA DE HOJE — que
+   vem na mensagem. O executor só entende literal: "este ano", "últimos 6
+   meses" e "ano passado" têm de sair do seu plano como intervalo concreto no
+   "where" ({"left":"data_venda","op":"between","right":["2026-01-01","2026-12-31"]}).
+   Se o usuário citar dia e mês sem ano, assuma o ANO ATUAL — nunca infira outro
+   por conta própria.
+
+   ⛔ E PENSE DUAS VEZES ANTES DE FIXAR UM INTERVALO NUM CARD. Diferente do
+   chat, o card FICA SALVO e é reexecutado por meses. "Últimos 30 dias" traduzido
+   para datas fixas CONGELA a janela: daqui a um ano o card ainda mostra este
+   mês, com o mesmo título, e ninguém percebe. Quando a pergunta pedir uma janela
+   que deve acompanhar o tempo, prefira NÃO filtrar por data — deixe o card ver a
+   base inteira, ou agrupe com "trunc" para a evolução aparecer sozinha. Só fixe
+   o intervalo quando o recorte for declaradamente histórico ("vendas de 2025").
+
+   ⛔ Se a DATA DE HOJE não vier na mensagem, NÃO INVENTE uma: devolva
+   {"erro": "..."} dizendo que a pergunta depende de saber a data de hoje.
+
    ⚠️ Coluna que guarda SÓ O ANO (valores como 2005, 2018) não é coluna de data
    e não aceita "trunc": agrupe por ela direto, como categórica, que o resultado
    já sai por ano.
@@ -345,8 +364,15 @@ async function gerarCard(pergunta: unknown, schemaMetadata: unknown): Promise<Re
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY.trim()}`;
 
-  const userPrompt =
-    `Pergunta: "${pergunta}"\nschema_metadata: ${JSON.stringify(schemaMetadata ?? {})}`;
+  // ⚠️ `dataDeHoje()` por requisição, e no fuso de São Paulo. Sem isto o
+  // Tarsila não tem como traduzir "este ano" e chuta o ano do treino do
+  // modelo — num card, que fica salvo e é reexecutado por meses. Ver
+  // `_shared/hoje.ts`.
+  const userPrompt = [
+    `Pergunta: "${pergunta}"`,
+    `DATA DE HOJE: ${dataDeHoje()}`,
+    `schema_metadata: ${JSON.stringify(schemaMetadata ?? {})}`,
+  ].join("\n");
 
   // Duas tentativas, mesmo padrão de `ai-plum-chat`: perder a pergunta porque o
   // modelo emitiu uma vírgula a mais é caro, e a retentativa não relaxa

@@ -181,6 +181,18 @@ function conferirMecanica(q: Pergunta, pl: Resultado | null): string[] {
     if (aggs.includes(proibida)) falhas.push(`usou '${proibida}', que esta pergunta proíbe`);
   }
 
+  // ⚠️ A combinação, não cada uma. `median` é legítima e `std` é legítima; o
+  // defeito é apresentá-las como par, porque `std` mede em torno da média, que
+  // é justamente o que `median` descartou. Ver `proibeMedianaComDesvio`.
+  if (q.proibeMedianaComDesvio && aggs.includes("median")) {
+    const desvios = aggs.filter((a) => a === "std" || a === "var");
+    if (desvios.length) {
+      falhas.push(
+        `misturou 'median' com '${desvios[0]}' — se o típico é mediana, a dispersão é quartil`,
+      );
+    }
+  }
+
   if (q.proibeLinhaBruta) {
     const brutos = tiposDePedido(pedidos).filter((t) => t === "registro" || t === "amostra");
     if (brutos.length) {

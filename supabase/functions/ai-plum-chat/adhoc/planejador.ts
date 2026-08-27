@@ -7,6 +7,7 @@ import {
 import { type Dicionario, paraPrompt } from "../../_shared/dicionario.ts";
 import type { ValorDoVocabulario } from "../../_shared/entidade.ts";
 import { PROMPT_PLANEJADOR } from "./prompts/a3_planejador.ts";
+import { dataDeHoje } from "../../_shared/hoje.ts";
 
 /**
  * A3 · Planejador — a pergunta vira `pedidos[]` + `presuncoes[]`.
@@ -75,10 +76,23 @@ export async function planejar(
  * ela o A3 não distingue "SP com 4.000 linhas" de "SP  com 2" (o duplicado com
  * espaço a mais) e trata os dois como categorias iguais. A contagem é o que
  * deixa a sujeira visível para quem planeja.
+ *
+ * ⚠️⚠️ **A DATA DE HOJE É CALCULADA AQUI, POR REQUISIÇÃO — nunca no escopo do
+ * módulo.** Um `const HOJE = new Date()` no topo do arquivo seria congelado no
+ * cold start do isolate, e isolates de Edge Function são reaproveitados por
+ * horas ou dias: o chat passaria a filtrar "este mês" pelo mês em que a função
+ * subiu, e a defasagem cresceria em silêncio até alguém republicar. É o tipo de
+ * erro que não aparece em teste nenhum, porque em teste o processo é novo.
  */
 function montarEntrada({ pergunta, dicionario, vocabularios }: EntradaDoPlanejador): string {
+  // ⚠️ `dataDeHoje()`, não `toISOString()`: aquele devolve UTC, e das 21h à
+  // meia-noite o Brasil ainda é ontem lá. Ver `_shared/hoje.ts`.
+  const hoje = dataDeHoje();
+
   const partes = [
     `PERGUNTA DO USUÁRIO: "${pergunta}"`,
+    "",
+    `DATA DE HOJE: ${hoje}`,
     "",
     // ⭐ `paraPrompt` em vez de `JSON.stringify`, e a diferença não é estética:
     // ele escreve o dicionário em prosa curta, diz "(sem descrição)" onde

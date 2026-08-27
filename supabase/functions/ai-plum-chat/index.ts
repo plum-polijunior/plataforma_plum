@@ -58,6 +58,7 @@ import {
   TETO_DE_LINHAS_BRUTAS,
 } from "../_shared/orcamento.ts";
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
+import { dataDeHoje } from "../_shared/hoje.ts";
 // ⭐ O A2 saiu do caminho no B15: quem diz o que a base significa agora é o
 // dicionário escrito no cadastro. `reconhecimento.ts` e `adhoc/reconhecedor.ts`
 // ficam no repositório, desligados — voltam na Etapa 3, quando escolher entre
@@ -930,7 +931,9 @@ async function handleAgente(
 
   let systemInstruction = "";
   let userPrompt = "";
-  const hoje = new Date().toISOString().slice(0, 10);
+  // ⚠️ Era `new Date().toISOString()`, que é UTC — o Agente A filtrava o dia
+  // seguinte das 21h em diante. Ver `_shared/hoje.ts`.
+  const hoje = dataDeHoje();
 
   if (action === "guard") {
     systemInstruction = `Você é o Agente Z, Guardião de Segurança, Contexto e Viabilidade da Plataforma Plum.

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
 import { extrairSheetRef, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
@@ -179,13 +180,39 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       // base que ele acabou de conectar.
       await liberarColunasParaAdmin(id, cab.nomes);
 
+      // ⭐ **Rascunho recuperado E RETOMADO.** Até 2026-08-25 esta parte
+      // restaurava três estados e depois caía em `setStep(1)` de qualquer jeito:
+      // o toast dizia "recuperamos o seu progresso" e a pessoa refazia tudo,
+      // pagando de novo os agentes 3 e 1. Um aviso que promete o que não cumpre
+      // é pior que não avisar.
+      //
+      // ⚠️ **O cabeçalho vem SEMPRE da planilha, nunca do rascunho** — ela pode
+      // ter mudado entre uma sessão e outra, e é justamente por isso que o
+      // cadastro foi invertido no B13. Coluna que sumiu some da tela; coluna
+      // nova aparece vazia para ser preenchida. O que o rascunho devolve é só o
+      // que foi DECIDIDO: regras, definições, papéis, grão e observações.
       if (sketch) {
-        // Rascunho recuperado: só o que já foi decidido volta. O cabeçalho vem
-        // sempre da planilha, nunca do rascunho — ela pode ter mudado.
         if (sketch.formattingRules) setFormattingRules(sketch.formattingRules);
         if (sketch.semanticDefinitions) setSemanticDefinitions(sketch.semanticDefinitions);
         if (sketch.formattedDataSamples) setFormattedDataSamples(sketch.formattedDataSamples);
-        toast({ title: "Rascunho encontrado", description: "Recuperamos o seu progresso anterior." });
+        // ⚠️ `dataSamples` era salvo e nunca lido. Sem ele o passo 2 mostra a
+        // tabela sem a coluna "antes", e o passo 3 mandaria amostra vazia ao
+        // Agente 1 — a pessoa retomava num estado pior que o que salvou.
+        if (Array.isArray(sketch.dataSamples)) setDataSamples(sketch.dataSamples);
+        if (typeof sketch.grao === "string") setGrao(sketch.grao);
+        if (Array.isArray(sketch.observacoes)) setObservacoes(sketch.observacoes);
+        if (sketch.papeis) setPapeis(sketch.papeis);
+        if (sketch.querVocabulario) setQuerVocabulario(sketch.querVocabulario);
+
+        const destino = passoParaRetomar(sketch, cab.colisoes);
+        setStep(destino);
+        toast({
+          title: "Rascunho encontrado",
+          description: destino > 1
+            ? `Voltamos para o passo ${destino + 1}, onde você parou.`
+            : "Recuperamos o que já estava decidido. Confira as colunas para seguir.",
+        });
+        return;
       }
 
       setStep(1);
@@ -204,7 +231,7 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
    */
   const lerCabecalhos = async (
     id: string,
-  ): Promise<{ nomes: string[] } | null> => {
+  ): Promise<{ nomes: string[]; colisoes: Record<string, string[]> } | null> => {
     const res = await supabase.functions.invoke('ai-plum-chat', {
       body: { action: 'cabecalhos_da_planilha', datasetId: id },
     });
@@ -228,7 +255,47 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     setLinhasDaGrade(res.data.row_count ?? 0);
     if (res.data.aba) setFileName(String(res.data.aba));
 
-    return { nomes: colunas.map((c) => c.nome) };
+    // ⚠️ As colisões voltam JUNTO, e não só pelo estado: `setColisoes` não é
+    // visível no mesmo tick, e quem retoma um rascunho precisa saber agora se
+    // pode pular o passo 1. Ler o estado ali daria o valor da renderização
+    // anterior — vazio na primeira conexão.
+    const colisoesLidas = (res.data.colisoes ?? {}) as Record<string, string[]>;
+    return { nomes: colunas.map((c) => c.nome), colisoes: colisoesLidas };
+  };
+
+  /**
+   * Até que passo dá para retomar um rascunho — decidido pelo CONTEÚDO dele,
+   * não pelo `step` que ele diz ter.
+   *
+   * ⭐ **Confiar no `sketch.step` sozinho devolveria a pessoa a uma tela vazia.**
+   * Ele é gravado no começo de cada etapa, então um rascunho pode dizer `step:3`
+   * tendo morrido antes de o Agente 1 responder. O que manda é o que existe: sem
+   * regras de formatação não há passo 2, sem definições não há passo 3.
+   *
+   * ⛔ **Colisão de nome trava no passo 1, sempre.** É lá que ela aparece na
+   * tela, com os cabeçalhos que colidem, e o cadastro não pode seguir sem que
+   * alguém renomeie uma coluna na planilha (C11). Pular direto para o passo 3
+   * esconderia o aviso e deixaria a base nascer com uma coluna a menos.
+   */
+  const passoParaRetomar = (
+    rascunho: any,
+    colisoesDaPlanilha: Record<string, string[]>,
+  ): number => {
+    if (Object.keys(colisoesDaPlanilha ?? {}).length) return 1;
+
+    const temRegras = Object.keys(rascunho?.formattingRules ?? {}).length > 0;
+    const temDefinicoes = Object.keys(rascunho?.semanticDefinitions ?? {}).length > 0;
+
+    // Nunca à frente de onde a pessoa realmente estava, mesmo que o conteúdo
+    // permitisse: retomar num passo que ela nunca viu é tão desorientador
+    // quanto voltar ao começo.
+    const ondeParou = typeof rascunho?.step === "number" ? rascunho.step : 1;
+
+    let possivel = 1;
+    if (temRegras) possivel = 2;
+    if (temRegras && temDefinicoes) possivel = 3;
+
+    return Math.min(possivel, Math.max(ondeParou, 1));
   };
 
   /**
@@ -294,6 +361,19 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
     return (res.data.linhas ?? []) as any[];
   };
 
+  /**
+   * Grava o rascunho do cadastro em `datasets.sketch`.
+   *
+   * ⚠️⚠️ **TUDO que acabou de ser calculado tem de vir por `extraData`, nunca do
+   * estado.** Esta função lê o estado pelo *closure*, e `setX(...)` não é
+   * síncrono: chamada logo depois de um `setDataSamples(linhas)`, ela grava o
+   * valor **anterior** — vazio, na primeira vez.
+   *
+   * ⭐ Era esse o furo real da retomada de rascunho: `dataSamples` aparecia no
+   * objeto salvo e ia para o banco como `[]`, então nem restaurá-lo adiantava.
+   * O sintoma ("recuperamos o seu progresso" e nada volta) parecia bug de
+   * leitura e era de escrita.
+   */
   const saveSketch = async (currentStep: number, extraData: any = {}) => {
     if (!datasetId) return;
     try {
@@ -304,10 +384,16 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
             step: currentStep,
             originalColumns,
             normalizedColumns,
-            dataSamples,
+            dataSamples: extraData.dataSamples ?? dataSamples,
             formattingRules: extraData.formattingRules || formattingRules,
             semanticDefinitions: extraData.semanticDefinitions || semanticDefinitions,
-            formattedDataSamples: extraData.formattedDataSamples || formattedDataSamples
+            formattedDataSamples: extraData.formattedDataSamples || formattedDataSamples,
+            // ⚠️ Os quatro do dicionário v2 (B14) faltavam aqui, e eram o que
+            // fazia a etapa 4 recomeçar do zero mesmo com rascunho recuperado.
+            grao: extraData.grao ?? grao,
+            observacoes: extraData.observacoes ?? observacoes,
+            papeis: extraData.papeis ?? papeis,
+            querVocabulario: extraData.querVocabulario ?? querVocabulario,
           }
         })
         .eq('id', datasetId);
@@ -425,6 +511,9 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         setFormattingRules(formatResult.formattingRules || {});
         
         saveSketch(2, {
+          // `linhas` e não `dataSamples`: o `setDataSamples` acima ainda não
+          // refletiu no closure. Ver o cabeçalho do `saveSketch`.
+          dataSamples: linhas,
           formattedDataSamples: formatResult.formattedSamples,
           formattingRules: formatResult.formattingRules || {}
         });
@@ -468,6 +557,26 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
       [original]: newValue
     }));
   };
+
+  /**
+   * ⭐ O trabalho da próxima etapa já existe para ESTAS colunas?
+   *
+   * Quando existe, o botão de avançar deixa de chamar agente: quem já rodou o
+   * Agente 3 e voltou para revisar as colunas não deve pagar a análise de novo
+   * — nem em cota do Gemini, nem em espera, nem no risco de a segunda resposta
+   * vir diferente da que a pessoa já tinha aprovado.
+   *
+   * ⚠️ **A checagem é por COLUNA, não por "tem alguma coisa salva".** Se a
+   * pessoa clicou em "Reler planilha" e a aba ganhou uma coluna, a análise
+   * antiga não a cobre — e um "Avançar" ali levaria essa coluna para o fim do
+   * cadastro sem regra de formatação e sem definição, em silêncio. Faltando
+   * uma, o botão volta a ser o de análise.
+   */
+  const colunasAtuais = Object.values(normalizedColumns);
+  const formatacaoPronta =
+    colunasAtuais.length > 0 && colunasAtuais.every((col) => col in formattingRules);
+  const semanticaPronta =
+    colunasAtuais.length > 0 && colunasAtuais.every((col) => col in semanticDefinitions);
 
   const [supportQuery, setSupportQuery] = useState("");
   const [supportResponse, setSupportResponse] = useState("");
@@ -571,12 +680,44 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         novoVocabulario[col] = Boolean(c.vocabulario_util);
       }
 
+      // ⚠️ **Guarda contra front e Edge Function em versões diferentes.**
+      //
+      // Se NENHUMA definição veio preenchida, as chaves de `columns` não
+      // casaram com as colunas desta base — o caso real é front antigo com
+      // `ai-agents` novo, que devolve `{columns, grao, observacoes}` onde o
+      // front velho esperava `{coluna: "definição"}` e guarda o objeto inteiro
+      // como se fosse o mapa.
+      //
+      // ⭐ O perigo não é a tela vazia, é o SALVAR: sem este aviso a pessoa
+      // preenche na mão, finaliza, e a base nasce com um dicionário que não
+      // descreve nada — silenciosamente, porque campo vazio é um estado
+      // legítimo. Avisa e deixa seguir: travar aqui deixaria alguém preso no
+      // meio de um cadastro por causa de um deploy pela metade.
+      if (finalColumns.length && !finalColumns.some((col) => definicoes[col])) {
+        console.error("Dicionario veio sem definicao para nenhuma coluna:", dicionario);
+        toast({
+          title: "As definições vieram vazias",
+          description:
+            "Nenhuma coluna foi descrita. Isso costuma ser front e Edge Function " +
+            "em versões diferentes — recarregue a página antes de continuar.",
+          variant: "destructive",
+        });
+      }
+
       setSemanticDefinitions(definicoes);
       setPapeis(novosPapeis);
       setQuerVocabulario(novoVocabulario);
       setGrao(dicionario.grao ?? "");
       setObservacoes(Array.isArray(dicionario.observacoes) ? dicionario.observacoes : []);
-      saveSketch(3, { semanticDefinitions: definicoes });
+      // ⚠️ Os cinco por `extraData`, pelo mesmo motivo: os `setGrao`/`setPapeis`
+      // logo acima não estão visíveis aqui ainda.
+      saveSketch(3, {
+        semanticDefinitions: definicoes,
+        grao: dicionario.grao ?? "",
+        observacoes: Array.isArray(dicionario.observacoes) ? dicionario.observacoes : [],
+        papeis: novosPapeis,
+        querVocabulario: novoVocabulario,
+      });
       setStep(3);
 
     } catch (error: any) {
@@ -614,11 +755,29 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
         grao: grao.trim(),
         observacoes: observacoes.map((o) => o.trim()).filter(Boolean),
         columns: Object.values(normalizedColumns).reduce((acc: any, col) => {
+          const papel = papeis[col] || "dimensao";
           acc[col] = {
             semantic_definition: semanticDefinitions[col] || "",
             formatting_rule: formattingRules[col] || REGRA_SEM_FORMATACAO,
-            papel_analitico: papeis[col] || "dimensao",
-            vocabulario_util: Boolean(querVocabulario[col]),
+            papel_analitico: papel,
+            // ⚠️ **Só dimensão pode ter vocabulário, e a checagem é aqui porque a
+            // tela não a faz.** O interruptor só é renderizado em dimensão —
+            // então `querVocabulario[col]` pode ter sobrado `true` de quando a
+            // coluna era dimensão, e o controle que o desligaria não está mais
+            // visível para a pessoa desligar.
+            //
+            // ⭐ O estrago era no chat, e silencioso: `lerDicionario` respeita o
+            // booleano como declarado, então `colunasComVocabulario` mandaria
+            // pedir a lista de valores de uma coluna numérica em TODA pergunta
+            // daquela base — desperdiçando um dos 4 pedidos de vocabulário, ou
+            // (abaixo de 200 distintos) entregando ao planejador uma lista de
+            // números apresentada como vocabulário de categoria.
+            //
+            // ⛔ Não limpar no `onChange` do papel: quem trocasse para medida por
+            // engano e voltasse para dimensão perderia a escolha, com o
+            // interruptor reaparecendo desligado. O salvamento é o único ponto
+            // onde a combinação precisa ser coerente.
+            vocabulario_util: papel === "dimensao" && Boolean(querVocabulario[col]),
           };
           return acc;
         }, {})
@@ -850,9 +1009,19 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Reler planilha
               </Button>
-              <Button onClick={handleFormatData} disabled={isProcessing || Object.keys(colisoes).length > 0}>
+              {/* ⚠️ O `disabled` por colisão vale nos DOIS caminhos: seguir com
+                  dois cabeçalhos que viram o mesmo nome interno faz uma coluna
+                  sumir calada da base (C11), e ter análise pronta não muda isso. */}
+              <Button
+                onClick={formatacaoPronta ? () => setStep(2) : handleFormatData}
+                disabled={isProcessing || Object.keys(colisoes).length > 0}
+              >
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Tudo certo! Podemos analisar a Formatação com IA <Bot className="ml-2 h-4 w-4" />
+                {formatacaoPronta ? (
+                  <>Avançar <ArrowRight className="ml-2 h-4 w-4" /></>
+                ) : (
+                  <>Tudo certo! Podemos analisar a Formatação com IA <Bot className="ml-2 h-4 w-4" /></>
+                )}
               </Button>
             </div>
           </div>
@@ -863,8 +1032,11 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
             <div>
               <h3 className="text-xl font-bold flex items-center gap-2"><Code className="h-5 w-5 text-primary" /> Formatação de Dados (Agente 3)</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                A IA leu uma amostra da sua planilha e decidiu como cada coluna deve ser lida.
-                Confira as regras e o resultado nas linhas de exemplo abaixo.
+                <strong>A formatação é o que impede o motor de cálculo de errar conta.</strong>{" "}
+                Para ele, <code className="font-mono text-xs">R$ 1.234,56</code> é texto até uma
+                regra virá-lo em número — e coluna que não vira número simplesmente não entra na
+                soma, sem erro nenhum na tela. Confira as regras e o resultado nas linhas de
+                exemplo abaixo.
               </p>
               
               {Object.keys(formattingRules).length > 0 && (
@@ -963,9 +1135,25 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(1)} disabled={isProcessing}>Voltar</Button>
-              <Button onClick={handleAnalyzeSemantics} disabled={isProcessing}>
+              {/* ⚠️ Quando a semântica já existe, "Refazer" fica ao lado do
+                  "Avançar" — e aqui ele importa mais que no passo anterior: se a
+                  pessoa mudou uma regra de formatação pelo Agente 3.1, o perfil
+                  que sustentou os papéis analíticos mudou junto, e as definições
+                  na mão dela são de antes. Sem esta saída, a única forma de
+                  refazer seria recomeçar o cadastro. */}
+              {semanticaPronta && (
+                <Button variant="secondary" onClick={handleAnalyzeSemantics} disabled={isProcessing}>
+                  {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                  Refazer a semântica
+                </Button>
+              )}
+              <Button
+                onClick={semanticaPronta ? () => setStep(3) : handleAnalyzeSemantics}
+                disabled={isProcessing}
+              >
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Prever Semântica com IA <ArrowRight className="ml-2 h-4 w-4" />
+                {semanticaPronta ? "Avançar" : "Prever Semântica com IA"}
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -1096,19 +1284,21 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
                           {PAPEIS.find((papel) => papel.valor === (papeis[col] || 'dimensao'))?.ajuda}
                         </p>
                         {(papeis[col] || 'dimensao') === 'dimensao' && (
-                          <label className="flex items-start gap-1.5 mt-2 text-[11px] text-muted-foreground cursor-pointer">
-                            <input
-                              type="checkbox"
+                          <div className="flex items-start gap-2 mt-3">
+                            <Switch
+                              id={`vocabulario-${col}`}
                               checked={Boolean(querVocabulario[col])}
-                              onChange={(e) =>
-                                setQuerVocabulario((antes) => ({
-                                  ...antes,
-                                  [col]: e.target.checked,
-                                }))}
-                              className="mt-0.5"
+                              onCheckedChange={(ligado) =>
+                                setQuerVocabulario((antes) => ({ ...antes, [col]: ligado }))}
+                              className="mt-0.5 shrink-0"
                             />
-                            <span>O chat pode consultar a lista de valores desta coluna</span>
-                          </label>
+                            <Label
+                              htmlFor={`vocabulario-${col}`}
+                              className="text-[11px] font-normal text-muted-foreground leading-snug cursor-pointer"
+                            >
+                              O chat pode consultar a lista de valores desta coluna
+                            </Label>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1117,22 +1307,23 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
               </table>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border">
+            {/* Os três à direita, na mesma ordem dos outros passos: Voltar ·
+                ação secundária · ação primária. Antes o "Voltar" ficava sozinho
+                à esquerda, e este era o único passo com o rodapé assim. */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(2)} disabled={isProcessing}>Voltar</Button>
-              <div className="flex gap-3">
-                <Button variant="secondary" onClick={handleRefineSemantics} disabled={isProcessing}>
-                  {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                  Refinar Descrições (Agente 2)
-                </Button>
-                <Button
-                  onClick={handleFinalizeAndSave}
-                  disabled={isProcessing}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-                >
-                  {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Finalizar e Salvar Base <CheckCircle className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
+              <Button variant="secondary" onClick={handleRefineSemantics} disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                Refinar Descrições (Agente 2)
+              </Button>
+              <Button
+                onClick={handleFinalizeAndSave}
+                disabled={isProcessing}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              >
+                {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Finalizar e Salvar Base <CheckCircle className="ml-2 h-4 w-4" />
+              </Button>
             </div>
           </div>
         )}

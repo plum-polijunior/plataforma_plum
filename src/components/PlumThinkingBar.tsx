@@ -26,7 +26,7 @@ export function PlumThinkingBar({ isProcessing }: PlumThinkingBarProps) {
         }
         return prev;
       });
-    }, 1000);
+    }, 500);
 
     return () => clearInterval(timer);
   }, [isProcessing]);

@@ -64,18 +64,32 @@ export interface Pergunta {
   exigeAgrupamento?: boolean;
   /** O `trunc` esperado, quando a pergunta pede série temporal. */
   esperaTrunc?: "week" | "month" | "quarter" | "year";
+  /**
+   * ⛔ Mediana e desvio padrão no mesmo plano.
+   *
+   * São duas réguas diferentes: `std` é calculado em torno da **média**, que é
+   * exatamente a medida que `median` descartou. Apresentados juntos como
+   * "típico e variação" enganam quem lê. Se o típico é mediana, a dispersão é
+   * quartil. Visto em 2026-08-25, na primeira execução real da suíte.
+   */
+  proibeMedianaComDesvio?: boolean;
 }
 
 export const PERGUNTAS: Pergunta[] = [
   // ── Dispersão e posição: o que o B09 acrescentou e ninguém mediu ─────────
   {
-    id: "dispersao-std",
+    id: "dispersao-criterio",
     texto: "Tem alguma venda muito fora do padrão?",
     porque:
-      "É a verificação mecânica que o plano nomeia primeiro. 'Fora do padrão' é dispersão, " +
-      "e antes do B09 o planejador não tinha `std` na gramática — a resposta era um `max` " +
-      "sem contexto, que não distingue um pico legítimo de um outlier.",
-    esperaAgregacao: ["std", "var"],
+      "⚠️ **Esta entrada foi APERTADA em 2026-08-25, e o motivo é que ela passou numa resposta " +
+      "errada.** Ela exigia só `std`, e `std` estava no plano — mas a conclusão era circular: " +
+      "*'99% das vendas vão até R$ 2.668 e a maior foi R$ 3.347, logo ela é um extremo'*. O " +
+      "máximo é SEMPRE maior que qualquer percentil, em qualquer base; a frase seria verdade " +
+      "numa distribuição uniforme. Agora cobra o que faltava: um limiar declarado como " +
+      "presunção, e percentis para mostrar a forma da distribuição em vez do máximo sozinho.",
+    esperaAgregacao: ["quantile"],
+    exigePresuncao: true,
+    proibeMedianaComDesvio: true,
     proibeLinhaBruta: true,
   },
   {
