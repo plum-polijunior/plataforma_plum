@@ -75,6 +75,33 @@ class PlanRequest(BaseModel):
     tipo: str = "agregado"
 
 
+class BaseRequest(BaseModel):
+    """
+    Uma base do payload: a planilha, a aba e **as permissões dela**.
+
+    ⭐⭐ **`allowed_columns` vive AQUI, por base, e isso é o ponto do bloco B19.**
+    Uma lista global do turno seria a união das permissões de bases diferentes:
+    quem pode ver `salario` em RH passaria a poder pedir `salario` de Vendas, e a
+    checagem não veria nada de errado — os dois nomes estão na lista. O RBAC é
+    por dataset (`role_permissions`), e o payload tem de ter a mesma forma.
+
+    ⚠️ `nome` é o que o `from` do Query Plan casa. Quem escolhe o nome é a Edge
+    Function, a partir do dataset — não o LLM.
+    """
+
+    nome: str
+    sheet_id: str
+    # Ver o comentário de `ExecutionPayload.tab`: apelido mutável, só usado
+    # quando `tab_gid` é nulo.
+    tab: str = "Sheet1"
+    # `0` é a primeira aba e é válido — por isso None, nunca 0.
+    tab_gid: Optional[int] = None
+    allowed_columns: List[str] = Field(default_factory=list)
+    # Regras do Agente 3/3.1 desta base. São por base porque descrevem colunas
+    # desta planilha: aplicar as de outra limparia a coluna errada.
+    formatting_rules: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
 class ExecutionPayload(BaseModel):
     """
     O que a Edge Function assina. `sheet_id` entra aqui de propósito: assim ele
@@ -101,6 +128,16 @@ class ExecutionPayload(BaseModel):
     # em modo observação: mede e registra, não recusa — ver
     # `pandas_executor._conferir_cardinalidade`.
     caminho: str = "legado"
+    # ⭐ Multi-base (B19). Quando vem preenchido, ELE MANDA: `sheet_id`, `tab`,
+    # `tab_gid`, `allowed_columns` e `formatting_rules` do topo são ignorados, e
+    # cada pedido é autorizado contra a base que o `from` do plano nomeia.
+    #
+    # ⚠️ **Nasce vazio de propósito, e o motivo é o mesmo do `PlanRequest.tipo`:**
+    # o Lambda é publicado a todo push (`query-engine.yml`) e a Edge Function à
+    # mão (I-03). Por algumas horas o executor novo recebe payload da função
+    # velha, que não manda este campo — obrigatório aqui derrubaria o dashboard
+    # nesse intervalo. Vazio ⇒ `main` sintetiza uma base só, dos campos do topo.
+    bases: List[BaseRequest] = Field(default_factory=list)
     # {coluna: {"type": <enum fechado>, "params": {...}}} — vem do Agente 3/3.1
     # via schema_metadata. O executor deriva column_roles disto mesmo
     # (roles_from_formatting_rules), não recebe role prontos da Edge Function.

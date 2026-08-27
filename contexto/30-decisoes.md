@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-26
+atualizado_em: 2026-08-27
 ---
 
 # Decisões
@@ -542,6 +542,26 @@ sobe de granularidade — `schema_metadata.versao >= 2` diz que houve humano no 
 presunção **por base**, não por coluna.
 **Status:** vigente.
 
+⚠️⚠️ **Correção de 2026-08-27 — o rejeitado (a) caiu, e com ele o bloco preservado.**
+
+O *"apagar seria jogar fora um bloco testado para reescrevê-lo igual"* valia para o A2 **do V7**,
+que fazia seleção sem ver a pergunta. 👤 definiu o escopo real do A2 que volta: ele decide **quais
+bases entram e qual A3 planeja** — duas escolhas, ambas dependentes da pergunta.
+
+⛔ E é isso que aposenta o bloco, pelo motivo escrito no cabeçalho do próprio módulo: *"não recebe a
+pergunta — é o que torna o resultado cacheável por `(dataset, digital do dicionário)`"*. Um A2 que vê
+a pergunta **não é cacheável por aquela chave**; cacheado assim de todo modo, devolveria a escolha de
+uma pergunta para outra, em silêncio. ⇒ `adhoc/reconhecedor.ts`, `_shared/reconhecimento.ts` e
+`plum_reconhecimento` são **apagados**, e o `a2_encaminhador` é escrito do zero (D-054).
+
+⭐ **O porquê que se preserva desta rodada, porque é o que não se recompra:** o bloco foi guardado
+por uma razão boa e a razão expirou por mudança de escopo, não por engano. E `plum_reconhecimento`
+deixa de fazer falta porque **o que ela cacheava deixou de ser uma chamada de LLM** — o índice das
+bases que o A2 precisa para escolher sai de um `select` no `schema_metadata`.
+
+⚠️ Fica de pé o que a D-049 decidiu de verdade: o **reconhecimento semântico** é do cadastro, não do
+chat, e não volta. O que volta é **seleção e roteamento**, que é outro trabalho.
+
 ### D-050 · 2026-08-25 · O cadastro ignora `vocabulario_exposto`, e as outras duas travas ficam
 **Decisão:** a ação `perfil_do_cadastro` pede o vocabulário das colunas candidatas **sem consultar**
 `datasets.vocabulario_exposto`.
@@ -633,5 +653,67 @@ Se a data não chegar, ambos devolvem erro em vez de inventar uma.
 
 **Status:** vigente. ⚠️ O `dashboard-agent` está fora do escopo do remake (C2) e ainda assim entrou
 nesta — a exceção é deliberada, porque o defeito não tinha como respeitar o recorte do remake.
+
+### D-054 · 2026-08-27 · ⭐⭐ O A2 volta como encaminhador, e o registro de agentes é código nosso
+**Decisão:** o slot 2 da cadeia do chat volta a existir como **`a2_encaminhador`**, com **duas**
+escolhas por pergunta: **quais bases** entram no prompt do A3, e **qual A3** gera o plano. Hoje há um
+A3 (`a3_planejador`, pau pra toda obra); a intenção é ter especialistas, como um `a3_tendencia`
+ligado a ferramentas de predição.
+
+⭐ **E "que agentes existem e o que cada um faz" é dado, num registro em CÓDIGO
+(`_shared/agentes.ts`), escrito pelos administradores.** Dele saem duas coisas geradas: o trecho do
+prompt do A2 e o `switch` que despacha.
+
+**Por quê:** sem o registro, acrescentar um A3 é editar um prompt **e** um dispatch em lugares
+diferentes, e eles divergem em silêncio — o padrão do D-028 e da divergência TS↔Python do D-017. Um
+dono, dois consumidores, como o `MODELO_POR_PAPEL`. E o dono ser o administrador, não o cliente,
+decide a **forma**: constante versionada, publicada por deploy.
+
+⭐ **A fronteira que isso desenha, e é a mesma forma do D-039:**
+
+| Quem escreve | O quê | Onde vive |
+|---|---|---|
+| **cliente** (revisado por pessoa, R-06) | o que os **dados significam** — definição de coluna, grão, observações | `schema_metadata`, no banco |
+| **administrador** | o que os **agentes sabem fazer** — `quando_usar`, capacidades, qual A3 existe | `_shared/agentes.ts`, em código |
+
+⇒ O cliente **não** cria, renomeia nem descreve um A3. O que ele influencia é qual base o A2 escolhe,
+e influencia isso escrevendo bom dicionário — que é o incentivo certo.
+
+**Rejeitado:**
+(a) **tabela `agentes` no Supabase, editável pelo painel** — trocar sem republicar é tentador e é a
+lição do I-03: *o código no repositório deixa de ser o que está rodando*. E daria ao cliente
+superfície de escrita sobre o roteamento.
+(b) **secret / variável de ambiente** — o mesmo motivo já escrito em `_shared/llm_core.ts` para os
+modelos: um typo derruba todas as perguntas daquele papel, nenhum teste alcança o valor, e trocar um
+secret **incrementa o `version`** da função sem código novo, criando de propósito mais casos do sinal
+falso que o I-03 manda ignorar.
+(c) **campo no `schema_metadata`** — território do cliente. Misturar as duas donacias no mesmo objeto
+é como o `dashboard_k_min` ficou vestigial: ninguém sabe mais quem manda.
+(d) **adaptar o `reconhecedor` em vez de escrever do zero** — ver a correção da D-049: ele não vê a
+pergunta, e o cache por digital devolveria a escolha de uma pergunta para outra, calado.
+(e) **reaproveitar o papel `reconhecedor` para o encaminhador** — o nome descreveria um trabalho que
+agora é do cadastro, e é exatamente a confusão que esta decisão nasceu corrigindo.
+
+⚠️ **`MODELOS.FLASH` já é `gemini-3.7-flash`**, então "o A2 é gemini-3.7" não é escolha nova: é uma
+linha no `MODELO_POR_PAPEL`, e é a linha certa pela regra do próprio arquivo — classificação sobre
+entrada curta que roda em toda pergunta é Flash. ⚠️ E o A2 entra no caminho crítico de **toda**
+pergunta: custo por pergunta, para sempre, ao contrário do cadastro (D-047), que é O(1) por base.
+
+⛔ **O `DROP` de `plum_reconhecimento` é exceção declarada à D-005** (migration não destrutiva). O
+repo honrou aquela regra duas vezes, mantendo `organizations.dashboard_k_min` e `plum_chat.assunto`
+vestigiais — mas aquelas duas guardam uma **ideia** que continua boa (D-026), e esta guarda um
+**mecanismo substituído**. Não é a mesma classe. A D-005 continua valendo para coluna.
+
+⚠️ **O que NÃO se apaga junto**, e parece apagável: a action **`ad_hoc_reconhecer`** é o nome do
+**primeiro turno** e está viva — o B15 manteve o nome e trocou o conteúdo (A1 → dicionário →
+vocabulário, um LLM só). E o valor `'reconhecedor'` fica no CHECK de `plum_logs.etapa`, porque o A2
+rodou de 2026-08-20 a 08-25 e há linhas com ele.
+
+⚠️ **Roteamento com um destino só é infalsificável.** Com um A3, o A2 sempre acerta e não se
+distingue roteador funcionando de roteador quebrado — o primeiro teste real seria no dia em que o
+segundo A3 sobe. Por isso o registro aceita uma entrada **só de teste**, para a suíte afirmar que uma
+pergunta de tendência escolhe o especialista e não o generalista. É o I-13 aplicado antes do erro.
+
+**Status:** proposta — é a Etapa 3. Ver `PLANO-etapa-3.md` §A3 e bloco B20.
 
 

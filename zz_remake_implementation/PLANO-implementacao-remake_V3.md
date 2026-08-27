@@ -504,7 +504,25 @@ passa a ter dois consumidores.
 cards.
 
 adições à etapa 4:
-entre o agente a1_porteiro e o agente a3_reconhecedor existe um espaço para um a2. e esse será o a2_encaminhador. ele encaminhará o prompt do usuário para o a3_reconhecedor (que é um agente pau pra toda obra) ou para outro agente mais específico (por exemplo, um agente que está conectado à um lambda que plota e estrapola gráficos para predição). por mais que ainda não exista nenhum outro agente para reconhecimento além do a3 em produção, é bom deixar a arquitetura pronta. o a2 deverá conhecer a função de todos os agentes e ser gemini-3.7.
+
+⚠️ **Correção de 2026-08-27 — o `a2_encaminhador` SAIU DAQUI e foi para a Etapa 3.** Este item
+estava escrito como adição à Etapa 4, e ele é o **mesmo agente** do §A3 da Etapa 3, não um segundo.
+O que os separava era achar que a Etapa 3 tinha um "seletor de planilha" e a Etapa 4 um
+"encaminhador" — 👤 definiu que é **um agente com duas escolhas**: quais bases entram, e qual A3
+planeja. Ver `PLANO-etapa-3.md` §A3 e bloco B20.
+
+⭐ Dois consertos de nome, porque o texto original os trocava:
+- O A3 é o **`a3_planejador`**. `reconhecedor` era o nome do **A2** — o que o cadastro substituiu no
+  B15. Escrever "a3_reconhecedor" cola no A3 o nome do agente que morreu.
+- **`MODELOS.FLASH` já é `gemini-3.7-flash`.** "O a2 deverá ser gemini-3.7" não é decisão nova: é
+  uma linha no `MODELO_POR_PAPEL`, e é a linha certa pela regra do próprio arquivo (classificação
+  sobre entrada curta que roda em toda pergunta é Flash).
+
+⛔ E um achado que aposenta o bloco preservado: o `reconhecedor` **não recebe a pergunta**, e é isso
+que o torna cacheável. Escolher bases exige a pergunta ⇒ o A2 é escrito do zero, é por pergunta, não
+cacheia, e `plum_reconhecimento` não volta. A D-049 dizia o contrário e está corrigida.
+
+(Nada mais sai da Etapa 4 — a morte do Tarsila continua sendo o titular dela.)
 
 ## Etapa 5 — dicionário camadas 3 e 4 + memória · 3–4 semanas
 

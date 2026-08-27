@@ -24,7 +24,7 @@ cliente nomeia as colunas do jeito dele.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Callable, Collection, Dict, Optional, Set
 
 import re
 import pandas as pd
@@ -46,6 +46,23 @@ class MissingColumnError(ExecutorError):
     tabela inteira com o rótulo do recorte pedido, que é um número errado com
     etiqueta convincente. Card quebrado se conserta em minutos; card mentindo
     dura meses.
+    """
+
+
+class TabelaNaoEncontradaError(ExecutorError):
+    """
+    O `from` do plano nomeia uma tabela que não veio no payload.
+
+    ⭐ **Era um `{"error": ...}` de retorno até 2026-08-27, e a diferença
+    importa.** Todo o resto deste módulo levanta — `MissingColumnError`,
+    `RawRowsBlocked`, `RowLimitExceeded`. Este caso destoava porque, com **uma**
+    tabela só, ele nunca acontecia: o `main.py` sobrescrevia `plano["from"]` e o
+    nome do plano era irrelevante.
+
+    ⚠️ Com multi-base isso vira o modo de falha mais provável — o planejador
+    escrevendo o nome errado da planilha. E um dicionário de retorno com `error`
+    dentro chega ao card como **card vazio, em silêncio**, enquanto uma exceção
+    nomeada aparece no log e na tela. Ver `20-pendencias.md` T8.
     """
 
 
@@ -629,6 +646,61 @@ def _rotulo_de_periodo(
     return rotulo.where(s.notna(), _SEM_DATA)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Qual tabela o plano quer
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ⭐ O nome que o caminho de UMA tabela sempre usou. Todo card salvo no
+# dashboard hoje tem `"from": "producao"`, porque o `main.py` sobrescrevia o
+# `from` antes de executar. Ele não é mais imposto, mas continua sendo o default
+# e o apelido de compatibilidade — ver `_resolver_tabela`.
+TABELA_PADRAO = "producao"
+
+
+def resolver_nome_da_tabela(plan: Dict[str, Any], nomes: Collection[str]) -> str:
+    """
+    O nome da tabela a usar, ou `TabelaNaoEncontradaError`.
+
+    ⚠️⚠️ **A regra de compatibilidade é o ponto desta função, não um detalhe.**
+    Até 2026-08-27 o `main.py` fazia `plano["from"] = "producao"` antes de
+    chamar, então **todo card salvo em produção carrega `"from": "producao"`** —
+    inclusive os dos quatro clientes pagantes. Passar a respeitar o `from` sem
+    esta ponte apagaria o dashboard de todo mundo no minuto da publicação.
+
+    A ponte: com **exatamente uma** tabela no payload, um `from` ausente ou igual
+    a `"producao"` cai nela, qualquer que seja o nome real dela. É o caso legado
+    inteiro, e ele continua idêntico.
+
+    ⛔ **A ponte NÃO vale com duas ou mais tabelas.** Ali "producao" não é
+    apelido de nada: se o plano pede um nome que não veio, adivinhar qual das N
+    ele queria devolveria o número de uma base com o rótulo de outra — a falha
+    que este módulo recusa em toda parte (ver `MissingColumnError`).
+
+    ⭐⭐ **Recebe `nomes`, não `tables`, porque o `main.py` chama isto ANTES de
+    ler o Google.** A barreira 4 precisa saber contra qual `allowed_columns`
+    autorizar o pedido, e essa decisão tem de ser **a mesma** que a execução vai
+    tomar depois. Duas implementações da regra divergiriam em silêncio, e a
+    divergência seria de autorização: um pedido autorizado contra a base A e
+    executado sobre a base B. É a classe do D-017, e aqui ela não é "coluna não
+    encontrada" — é vazamento.
+    """
+    pedida = plan.get("from")
+    nomes = set(nomes)
+
+    if pedida in nomes:
+        return pedida
+
+    # ── A ponte do legado, e só ela ──────────────────────────────────────────
+    if len(nomes) == 1 and (pedida is None or pedida == TABELA_PADRAO):
+        return next(iter(nomes))
+
+    disponiveis = ", ".join(sorted(nomes)) or "(nenhuma)"
+    raise TabelaNaoEncontradaError(
+        f"O plano pede a tabela '{pedida}', que nao veio no payload. "
+        f"Disponiveis: {disponiveis}."
+    )
+
+
 def execute_plan(
     plan: Dict[str, Any],
     tables: Dict[str, pd.DataFrame],
@@ -650,13 +722,7 @@ def execute_plan(
     """
     roles = _roles(column_roles)
 
-    table_name = plan.get("from", "producao")
-    if table_name not in tables:
-        return {
-            "columns": [], "rows": [], "row_count": 0,
-            "error": f"Tabela '{table_name}' nao encontrada.",
-        }
-
+    table_name = resolver_nome_da_tabela(plan, tables)
     df = tables[table_name].copy()
 
     # ── TETO DE ENTRADA ──────────────────────────────────────────────────────

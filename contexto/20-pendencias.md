@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: plataforma
-atualizado_em: 2026-08-26
+atualizado_em: 2026-08-27
 ---
 
 # Pendências da plataforma
@@ -85,6 +85,7 @@ usa a base. ⭐ O que rende mais são as perguntas que já se viu o chat errar.
 | P7 | `formattingRules` cumprir o que promete | Quem escolhe o `type` ainda é um LLM olhando 5 linhas de amostra. O enum é fechado e `type` inválido loga warning, mas a escolha continua sendo um chute informado |
 | P8 | Domínio próprio (`plum-polijunior.com.br`) | ⚠️ O domínio **não aponta para a Vercel** hoje. Três lugares têm de mudar juntos ou o SSO quebra |
 | P9 | Mover a matriz de permissões de `Dashboard.tsx` para `Cfgdatabase.tsx` | `Dashboard.tsx` tem 1007 linhas. Plano existe e continua válido; sem urgência |
+| P10 | ⭐ **`a2_encaminhador` — o slot 2 volta, com duas escolhas** | Etapa 3. Escolhe **quais bases** entram no prompt do A3 **e qual A3** planeja (D-054). ⛔ Escrito do zero: o `reconhecedor` preservado não vê a pergunta, e escolher base exige a pergunta — o cache por digital devolveria a escolha de uma pergunta para outra, calado. Junto vem o registro `_shared/agentes.ts`, que é **código nosso**, não campo do cliente. ⚠️ Depende do T8 e do `main.py` parar de sobrescrever o `from`, senão a escolha do A2 é descartada e nada dela é observável. Ver `PLANO-etapa-3.md` §A3 e B20 |
 
 ## 🔴 Precisa de decisão antes de virar tarefa
 
@@ -102,6 +103,7 @@ usa a base. ⭐ O que rende mais são as perguntas que já se viu o chat errar.
 | D10 | ⭐ **O arquiteto emite análise declarada (compilada pela plataforma) ou Query Plan direto?** Recomendação: compilador **com `ad_hoc` liberado** desde o começo, para medir a taxa (D-044) | produto + tech |
 | D11 | **R1 do arquiteto é LLM ou código?** Casar termo da pergunta com o dicionário talvez não precise de modelo. Tentar código primeiro é mais barato e determinístico (D-043) | tech |
 | D12 | **`ad_hoc` fica visível ao usuário?** ("essa pergunta saiu do meu repertório") — honestidade contra ruído | produto |
+| D13 | **Um A3 especialista fica disponível para toda organização, ou é entitlement?** A *definição* de cada A3 é nossa e global (D-054); a *disponibilidade* talvez não seja — um cliente que não comprou o `a3_tendencia` deveria vê-lo? O padrão já existe (`organizations.remake_habilitado`) e a mudança é filtrar o registro antes de montar o prompt do A2. ⛔ Não antecipar o campo enquanto não houver o segundo A3: seria desenhar para um preço que ninguém definiu | comercial |
 
 ---
 

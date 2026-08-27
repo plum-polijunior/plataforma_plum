@@ -70,6 +70,9 @@ export type EtapaLog =
   // O remake (`ad_hoc`).
   | "porteiro"
   | "reconhecedor"
+  // ⭐ O A2 de verdade, desde a Etapa 3 (D-054). Convive com `reconhecedor`, que
+  // fica porque as linhas de 2026-08-20 a 08-25 carregam aquele valor.
+  | "encaminhador"
   | "planejador"
   | "interprete"
   /** Ida ao Lambda. ⚠️ NUNCA rotular com o nome do agente seguinte: rotular a

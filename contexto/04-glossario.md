@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-14
+atualizado_em: 2026-08-27
 ---
 
 # Glossário
@@ -27,6 +27,27 @@ dicionário de 4 camadas, assinado pelo cliente. → `40-implementacao/metodo-on
 ---
 
 ## Arquitetura
+
+**A1 · A2 · A3 · A4** · ⭐ os quatro slots da cadeia `ad_hoc` do chat. **O número é o slot; o nome é
+a implementação.** Hoje: `a1_porteiro` (segurança e viabilidade) → *slot 2 vazio* →
+`a3_planejador` (emite o Query Plan) → executor → `a4_interprete` (a prosa, que não faz conta).
+
+⚠️ **Duas confusões que este verbete existe para evitar:**
+1. **O A3 é o `planejador`, não o "reconhecedor".** `reconhecedor` foi o nome do **A2**, o agente que
+   o cadastro substituiu no B15 (`30-decisoes.md` D-049). O identificador sobrevive no tipo `Papel`,
+   no `log_core.ts` e no CHECK de `plum_logs.etapa` sem avisar que o agente morreu — daí a confusão
+   ser reprodutível, não um lapso.
+2. **Um slot pode ter várias implementações.** `a3_planejador` e o futuro `a3_tendencia` são dois A3.
+   Quando isso acontecer, quem escolhe entre eles é o `a2_encaminhador` (D-054).
+
+**`a2_encaminhador`** · (proposta, Etapa 3) o slot 2 preenchido: por pergunta, escolhe **quais bases**
+entram no prompt do A3 **e qual A3** planeja. ⛔ Não é o `reconhecedor` revivido — aquele não via a
+pergunta, e é exatamente por isso que era cacheável. → `30-decisoes.md` D-054
+
+**Registro de agentes** · `_shared/agentes.ts`: por agente, `quando_usar` e capacidades. ⭐ **Dono é o
+administrador, não o cliente** — é código versionado, publicado por deploy, e dele saem *gerados* o
+prompt do A2 e o `switch` de despacho. A fronteira: o cliente escreve o que os **dados** significam
+(no `schema_metadata`); nós escrevemos o que os **agentes** sabem fazer. → `30-decisoes.md` D-054
 
 **Arquiteto** · (proposta do remake) o componente que traduz a pergunta do usuário em um **plano de
 ação analítico** — decide *que análise* a pergunta exige antes de qualquer dado ser buscado. A LLM

@@ -239,10 +239,12 @@ export function normalizarDicionario(cru: unknown): Dicionario {
 /**
  * As colunas cujo vocabulário vale buscar, em ordem estável.
  *
- * Espelha `colunasComVocabularioUtil` de `reconhecimento.ts`, que sai de cena
- * no B15. Ordem alfabética porque o chamador corta as 4 primeiras — sem ordem
- * estável, qual coluna ganha vocabulário mudaria entre execuções, e com ela o
- * plano.
+ * Herdou o comportamento do `colunasComVocabularioUtil` que vivia em
+ * `reconhecimento.ts` — apagado em 2026-08-27 com o resto do A2 (D-054). Esta é
+ * a única implementação desde então.
+ *
+ * Ordem alfabética porque o chamador corta as 4 primeiras — sem ordem estável,
+ * qual coluna ganha vocabulário mudaria entre execuções, e com ela o plano.
  */
 export function colunasComVocabulario(d: Dicionario): string[] {
   return Object.entries(d.colunas)
@@ -297,4 +299,84 @@ export function paraPrompt(d: Dicionario): string {
   }
 
   return blocos.join("\n");
+}
+
+/**
+ * Uma base no ÍNDICE que o A2 encaminhador lê para escolher.
+ *
+ * ⭐ `nome` é o que o `from` do Query Plan casa, e quem o escolhe é a Edge
+ * Function a partir do dataset — nunca o LLM.
+ */
+export interface BaseNoIndice {
+  nome: string;
+  dicionario: Dicionario;
+}
+
+/**
+ * O ÍNDICE das bases — o insumo do A2, e **de propósito muito menor** que o
+ * dicionário.
+ *
+ * ── ⭐⭐ POR QUE NÃO É O `paraPrompt` DE CADA BASE ───────────────────────────
+ *
+ * O A2 existe porque mandar o dicionário completo de seis planilhas ao A3 em
+ * toda pergunta é caro e ruidoso. Se o A2 recebesse esses mesmos seis
+ * dicionários para escolher, o custo teria sido **movido um salto**, não
+ * resolvido — e o A2 seria gasto puro.
+ *
+ * ⇒ Aqui vai o mínimo para ESCOLHER: por base, o nome, o grão, quantas colunas
+ * ela tem, e a **lista de nomes de coluna agrupada por papel analítico**. Sem o
+ * conceito de cada coluna, sem formatação, sem observações. O A3 depois recebe o
+ * `paraPrompt` **inteiro** — mas só das bases escolhidas. É aí que a economia
+ * mora.
+ *
+ * ⚠️ **O nome da coluna é informação suficiente para escolher a BASE, e não para
+ * planejar.** É por isso que o A2 não pode emitir Query Plan: ele viu nomes, não
+ * significados. Quem lê `lucro` sem ler *"lucro não inclui impostos"* erraria a
+ * conta — e é justamente o conceito que fica fora deste índice.
+ *
+ * ⭐ Agrupar por papel em vez de listar cru é o que torna a escolha possível sem
+ * o conceito: *"tem coluna temporal?"* é a pergunta que decide se um
+ * `a3_tendencia` consegue trabalhar naquela base.
+ */
+export function paraIndice(bases: readonly BaseNoIndice[]): string {
+  const blocos = bases.map(({ nome, dicionario }) => {
+    const porPapel = new Map<PapelAnalitico, string[]>();
+    for (const [coluna, c] of Object.entries(dicionario.colunas)) {
+      const lista = porPapel.get(c.papel_analitico) ?? [];
+      lista.push(coluna);
+      porPapel.set(c.papel_analitico, lista);
+    }
+
+    const linhas = [`### ${nome}`];
+    linhas.push(
+      dicionario.grao
+        ? `UMA LINHA É: ${dicionario.grao}`
+        : "UMA LINHA É: (não declarado)",
+    );
+
+    const total = Object.keys(dicionario.colunas).length;
+    linhas.push(`${total} coluna(s):`);
+
+    // ⭐ Ordem fixa, não a de inserção: sem ela o mesmo índice sairia diferente
+    // entre execuções e a escolha do A2 mudaria sem nada ter mudado na base.
+    for (const papel of ["temporal", "medida", "dimensao", "identificador"] as const) {
+      const nomes = porPapel.get(papel);
+      if (!nomes?.length) continue;
+      linhas.push(`  ${papel}: ${[...nomes].sort().join(", ")}`);
+    }
+    if (!total) linhas.push("  (nenhuma coluna descrita)");
+
+    // ⚠️ Base não conferida entra no índice do mesmo jeito — esconder uma base
+    // porque ninguém revisou o dicionário dela faria a pergunta parecer
+    // impossível em vez de arriscada. O aviso vai ao A3, que é quem planeja.
+    if (!dicionario.conferido) linhas.push("  ⚠️ dicionário não conferido por pessoa");
+
+    return linhas.join("\n");
+  });
+
+  return [
+    "AS BASES DESTA ORGANIZAÇÃO (nome: o que uma linha é, e as colunas por papel):",
+    "",
+    blocos.length ? blocos.join("\n\n") : "(nenhuma base cadastrada)",
+  ].join("\n");
 }

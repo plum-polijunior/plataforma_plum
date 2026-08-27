@@ -60,9 +60,16 @@ import {
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
 import { dataDeHoje } from "../_shared/hoje.ts";
 // ⭐ O A2 saiu do caminho no B15: quem diz o que a base significa agora é o
-// dicionário escrito no cadastro. `reconhecimento.ts` e `adhoc/reconhecedor.ts`
-// ficam no repositório, desligados — voltam na Etapa 3, quando escolher entre
-// PLANILHAS for problema de verdade (§A3 do plano da Etapa 2, D-005).
+// dicionário escrito no cadastro, conferido por gente (D-049).
+//
+// ⛔ `reconhecimento.ts` e `adhoc/reconhecedor.ts` foram APAGADOS em 2026-08-27.
+// O B15 os deixou de lado prevendo que voltariam na Etapa 3 — mas o A2 que volta
+// é o `a2_encaminhador`, que escolhe bases E escolhe qual A3 planeja, e as duas
+// escolhas dependem da PERGUNTA. O módulo antigo não recebia a pergunta, e era
+// exatamente isso que o tornava cacheável por `(dataset, digital)`. Reaproveitá-lo
+// devolveria a escolha de uma pergunta para outra, em silêncio. Ver D-054.
+//
+// ⚠️ O slot 2 está VAZIO hoje: o turno é A1 → dicionário → A3.
 import {
   colunasComVocabulario,
   lerDicionario,
@@ -1306,7 +1313,9 @@ async function handleAdHocReconhecer(
  * última coisa. Separar dá ao agente lento um orçamento de tempo só dele, e
  * torna a latência dele legível isolada no log.
  *
- * ⚠️ `reconhecimento` e `vocabularios` chegam do cliente. É seguro pela mesma
+ * ⚠️ O **dicionário** e os `vocabularios` chegam do cliente (o parâmetro é
+ * `dicionarioCru`; até o B15 era `reconhecimento`, e o nome antigo ficou neste
+ * comentário até 2026-08-27). É seguro pela mesma
  * razão dos `pedidos`: **nada disso é decisão de autorização.** O
  * `authorizePlan` roda no servidor sobre o plano final e a barreira 4 do Lambda
  * reconfere contra o `allowed_columns` lido com o JWT. O vocabulário contém

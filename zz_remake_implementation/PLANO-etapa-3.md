@@ -48,20 +48,135 @@ enquanto `MissingColumnError` aparece. Com uma tabela só isso nunca acontecia,
 porque o `from` era sobrescrito. Com várias, passa a ser o modo de falha mais
 provável — o planejador escrevendo o nome errado da planilha.
 
-### A3 ⭐ O A2 volta, e o trabalho dele agora existe
-
-`adhoc/reconhecedor.ts`, `_shared/reconhecimento.ts` e `plum_reconhecimento`
-ficaram desligados no B15 exatamente para isto (D-049).
+### A3 ⭐⭐ O A2 volta como ENCAMINHADOR — e tem DUAS escolhas, não uma
 
 Com **uma** planilha o trabalho dele era vazio — *"que tabelas importam"* era
 constante. Com várias, é a pergunta central: mandar o dicionário de seis
 planilhas ao A3 em toda pergunta é caro e ruidoso, e ele escolheria mal.
 
-⚠️ **Mas ele não volta igual.** O A2 do V7 deduzia o significado das colunas sem
-ver linha nenhuma; isso agora é do cadastro e está no dicionário, conferido por
-gente. O que sobra para ele é **seleção**: dadas N planilhas e uma pergunta,
-quais entram no prompt do A3. Entrada menor, saída menor, e o cache por
-`(dataset, versão do dicionário)` volta a fazer sentido.
+⚠️ **Correção de 2026-08-27, e ela muda o bloco.** Este parágrafo dizia que o A2
+volta como *seletor de planilha* e que o cache por `(dataset, versão do
+dicionário)` voltava a fazer sentido. 👤 definiu o escopo real:
+
+> **O A2 decide quais bases serão calculadas E quem vai gerar o plano de
+> execução.**
+
+Hoje existe um A3 só, o `a3_planejador`, que é pau pra toda obra. A intenção é
+ter outros — um `a3_tendencia` ligado a ferramentas de predição, por exemplo. Por
+mais que nenhum especialista exista ainda, o valor agora é **deixar a arquitetura
+pronta**, não o roteamento em si.
+
+⛔⛔ **E o bloco preservado NÃO SERVE.** A D-049 guardou `adhoc/reconhecedor.ts`,
+`_shared/reconhecimento.ts` e `plum_reconhecimento` dizendo que *"apagar seria
+jogar fora um bloco inteiro já testado para reescrevê-lo igual"*. Essa frase
+morreu, e o motivo está no cabeçalho do próprio módulo:
+
+> ⭐ **Não recebe a pergunta.** É o que torna o resultado cacheável por
+> `(dataset, digital do dicionário)` e vale para qualquer pergunta depois.
+
+**Escolher bases exige a pergunta.** Um A2 que vê a pergunta não é cacheável por
+aquela chave — e se for cacheado assim de todo modo, devolve a escolha de uma
+pergunta para **outra** pergunta, em silêncio. É a classe de bug mais caro deste
+produto.
+
+⇒ O A2 é **escrito do zero**, é **por pergunta** e **não cacheia**. E
+`plum_reconhecimento` não volta: o índice que o A2 precisa para escolher sai de um
+`select` no `schema_metadata` — não há chamada de LLM ali para cachear.
+
+⚠️⚠️ **NOMES: use os do código.** Os quatro arquivos são `a1_porteiro.ts`,
+`a2_reconhecedor.ts`, `a3_planejador.ts`, `a4_interprete.ts`. O A3 é o
+**planejador**; `reconhecedor` era o nome do **A2** — o que o cadastro
+substituiu. Escrever "a3_reconhecedor" cola no A3 o nome do agente que morreu, e
+manda quem for implementar procurar um arquivo que não existe.
+
+**Fluxo hoje:** `a1_porteiro → a3_planejador → executor → a4_interprete`
+**Fluxo alvo:** `a1_porteiro → a2_encaminhador → a3_* → executor → a4_interprete`
+
+⭐ **`a3_tendencia`, sem acento.** Nome de arquivo neste repositório é ASCII.
+
+#### O contrato do A2
+
+```
+recebe:  a pergunta · o ÍNDICE das bases da organização · o REGISTRO de agentes
+devolve: { agente: "a3_planejador", bases: ["vendas", "estoque"],
+           presuncao: "…", inviavel?: "…" }
+```
+
+**a · ⭐ O índice das bases não é o dicionário.** Mandar o dicionário completo de
+seis bases ao A2 move o custo um salto em vez de resolvê-lo — é o problema que ele
+existe para atacar. O que ele precisa é: por base, o nome, o **grão**, uma linha
+de descrição e a **lista de colunas sem as descrições**. ⇒ `paraIndice(d)` ao lado
+do `paraPrompt(d)` que já existe em `_shared/dicionario.ts:265`; reusar o módulo,
+não escrever um segundo formatador — `paraPrompt` já resolve o *"(sem descrição)"*,
+que omitir faria a coluna parecer inexistente. O A3 continua recebendo o
+dicionário **inteiro**, mas só das bases escolhidas. É aí que a economia mora.
+
+**b · ⭐⭐ O registro de agentes é DADO, e o dono dele é o ADMINISTRADOR.**
+`_shared/agentes.ts`, uma entrada por agente: `{ id, papel, quando_usar,
+capacidades }`. Dele saem duas coisas **geradas**: o trecho do prompt do A2 que
+descreve as opções, e o `switch` que despacha.
+
+⚠️ Sem isso, acrescentar um A3 é editar um prompt **e** um dispatch em lugares
+diferentes — e eles divergem em silêncio, que é o padrão do D-028 e da divergência
+TS↔Python do D-017. Um dono, dois consumidores, como o `MODELO_POR_PAPEL`.
+
+⛔ Quem escreve o `quando_usar` e as `capacidades` somos **nós**, não o cliente.
+Logo: **constante em código**, versionada, publicada por deploy. Fica fora de
+tabela no banco (I-03: o código no repositório deixa de ser o que está rodando, e
+daria ao cliente superfície de escrita sobre o roteamento), fora de secret (o
+mesmo motivo pelo qual `MODELOS` não é env var, já escrito em `llm_core.ts`) e
+fora do `schema_metadata` (ali é território do cliente). A fronteira, que é a
+mesma forma do D-039: o **cliente** escreve o que os dados significam; o
+**administrador** escreve o que os agentes sabem fazer.
+
+**c · As duas escolhas são acopladas e saem na MESMA passada.** Um `a3_tendencia`
+precisa de base temporal; escolher as bases supondo o generalista e só depois
+rotear entregaria base errada ao especialista. O prompt diz explicitamente que a
+capacidade do agente restringe a base elegível.
+
+**d · ⛔ Id desconhecido cai no `a3_planejador`, nunca em erro.** Um roteador que
+levanta exceção transforma um typo do modelo em **chat morto**. Valida contra o
+registro; não casou, despacha para o generalista e grava `codigo_erro`. Mesmo
+espírito do `metadados`, que devolve `{"existe": false}` por coluna em vez de
+recusar a base inteira.
+
+**e · ⛔ A escolha de base vira PRESUNÇÃO DECLARADA.** Se o A2 pega 1 de 6 e a
+resposta precisava de 2, o número sai **errado e confiante** — a mesma classe do
+D5 (data trocada na origem), que é a falha contra a qual este produto tem menos
+defesa. *"Respondi olhando só a planilha de Vendas."* A máquina de presunções já
+existe no A3; reusar.
+
+**f · `inviavel` também no A2.** *"Nenhuma base responde isso"* é resposta
+legítima e é mais barata aqui que deixar o A3 inventar um `from`. `plum_logs.
+status` já aceita o valor.
+
+#### ⚠️ O roteamento com um destino só é INFALSIFICÁVEL — conserto agora, não depois
+
+Com um A3, o A2 sempre acerta: não há como distinguir roteador funcionando de
+roteador quebrado. O primeiro teste real seria no dia em que o segundo A3 sobe —
+o pior momento possível para descobrir que o despacho nunca rodou.
+
+1. ⭐ O registro aceita uma entrada **só de teste** (um `a3_tendencia` de
+   mentira), para a suíte afirmar que uma pergunta de tendência escolhe o
+   especialista e **não** o generalista. É o que torna o roteador falsificável
+   antes de o especialista existir.
+2. A escolha **e o motivo** vão para `plum_logs.resposta` da etapa
+   `encaminhador` desde o primeiro dia. Sem coluna nova.
+
+⚠️ Isto é o I-13 aplicado antes do erro: critério que só confere *"a peça está no
+lugar?"* dá verde para mecanismo que nunca executou.
+
+#### O acoplamento a mexer
+
+| Onde | O quê |
+|---|---|
+| `_shared/llm_core.ts` | `Papel` ganha `encaminhador`; `MODELO_POR_PAPEL` ganha `encaminhador: { provedor: "google", modelo: MODELOS.FLASH }`. ⭐ **`MODELOS.FLASH` já É `gemini-3.7-flash`** — o pedido do 👤 é uma linha, não uma constante nova. E é a linha certa pela regra do próprio arquivo: classificação sobre entrada curta que roda em toda pergunta é Flash |
+| `_shared/llm_core.test.ts` | itera todos os papéis (`:67`, `:92`, `:157`) — cobre o novo de graça |
+| migration nova | ⚠️ **acrescenta** `'encaminhador'` ao CHECK de `plum_logs.etapa` e **mantém** `'reconhecedor'`: o A2 rodou de 2026-08-20 a 08-25 e há linhas com esse valor. Não destrutiva (D-005) |
+| §A2 (tabela inexistente) | 🔮 deixa de ser detalhe e passa a **pré-requisito**: o A2 é justamente quem passa a poder errar o `from`, e hoje `from` errado devolve `{"error": …}` em vez de levantar ⇒ card vazio calado |
+
+⛔ **Não** renomear o `a3_planejador`, e **não** reaproveitar o slot
+`reconhecedor` para o encaminhador.
 
 ### A4 ⚠️ Recadastrar a mesma planilha cria base duplicada, calada
 
@@ -216,18 +331,37 @@ numa união de permissões de bases diferentes.
 **Testes:** `vitest`, e antes do código — plano que pede coluna permitida na base
 A mas proibida na B é negado; lote misto aprova um e nega outro.
 
-### B20 · O A2 volta, como seletor de planilha
+### B20 · O `a2_encaminhador` — escolhe as bases E escolhe o A3
 
-- Entrada: a pergunta + a **lista** de bases com nome, grão e observações (não o
-  dicionário inteiro de cada uma).
-- Saída: quais datasets entram no prompt do A3.
-- O cache por `(dataset, versão do dicionário)` volta — a chave passa a ser o
-  **conjunto** de bases da organização.
-- ⚠️ Uma base só: o A2 **não roda**. Não há escolha a fazer, e pagar um LLM para
-  responder "essa" é o que esvaziou o A2 na Etapa 2.
+⭐ Escrito **do zero** (§A3). Não é o `reconhecedor` adaptado: aquele não vê a
+pergunta, e este precisa dela.
 
-**Pronto quando:** numa organização com três bases, a pergunta sobre vendas leva
-só a base de vendas ao A3, e o `plum_logs` mostra `reconhecedor` de volta.
+**Arquivos novos:** `_shared/agentes.ts` (o registro), `adhoc/encaminhador.ts`,
+`adhoc/prompts/a2_encaminhador.ts`, e `paraIndice()` em `_shared/dicionario.ts`.
+
+- **Entrada:** a pergunta + o **índice** das bases (nome, grão, uma linha,
+  colunas sem descrição) + o registro de agentes, gerado de `agentes.ts`.
+- **Saída:** `{ agente, bases[], presuncao, inviavel? }`.
+- ⛔ **Não cacheia.** Ver §A3 — a chave por digital do dicionário devolveria a
+  escolha de uma pergunta para outra, calada.
+- ⛔ `agente` desconhecido ⇒ `a3_planejador` + `codigo_erro`. Nunca exceção.
+- ⭐ A escolha de bases é **presunção declarada** e chega ao usuário.
+- ⚠️ **Uma base só: o A2 ainda RODA**, porque a segunda escolha (qual A3) existe
+  independente do número de bases. Com um A3 e uma base ele é quase um no-op —
+  🔮 e se a medição mostrar que é gasto puro, o portão de "só roda com 2+ bases"
+  volta a valer para a metade de seleção, nunca para a de roteamento.
+
+**Pronto quando** (as três, e a terceira é a que costuma faltar):
+
+1. Numa organização com três bases, a pergunta sobre vendas leva **só** a base de
+   vendas ao A3, e `plum_logs` traz a etapa `encaminhador` com a escolha **e o
+   motivo** em `resposta` — conferido no banco, não na tela (I-12).
+2. Acrescentar um agente de mentira a `agentes.ts` muda o prompt **e** o dispatch
+   **sem editar mais nenhum arquivo**. Precisou de uma segunda edição ⇒ o
+   registro não é dono único.
+3. ⛔ A suíte afirma que uma pergunta de tendência escolhe o `a3_tendencia` de
+   teste e **não** o generalista. Sem isso o roteamento não está testado — está
+   só instalado.
 
 ### B21 · 🔧 Planilha já cadastrada para de virar base duplicada
 

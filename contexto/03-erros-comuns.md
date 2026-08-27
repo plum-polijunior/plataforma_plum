@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-26
+atualizado_em: 2026-08-27
 ---
 
 # Erros comuns — o que se acredita e é falso
@@ -45,6 +45,9 @@ atualizado_em: 2026-08-26
 | "O build passou" significa que compila | Significa que o esbuild não reclamou. Um `ReferenceError` de 40 identificadores inexistentes passou por ele | `31-incidentes-e-licoes.md` I-11 |
 | `plum_logs.presuncoes_qtd` tem dado histórico | Era **`NULL` em toda linha** até 2026-08-25: a coluna existia, o código a passava, o mapeamento não a incluía | `31-incidentes-e-licoes.md` I-12 |
 | O A2 Reconhecedor roda no chat | **Saiu do caminho em 2026-08-25.** O A3 lê o dicionário escrito no cadastro; `reconhecedor` não aparece em turno novo | `30-decisoes.md` D-049 |
+| ⭐⭐ O A3 é o "reconhecedor" | ⛔ **Não. O A3 é o `planejador`** (`a3_planejador.ts`). `reconhecedor` era o nome do **A2** — justamente o agente que o cadastro substituiu. Confundir os dois inverte quem morreu, e é reprodutível: o identificador `reconhecedor` continua vivo no tipo `Papel`, no `log_core.ts` e no CHECK de `plum_logs.etapa`, sem nada avisando que o agente não existe | `30-decisoes.md` D-049 |
+| ⭐ A action `ad_hoc_reconhecer` é resto do A2 morto | ⛔ **É o nome do PRIMEIRO TURNO, e está viva.** O B15 manteve o nome e trocou o conteúdo: hoje é A1 → dicionário → vocabulário, um LLM só. Apagá-la junto com o A2 derruba o chat | `30-decisoes.md` D-054 |
+| O cliente pode descrever ou criar um agente | **Não.** `quando_usar` e capacidades de cada A3 são **código nosso** (`_shared/agentes.ts`), publicado por deploy. O cliente escreve o que os **dados** significam; o administrador, o que os **agentes** sabem fazer | `30-decisoes.md` D-054 |
 | A definição semântica que o usuário escreve chega ao chat | Só desde 2026-08-25. Antes ela era **apenas o hash** da chave do cache do A2 — o remake havia regredido nisso | `30-decisoes.md` D-049 |
 
 ## Sobre o executor

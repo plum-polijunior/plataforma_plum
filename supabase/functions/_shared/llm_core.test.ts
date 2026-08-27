@@ -124,7 +124,12 @@ describe("resolução de papel", () => {
     // em modelos diferentes, a comparação ficaria contaminada: não daria para
     // saber se o remake ficou melhor ou se só ganhou um modelo mais novo.
     const legado: Papel[] = ["guard", "plan_query", "synthesize_answer"];
-    const novo: Papel[] = ["porteiro", "reconhecedor"];
+    // ⚠️ `reconhecedor` saiu daqui em 2026-08-27, junto com o agente (D-054).
+    // ⭐ A lista é escrita à mão de propósito: derivá-la de `MODELO_POR_PAPEL`
+    // tornaria o teste circular — ele afirmaria que o Flash é o Flash. O preço é
+    // que entrar ou sair um papel exige editar esta linha, e isso é o teste
+    // fazendo o trabalho dele.
+    const novo: Papel[] = ["porteiro"];
 
     for (const papel of [...legado, ...novo]) {
       expect(resolver(papel, true), papel).toMatchObject({

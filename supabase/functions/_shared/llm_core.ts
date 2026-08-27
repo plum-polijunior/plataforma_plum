@@ -34,7 +34,18 @@ export type Papel =
   | "plan_query"
   | "synthesize_answer"
   | "porteiro"
-  | "reconhecedor"
+  // ⛔ `reconhecedor` SAIU daqui em 2026-08-27, junto com o agente (D-054). Não
+  // reponha o papel para o `a2_encaminhador`: o nome descreveria um trabalho que
+  // hoje é do cadastro, e é a confusão que a D-054 nasceu corrigindo.
+  //
+  // ⚠️ Ele CONTINUA no CHECK de `plum_logs.etapa` e no tipo de `log_core.ts`, e
+  // isso não é inconsistência — o A2 rodou de 2026-08-20 a 08-25 e há linhas com
+  // aquele valor. Este tipo diz quem PODE ser chamado; aquele diz o que EXISTE
+  // no banco. São perguntas diferentes.
+  //
+  // ⭐ O slot 2 volta preenchido, com nome próprio (D-054): o `encaminhador`
+  // escolhe as bases E escolhe qual A3 planeja.
+  | "encaminhador"
   | "planejador"
   | "interprete"
   // ⭐ A terceira cadeia, do B14: os seis agentes do cadastro (`ai-agents`).
@@ -103,10 +114,14 @@ export const MODELOS = {
 /**
  * ⭐ A tabela que é o ponto do bloco. Trocar de modelo é editar uma linha.
  *
- * Porteiro e reconhecedor são classificação sobre entrada curta: Flash resolve,
- * e são os dois que rodam em toda pergunta. Planejador e intérprete carregam a
- * dificuldade — o Query Plan e a prosa que não pode fazer conta (R-13) — e vão
- * para o modelo caro.
+ * O porteiro é classificação sobre entrada curta: Flash resolve. Planejador e
+ * intérprete carregam a dificuldade — o Query Plan e a prosa que não pode fazer
+ * conta (R-13) — e vão para o modelo caro.
+ *
+ * ⭐ **A regra, para o próximo papel que entrar aqui:** classificação sobre
+ * entrada curta que roda em TODA pergunta é Flash; quem escreve o que vale para
+ * sempre é raciocínio. É por isso que o `a2_encaminhador` da Etapa 3 nasce Flash
+ * (D-054) e a cadeia do cadastro é a exceção explicada abaixo.
  *
  * ⭐ **As duas cadeias usam o MESMO Flash de propósito.** A Etapa 1 compara o
  * caminho `ad_hoc` com o `legado`, e diferença de modelo entre eles
@@ -119,7 +134,12 @@ export const MODELO_POR_PAPEL: Readonly<Record<Papel, Destino>> = {
   synthesize_answer: { provedor: "google", modelo: MODELOS.FLASH },
 
   porteiro: { provedor: "google", modelo: MODELOS.FLASH },
-  reconhecedor: { provedor: "google", modelo: MODELOS.FLASH },
+  // ⭐ Flash pela regra acima, e o pedido do 👤 ("gemini-3.7") já está satisfeito:
+  // `MODELOS.FLASH` **é** `gemini-3.7-flash`. Não é constante nova, é esta linha.
+  //
+  // ⚠️ E ele está no caminho crítico de TODA pergunta — custo por pergunta, para
+  // sempre. É o oposto da cadeia do cadastro (D-047), que é O(1) por base.
+  encaminhador: { provedor: "google", modelo: MODELOS.FLASH },
 
   // ⚠️ Foram para a Anthropic (`claude-opus-5`) do B05 até 2026-08-21, quando
   // uma análise de custo os trouxe para o Gemini Pro. O adaptador da Anthropic

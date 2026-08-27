@@ -31,17 +31,21 @@ from pydantic import ValidationError
 
 from query_engine import config, linhas as linhas_mod, metadados as metadados_mod, sheets
 from query_engine.pandas_executor import (
+    TABELA_PADRAO,
     CardinalidadeExcedida,
     ExecutorError,
     MissingColumnError,
     RawRowsBlocked,
     RowLimitExceeded,
+    TabelaNaoEncontradaError,
     apply_formatting_rules,
     execute_plan,
+    resolver_nome_da_tabela,
     roles_from_formatting_rules,
 )
 from query_engine.security import (
     BadSignature,
+    BaseRequest,
     ColumnNotAllowed,
     ExecutionPayload,
     PayloadExpired,
@@ -227,19 +231,69 @@ async def execute(
             detail="'cabecalhos' nao pode vir num lote com outros tipos",
         )
 
-    # ── Barreira 4: conjunto de colunas, por card ────────────────────────────
+    # ── Quais bases este payload traz ────────────────────────────────────────
+    # ⭐ Multi-base (B19). `payload.bases` vazio significa payload de Edge
+    # Function anterior ao bloco: sintetiza-se UMA base com os campos do topo, e
+    # o nome dela é `TABELA_PADRAO` — que é exatamente o `from` que todo card
+    # salvo carrega. O caminho legado sai idêntico daqui.
+    bases = payload.bases or [
+        BaseRequest(
+            nome=TABELA_PADRAO,
+            sheet_id=payload.sheet_id,
+            tab=payload.tab,
+            tab_gid=payload.tab_gid,
+            allowed_columns=payload.allowed_columns,
+            formatting_rules=payload.formatting_rules,
+        )
+    ]
+    por_nome: Dict[str, Any] = {b.nome: b for b in bases}
+    if len(por_nome) != len(bases):
+        # Duas bases com o mesmo nome fariam o `from` casar com a errada, e qual
+        # ganha dependeria da ordem do dict. Recusa: é erro de quem monta.
+        raise HTTPException(status_code=400, detail="duas bases com o mesmo nome")
+
+    # ── Barreira 4: conjunto de colunas, por card e POR BASE ─────────────────
     # Feita antes de tocar no Google: um card proibido não deve nem gerar leitura.
-    aprovados: List = []
+    #
+    # ⛔⛔ **`allowed_columns` é da BASE, nunca do turno.** Uma lista global seria
+    # a união das permissões de bases diferentes: quem pode ver `salario` em RH
+    # passaria a pedir `salario` de Vendas e a comparação de conjuntos não veria
+    # nada de errado, porque o nome está na lista. O RBAC é por dataset
+    # (`role_permissions`) e esta barreira tem de ter a mesma forma.
+    #
+    # ⭐ E o `resolver_nome_da_tabela` é o MESMO que o `execute_plan` usa. Duas
+    # implementações da regra do `from` divergiriam em silêncio, e a divergência
+    # seria autorizar contra a base A e executar sobre a base B.
+    # ⛔⛔ **`(pedido, nome_base)` em par, NUNCA um dict chaveado por `card_id`.**
+    #
+    # O `card_id` vem do PLANEJADOR — é `pedido.id` emitido por um LLM — e nada
+    # garante que seja único no lote. Um dict `{card_id: base}` colapsaria dois
+    # pedidos de mesmo id na base do último, e o primeiro executaria sobre uma
+    # base contra a qual ele NÃO foi autorizado. É bypass de RBAC por colisão de
+    # string que um modelo escolheu.
+    aprovados: List[tuple] = []
     resultados: List[Dict[str, Any]] = []
-    colunas_a_carregar: set = set()
+    # {nome da base: colunas a carregar} — uma leitura do Google por base.
+    colunas_por_base: Dict[str, set] = {nome: set() for nome in por_nome}
 
     for pedido in payload.plans:
         try:
+            nome_base = resolver_nome_da_tabela(pedido.plan, por_nome.keys())
+        except TabelaNaoEncontradaError as exc:
+            # ⚠️ Não é `forbidden`: nada foi negado por cargo. É plano malformado
+            # — o planejador nomeou uma planilha que não veio. Ver T8.
+            logger.warning("Card %s sem base: %s", pedido.card_id, exc)
+            resultados.append(
+                {"card_id": pedido.card_id, "status": "error", "error": str(exc)}
+            )
+            continue
+
+        try:
             colunas = assert_columns_allowed(
-                pedido.resolved_columns, payload.allowed_columns
+                pedido.resolved_columns, por_nome[nome_base].allowed_columns
             )
         except ColumnNotAllowed as exc:
-            logger.warning("Card %s barrado: %s", pedido.card_id, exc)
+            logger.warning("Card %s barrado em '%s': %s", pedido.card_id, nome_base, exc)
             resultados.append(
                 {
                     "card_id": pedido.card_id,
@@ -248,8 +302,9 @@ async def execute(
                 }
             )
             continue
-        aprovados.append(pedido)
-        colunas_a_carregar |= colunas
+
+        aprovados.append((pedido, nome_base))
+        colunas_por_base[nome_base] |= colunas
 
     if not aprovados:
         return {"results": resultados}
@@ -266,41 +321,69 @@ async def execute(
     # pedido COM PLANO rodar sem uma coluna do `where`, devolvendo a conta sobre
     # a tabela inteira com o rotulo do recorte pedido. Na pratica coleta e
     # execucao ja vem em lotes separados; isto garante em vez de torcer.
-    so_metadados = all(p.tipo == "metadados" for p in aprovados)
+    so_metadados = all(p.tipo == "metadados" for p, _ in aprovados)
 
-    # ── Uma leitura para todos os cards aprovados ────────────────────────────
-    try:
-        df = sheets.load_columns(
-            _google_service(),
-            payload.sheet_id,
-            payload.tab,
-            colunas_a_carregar,
-            max_rows=max_rows,
-            tolerar_ausentes=so_metadados,
-            # Qual aba, pelo identificador estável. Quando presente tem
-            # precedência sobre `payload.tab` — ver `sheets.resolver_aba`.
-            tab_gid=payload.tab_gid,
-        )
-    except sheets.SheetError as exc:
-        # Falha de leitura atinge todos os cards que dependiam dela. A Edge
-        # Function transforma isto em snapshot antigo com selo de idade.
-        for pedido in aprovados:
-            resultados.append(
-                {"card_id": pedido.card_id, "status": "error", "error": str(exc)}
+    # ── Uma leitura do Google por base com pedido aprovado ───────────────────
+    # ⚠️ Base sem nenhuma coluna a carregar é pulada: ler a planilha para não
+    # usar nada é latência e cota de graça.
+    tabelas: Dict[str, Any] = {}
+    papeis_por_base: Dict[str, Dict[str, str]] = {}
+
+    for nome_base, colunas_a_carregar in colunas_por_base.items():
+        if not colunas_a_carregar:
+            continue
+        base = por_nome[nome_base]
+        try:
+            bruto = sheets.load_columns(
+                _google_service(),
+                base.sheet_id,
+                base.tab,
+                colunas_a_carregar,
+                max_rows=max_rows,
+                tolerar_ausentes=so_metadados,
+                # Qual aba, pelo identificador estável. Quando presente tem
+                # precedência sobre `base.tab` — ver `sheets.resolver_aba`.
+                tab_gid=base.tab_gid,
             )
+        except sheets.SheetError as exc:
+            # ⭐ Falha de leitura atinge só os cards DAQUELA base. Antes do B19
+            # havia uma base e o `return` aqui era o comportamento certo; com N,
+            # derrubar o lote inteiro porque uma planilha perdeu o
+            # compartilhamento esconderia as respostas que ainda dão.
+            for pedido, base_do_pedido in aprovados:
+                if base_do_pedido == nome_base:
+                    resultados.append(
+                        {"card_id": pedido.card_id, "status": "error", "error": str(exc)}
+                    )
+            continue
+
+        # Regras estruturadas do Agente 3/3.1 DESTA base: limpa/tipa colunas que
+        # a planilha guarda como texto (moeda escrita como string, CPF pontuado,
+        # Sim/Não...). Colunas já nativamente numéricas/data no Sheets chegam
+        # corretas de `sheets.load_columns` (valueRenderOption=UNFORMATTED_VALUE)
+        # e passam incólumes por aqui.
+        #
+        # ⚠️ Por base, não do payload: as regras descrevem as colunas de UMA
+        # planilha, e aplicar as de outra limparia a coluna errada.
+        tabelas[nome_base] = apply_formatting_rules(bruto, base.formatting_rules)
+        papeis_por_base[nome_base] = roles_from_formatting_rules(base.formatting_rules)
+
+    if not tabelas:
         return {"results": resultados}
 
-    # Regras estruturadas do Agente 3/3.1: limpa/tipa colunas que a planilha
-    # guarda como texto (moeda escrita como string, CPF pontuado, Sim/Não...).
-    # Colunas já nativamente numéricas/data no Sheets chegam corretas de
-    # `sheets.load_columns` (valueRenderOption=UNFORMATTED_VALUE) e passam
-    # incólumes por aqui.
-    df = apply_formatting_rules(df, payload.formatting_rules)
-    column_roles = roles_from_formatting_rules(payload.formatting_rules)
+    for pedido, nome_base in aprovados:
+        # ⭐ A base vem EM PAR com o pedido, decidida na barreira 4. Não se
+        # recalcula e não se busca por chave: a decisão que autorizou tem de ser
+        # exatamente a que executa, e nada que o modelo escolheu pode indexá-la.
+        #
+        # ⚠️ Pode não estar em `tabelas` se a leitura daquela planilha falhou — o
+        # erro já foi para `resultados` no laço de leitura.
+        if nome_base not in tabelas:
+            continue
+        df = tabelas[nome_base]
+        column_roles = papeis_por_base[nome_base]
+        base = por_nome[nome_base]
 
-    tabelas = {"producao": df}
-
-    for pedido in aprovados:
         # ── Pedido `metadados`: descrição, não consulta ──────────────────────
         # Não tem Query Plan — não há o que planejar. Devolve a forma da base
         # (papel, distintos, vazios, extremos onde é seguro) para o A2 escolher
@@ -333,7 +416,11 @@ async def execute(
         if pedido.tipo in ("registro", "amostra", "amostra_cadastro"):
             try:
                 colunas = colunas_de_linha(pedido.plan, pedido.resolved_columns)
-                semente = linhas_mod.semente_de(payload.sheet_id, len(df))
+                # ⚠️ `base.sheet_id`, não `payload.sheet_id`: a semente
+                # existe para a amostra ser estável por planilha. Com multi-base
+                # o campo do topo é o da primeira e daria a MESMA semente para
+                # bases diferentes — amostras correlacionadas sem motivo.
+                semente = linhas_mod.semente_de(base.sheet_id, len(df))
                 if pedido.tipo == "registro":
                     saida = linhas_mod.registro(
                         df, colunas, plano_where(pedido.plan), column_roles
@@ -353,13 +440,19 @@ async def execute(
             resultados.append({"card_id": pedido.card_id, "status": "ok", **saida})
             continue
 
-        # `from` do plano pode nomear a tabela; aqui só existe uma.
-        plano = dict(pedido.plan)
-        plano["from"] = "producao"
+        # ⭐⭐ **O `from` do plano é RESPEITADO desde 2026-08-27 (B18).** Até
+        # aqui esta função fazia `plano["from"] = "producao"`, descartando o que
+        # o planejador emitiu — o executor sempre soube receber várias tabelas,
+        # quem não sabia era este arquivo.
+        #
+        # ⚠️ Passa-se só a tabela DESTE pedido, não o dicionário inteiro. É
+        # redundante com o `from` e é de propósito: `execute_plan` não tem como
+        # alcançar uma base que a barreira 4 não autorizou para este card, nem
+        # que o `from` diga outra coisa. Defesa em profundidade, e barata.
         try:
             saida = execute_plan(
-                plano,
-                tabelas,
+                pedido.plan,
+                {nome_base: df},
                 column_roles=column_roles,
                 max_rows=None,  # já barrado em sheets.load_columns
                 # ⭐ O teto de cardinalidade só recusa no caminho novo. No
