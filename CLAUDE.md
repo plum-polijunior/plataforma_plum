@@ -288,6 +288,29 @@ As regras abaixo são o resultado. **Violá-las é regressão de segurança.**
 `custom_access_token_hook(event)` · `handle_new_user()` [trigger `on_auth_user_created`] ·
 `tocar_updated_at()` · `auditar_mudanca_perfil()`.
 
+### ⚠️ Os TRÊS lugares do SSO — e é sempre o segundo que quebra
+
+O front está em `https://plum-polijunior.com.br` (Vercel) desde 2026-08-27. Trocar de domínio, abrir
+um ambiente novo ou criar um preview mexe em **três** lugares, e eles não se avisam:
+
+| # | onde | o quê | sintoma quando falta |
+|---|---|---|---|
+| 1 | **Vercel** | o domínio aponta para o projeto | o site não abre |
+| 2 | ⭐ **Supabase → Authentication → URL Configuration** | **dois** campos: `Site URL` (o fallback) e `Redirect URLs` (a allow-list, com sufixo `/**`) | ⚠️ o login **funciona** e aterrissa na URL errada, com a sessão no fragmento `#access_token=` |
+| 3 | **Google Cloud → cliente OAuth** | o domínio nas *Authorized JavaScript origins*. O *redirect URI* aponta para `…supabase.co/auth/v1/callback` e **não** muda | erro do Google antes de sair da página |
+
+⛔ **O sintoma do 2 engana**: aterrissar em `localhost:3000` parece build com URL de dev embutida, e
+manda quem investiga caçar variável de ambiente no front. Não há nenhuma — `Auth.tsx:141` usa
+`${window.location.origin}`, calculado em runtime. O Supabase é que rejeita o origin desconhecido e
+cai no `Site URL`. Aconteceu em 2026-08-27, na virada para o domínio próprio.
+
+⭐ **`Redirect URLs` precisa do `/**`.** Sem o sufixo só a raiz é autorizada, e como o código pede
+`/inicio`, o pedido cai no fallback do mesmo jeito — com um sintoma mais sutil, porque a URL final
+até é a certa, só que sem a rota.
+
+⚠️ Preview da Vercel tem URL por deploy: sem uma entrada curinga (`https://*.vercel.app/**`), todo
+preview reproduz isto e parece intermitente.
+
 ### JWT e SSO por domínio
 
 O **Custom Access Token Hook** injeta 4 claims: `organization_id`, `profile_status`,

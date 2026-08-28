@@ -92,6 +92,8 @@ atualizado_em: 2026-08-27
 | `/dashboard` é o dashboard | É **"Minha Organização"** — membros, cargos, permissões. O dashboard é `/inicio` | `20-pendencias.md` |
 | O tema escuro é a classe `.dark` | O tema do produto é `.tema-escuro`, um **terceiro** mecanismo. `.dark` hoje não tem consumidor | `30-decisoes.md` D-029 |
 | Mudar `status` no banco reflete no acesso | ⚠️ **Claims só são reemitidas no login.** O usuário precisa sair e entrar | `CLAUDE.md` §4 |
+| ⭐⭐ Cair em outra URL depois do SSO = build com URL de dev embutida | ⛔ **Não existe URL embutida no front** — o `redirectTo` é `${window.location.origin}/inicio`, calculado em runtime (`Auth.tsx:141`). Aterrissar em endereço alheio significa que o Supabase **rejeitou** aquele origin e caiu no **Site URL**. O conserto é a allow-list, não o código | `CLAUDE.md` §4 |
+| O `Site URL` do Supabase basta para o SSO | São **dois** campos: o `Site URL` é só o *fallback*; quem **autoriza** o `redirectTo` é a lista `Redirect URLs`, e ela precisa do sufixo `/**` — sem ele só a raiz passa, e `/inicio` cai no fallback | `CLAUDE.md` §4 |
 | A migration é aplicada pelo CI | **Manual**, colada no SQL Editor do painel, de propósito | `30-decisoes.md` D-005 |
 | Segurança é problema da implementação | **Mecanismo** é da plataforma; **política de sensibilidade** é da implementação | `30-decisoes.md` D-039 |
 | `join_mode = 'share_id'` no banco | O SQL versionado diz `'share_id'`, o dump de produção diz `'codigo'`. Importe as constantes de `src/lib/organizacao.ts`, **nunca** inline | `CLAUDE.md` §8 |

@@ -83,7 +83,6 @@ usa a base. ⭐ O que rende mais são as perguntas que já se viu o chat errar.
 | P5 | Dicionário camadas 3 e 4 + editor em "minha base de dados" | Sem isso, cenário e "se A muda B" não existem |
 | P6 | Streaming / agregação incremental para bases grandes | Hoje o executor carrega tudo num DataFrame; centenas de milhares de linhas matam o container |
 | P7 | `formattingRules` cumprir o que promete | Quem escolhe o `type` ainda é um LLM olhando 5 linhas de amostra. O enum é fechado e `type` inválido loga warning, mas a escolha continua sendo um chute informado |
-| P8 | Domínio próprio (`plum-polijunior.com.br`) | ⚠️ O domínio **não aponta para a Vercel** hoje. Três lugares têm de mudar juntos ou o SSO quebra |
 | P9 | Mover a matriz de permissões de `Dashboard.tsx` para `Cfgdatabase.tsx` | `Dashboard.tsx` tem 1007 linhas. Plano existe e continua válido; sem urgência |
 | P10 | ⭐ **`a2_encaminhador` — o slot 2 volta, com duas escolhas** | Etapa 3. Escolhe **quais bases** entram no prompt do A3 **e qual A3** planeja (D-054). ⛔ Escrito do zero: o `reconhecedor` preservado não vê a pergunta, e escolher base exige a pergunta — o cache por digital devolveria a escolha de uma pergunta para outra, calado. Junto vem o registro `_shared/agentes.ts`, que é **código nosso**, não campo do cliente. ⚠️ Depende do T8 e do `main.py` parar de sobrescrever o `from`, senão a escolha do A2 é descartada e nada dela é observável. Ver `PLANO-etapa-3.md` §A3 e B20 |
 
@@ -147,4 +146,5 @@ Registrado para que ninguém "conserte" de novo:
 | Formatação aprovada sem ver o dado | 2026-08-25 | a tabela antes-vs-depois passou a ser renderizada; era documentada e nunca existiu (D-048) |
 | **C2** — abstração de provedor de LLM | 2026-08-25 | o `ai-agents` entrou nela no B14. Sobra o `dashboard-agent`, fora de escopo por decisão. ⚠️ **"Fora do escopo" não quer dizer intocado:** em 2026-08-26 ele adotou `_shared/hoje.ts` (D-053). O que continua verdade é o estreito — ele **não** usa `_shared/llm.ts`, e a URL do Gemini segue inline lá |
 | A definição semântica do usuário não chegava ao chat | 2026-08-25 | o A3 lê o dicionário (D-049). Era só o hash da chave do cache do A2 |
+| **P8** — domínio próprio `plum-polijunior.com.br` | 2026-08-27 | ✅ no ar na Vercel (`Server: Vercel`, `gru1`), com SSO funcionando. ⭐ Os **três lugares** que a pendência citava sem nomear estão no `CLAUDE.md` §4. O que quebrou no caminho foi o segundo — ver `03-erros-comuns.md` |
 | `plum_logs.presuncoes_qtd` sempre `NULL` | 2026-08-25 | mapeamento que faltava em `montarLinha`, com regressão (I-12). ⚠️ Sem linha de base recuperável |
