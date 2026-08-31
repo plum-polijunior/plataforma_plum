@@ -280,6 +280,23 @@ export default function PlumChat() {
           // Qual A3 o encaminhador escolheu. ⚠️ Revalidado no servidor contra o
           // registro de agentes: isto passou pelo cliente.
           agente: rec.data.agente,
+          // ⚠️⚠️ **PONTE DE TRANSIÇÃO — remover quando a Edge Function nova
+          // estiver publicada.**
+          //
+          // A Vercel publica este arquivo no push; a Edge Function é publicada à
+          // mão, e em 2026-08-31 o deploy manual estava dando 403 com a função
+          // parada na versão 74 (26/08). Front novo + Edge velha = 400 em toda
+          // pergunta, porque a velha exige `dicionario` e este arquivo parou de
+          // mandar.
+          //
+          // ⭐ Repassar o que a 1ª invocação devolveu resolve as DUAS direções
+          // sem detectar versão: a Edge velha devolve `dicionario` e ignora
+          // `bases`; a nova devolve `bases` e ignora isto (o campo saiu do
+          // destructuring dela). `undefined` não vai no JSON.
+          //
+          // ⛔ Não é "por segurança": é uma ponte com data de remoção. Ver o
+          // `PROXIMO-PASSO.md`.
+          dicionario: rec.data.dicionario,
           vocabularios: rec.data.vocabularios,
         });
         if (pl.error || !pl.data) return await falhou('planejador');
@@ -594,7 +611,16 @@ export default function PlumChat() {
                     ⚠️ Só aparece com 2+ bases: com uma, "Todas" e "aquela" são a
                     mesma coisa, e a opção só confundiria.
                   */}
-                  {datasets.length > 1 && (
+                  {/*
+                    ⛔ **DESLIGADO ENQUANTO A EDGE FUNCTION NOVA NÃO SUBIR.**
+                    A opção manda `datasetId: "todas"`, e a Edge velha faz
+                    `.eq("id", "todas")` — cast de uuid que falha e derruba o
+                    turno. A ponte de compatibilidade acima cobre o contrato do
+                    `ad_hoc_planejar`, mas não cobre isto: o sentinela só é
+                    entendido pela função nova.
+                    ⭐ Reativar é apagar o `false &&` — nada mais.
+                  */}
+                  {false && datasets.length > 1 && (
                     <SelectItem value={TODAS_AS_BASES}>
                       Todas as minhas bases
                     </SelectItem>
