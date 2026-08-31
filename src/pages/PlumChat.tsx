@@ -280,23 +280,6 @@ export default function PlumChat() {
           // Qual A3 o encaminhador escolheu. ⚠️ Revalidado no servidor contra o
           // registro de agentes: isto passou pelo cliente.
           agente: rec.data.agente,
-          // ⚠️⚠️ **PONTE DE TRANSIÇÃO — remover quando a Edge Function nova
-          // estiver publicada.**
-          //
-          // A Vercel publica este arquivo no push; a Edge Function é publicada à
-          // mão, e em 2026-08-31 o deploy manual estava dando 403 com a função
-          // parada na versão 74 (26/08). Front novo + Edge velha = 400 em toda
-          // pergunta, porque a velha exige `dicionario` e este arquivo parou de
-          // mandar.
-          //
-          // ⭐ Repassar o que a 1ª invocação devolveu resolve as DUAS direções
-          // sem detectar versão: a Edge velha devolve `dicionario` e ignora
-          // `bases`; a nova devolve `bases` e ignora isto (o campo saiu do
-          // destructuring dela). `undefined` não vai no JSON.
-          //
-          // ⛔ Não é "por segurança": é uma ponte com data de remoção. Ver o
-          // `PROXIMO-PASSO.md`.
-          dicionario: rec.data.dicionario,
           vocabularios: rec.data.vocabularios,
         });
         if (pl.error || !pl.data) return await falhou('planejador');

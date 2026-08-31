@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-27
+atualizado_em: 2026-08-31
 ---
 
 # Decisões
@@ -590,7 +590,7 @@ depende de uma lista de perguntas que ainda não existe (ver D-052) e que não �
 `versao: 1` e não serão recadastradas (recadastrar cria uuid novo e órfã os cards — C13). Se o leitor
 único não tolerasse a v1, virar o padrão transformaria toda base esquecida em **chat quebrado**.
 ⚠️⚠️ Isto **não alcança os quatro clientes pagantes**: eles usam a 🔧 implementação, deploy separado.
-**Status:** vigente. Migration `20260825120000_adhoc_como_padrao.sql` escrita e **não aplicada**.
+**Status:** vigente e **APLICADA em 2026-08-31**. A migration `20260825120000_adhoc_como_padrao.sql` rodou pelo SQL Editor: `remake_habilitado` nasce `true` e todas as organizações existentes foram ligadas. ⇒ O `ad_hoc` deixou de ser opt-in; o legado passa a ser alcançável só pelo `UPDATE` de emergência.
 
 ### D-052 · 2026-08-25 · A suíte de avaliação fica pela metade, de propósito
 **Decisão:** o arnês de avaliação foi escrito e roda (`npm run avaliacao`), com **14** perguntas onde
