@@ -21,6 +21,21 @@ interface ChatMessage {
   created_at: string;
 }
 
+/**
+ * ⭐ O valor do seletor que liga a metade de SELEÇÃO do A2 encaminhador.
+ *
+ * ⚠️ **Espelha `TODAS_AS_BASES` de `supabase/functions/_shared/bases.ts`**, e a
+ * réplica é forçada: `src/` não é empacotado nas Edge Functions, então não há
+ * como importar de lá. Divergir aqui faz o servidor tratar o sentinela como id
+ * de dataset — e `.eq("id", "todas")` devolve vazio, ou seja, o chat responderia
+ * "base não encontrada" sem nenhuma pista do motivo.
+ *
+ * ⛔ Não use `""` nem `null`: `datasetId` ausente já significa "requisição
+ * malformada" em quatro handlers da Edge Function, e reaproveitar isso faria um
+ * bug de front virar uma consulta a todas as bases da organização.
+ */
+const TODAS_AS_BASES = 'todas';
+
 export default function PlumChat() {
   const { session, organizationId, roleId } = useOrgAccess();
   const { toast } = useToast();
@@ -185,7 +200,13 @@ export default function PlumChat() {
           content: userMsgContent,
           // Guardado desde o INSERT: é metade da chave de reuso do plano (a
           // mesma frase contra outra base é outra pergunta).
-          dataset_id: selectedDatasetId,
+          //
+          // ⚠️ `null` no modo "Todas": o sentinela não é uuid e o INSERT
+          // quebraria na foreign key. ⛔ E não se inventa "a base principal"
+          // aqui — seria um rótulo errado num registro que alguém vai usar para
+          // auditar qual base respondeu. Qual base o A2 escolheu está no
+          // `plum_logs`, na etapa `encaminhador`.
+          dataset_id: selectedDatasetId === TODAS_AS_BASES ? null : selectedDatasetId,
         })
         .select()
         .single();
@@ -239,13 +260,26 @@ export default function PlumChat() {
         }
         if (rec.data.status !== 'ok') return await falhou(rec.data.etapa ?? 'dicionario');
 
+        // ⭐ Inviável é RESPOSTA, e o A2 pode dizer isso já na 1ª invocação:
+        // "nenhuma base tem dados de RH" é mais honesto e mais barato que deixar
+        // o A3 planejar sobre a base menos errada.
+        if (rec.data.status === 'inviavel') {
+          await saveAndShowAssistantMsg(rec.data.mensagem);
+          setIsProcessing(false);
+          return;
+        }
+
         const pl = await chamarAdHoc({
           action: 'ad_hoc_planejar',
-          // ⭐ `dicionario`, não `reconhecimento`: o A2 saiu do caminho no B15.
-          // O que atravessa o cliente aqui é o dicionário escrito no cadastro —
-          // e ele volta a ser normalizado no servidor (`normalizarDicionario`),
-          // porque nada que passa por aqui é confiado como forma.
-          dicionario: rec.data.dicionario,
+          // ⭐⭐ **IDs de base, não dicionários.** Até 2026-08-28 o dicionário
+          // inteiro fazia esta volta pelo navegador e o servidor o renormalizava
+          // por desconfiança. Com N bases seriam N dicionários indo e voltando —
+          // payload grande de dado que o cliente não usa. Agora o servidor relê
+          // o `schema_metadata` das bases escolhidas (D-054).
+          bases: rec.data.bases,
+          // Qual A3 o encaminhador escolheu. ⚠️ Revalidado no servidor contra o
+          // registro de agentes: isto passou pelo cliente.
+          agente: rec.data.agente,
           vocabularios: rec.data.vocabularios,
         });
         if (pl.error || !pl.data) return await falhou('planejador');
@@ -271,7 +305,20 @@ export default function PlumChat() {
         const ex = await chamarAdHoc({
           action: 'ad_hoc_executar',
           pedidos: pl.data.pedidos,
-          presuncoes: pl.data.presuncoes,
+          // ⭐ A presunção do ENCAMINHADOR entra junto com as do planejador. Se
+          // ele pegou 1 base de 6 e a resposta precisava de 2, o número sai
+          // errado e confiante — e o usuário é a única pessoa capaz de perceber.
+          presuncoes: [
+            ...(rec.data.presuncaoDoEncaminhador
+              ? [{
+                campo: 'base consultada',
+                presumido: rec.data.presuncaoDoEncaminhador,
+                porque: 'Escolhi entre as suas bases a partir da pergunta.',
+              }]
+              : []),
+            ...(pl.data.presuncoes ?? []),
+          ],
+          bases: rec.data.bases,
         });
         if (ex.error || !ex.data) return await falhou('executor');
 
@@ -285,7 +332,11 @@ export default function PlumChat() {
           setIsProcessing(false);
           return;
         }
-        return await falhou(ex.data.etapa ?? 'interprete');
+        // ⚠️ `'desconhecida'`, nunca o nome de uma etapa. Aqui havia
+        // `?? 'interprete'`, e o default acusava o A4 de falhas do executor —
+        // porque o retorno de "nenhum resultado" não mandava `etapa`. Um chute
+        // com cara de diagnóstico é pior que admitir que não se sabe.
+        return await falhou(ex.data.etapa ?? 'desconhecida');
       }
 
       // 2. Chama Agente Z (Guardião)
@@ -534,6 +585,20 @@ export default function PlumChat() {
                   <SelectValue placeholder="Escolher base" />
                 </SelectTrigger>
                 <SelectContent>
+                  {/*
+                    ⭐ Escolher uma base é o comportamento de sempre; "Todas"
+                    entrega a escolha ao A2. Manter as duas é o que torna o
+                    encaminhador COMPARÁVEL — dá para perguntar a mesma coisa dos
+                    dois jeitos e ver se ele escolheu a base que você escolheria.
+
+                    ⚠️ Só aparece com 2+ bases: com uma, "Todas" e "aquela" são a
+                    mesma coisa, e a opção só confundiria.
+                  */}
+                  {datasets.length > 1 && (
+                    <SelectItem value={TODAS_AS_BASES}>
+                      Todas as minhas bases
+                    </SelectItem>
+                  )}
                   {datasets.map(d => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.name}

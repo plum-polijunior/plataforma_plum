@@ -193,6 +193,23 @@ export function lerDicionario(schemaMetadata: unknown): Dicionario {
 }
 
 /**
+ * ⚠️⚠️ **SEM CONSUMIDOR DE PRODUÇÃO desde 2026-08-28 — e fica de propósito.**
+ *
+ * Ela existia porque o dicionário fazia uma volta pelo cliente entre a 1ª e a 2ª
+ * invocação do turno, e o servidor não confiava na forma que voltava. No B20 essa
+ * volta acabou: a 2ª invocação recebe **ids de base** e relê o `schema_metadata`
+ * (D-054). Não há mais dicionário chegando de fora.
+ *
+ * ⭐ Não é apagada porque o que ela guarda é uma **capacidade que volta**: no
+ * minuto em que algum caminho aceitar dicionário de fora — importação, API
+ * pública do contrato `/resolver`, um cliente que edita e devolve — ela é a
+ * defesa, e reescrevê-la é reencontrar os mesmos casos de borda que o teste dela
+ * já cobre. Mesmo critério do `plum_chat.assunto` (D-026): a ideia continua boa.
+ *
+ * ⛔ **Não a chame "por segurança" num caminho que lê do banco.** Ali o dado já
+ * está na forma certa e `lerDicionario` é o leitor — passar duas vezes esconderia
+ * um `schema_metadata` corrompido em vez de deixá-lo aparecer.
+ *
  * Normaliza um dicionário que **voltou do cliente**, entre as duas invocações.
  *
  * ⭐ Por que existe: o `ad_hoc` é dividido em duas invocações (o turno inteiro

@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: plataforma
-atualizado_em: 2026-08-27
+atualizado_em: 2026-08-28
 ---
 
 # Pendências da plataforma
@@ -121,6 +121,7 @@ regressão.
 | `plum_chat.assunto` vestigial | Mantida de propósito: é o registro de que a ideia existe e continua boa (D-026) |
 | Migrations aplicadas à mão | Decisão consciente (D-005) |
 | ⚠️ **Existem funções publicadas que não estão no repositório** | Medido em 2026-08-20: a Management API lista **seis** funções e o repositório tem **cinco**. A sexta (`plum-chat`, da primeira PRD) está em T7. ⭐ A lição fica mesmo depois de apagá-la: **`ls supabase/functions/` não é a lista do que está no ar** — a lista real vem da API. Já tinha acontecido com o `dashboard-agent` em 2026-08-11 (I-03) |
+| ⚠️ **`aprovarLote` decide o orçamento pelo MENOR saldo entre as bases** | Assumida em 2026-08-28, no B20. Ela recebe **um** saldo, e um pedido não declara de qual base lê — quem sabe isso é o `from`. ⇒ Num turno multi-base o lote é julgado pelo saldo da base mais gasta. ⭐ **Erra para o lado seguro** (nunca entrega mais do que a base mais apertada permite), e o custo é o inverso: uma base zerada trava as outras, e o usuário lê *"você já viu o máximo de linhas"* sobre uma base que ainda tem cota. ⛔ **Consertar exige `resolverBase` dentro do cálculo do orçamento** — e aí a decisão de *qual base* passa a existir em dois lugares do `ai-plum-chat/index.ts`, que é exatamente o que a barreira 3 foi desenhada para evitar (a divergência ali não é erro de coluna, é autorizar contra a base A e executar sobre a B). O caminho certo é `aprovarLote` passar a receber `{base: saldo}` e o pedido a carregar a base que a barreira 3 **já** resolveu — uma decisão, dois consumidores. ⚠️ Só vale a pena quando houver medição de quantos turnos tocam duas bases (D1) |
 ---
 
 ## Já resolvido — não reabrir

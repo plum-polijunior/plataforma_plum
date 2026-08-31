@@ -87,7 +87,11 @@ async function rodarTurno(pergunta: string, sessaoId: string, turnoId: string) {
   const pl = await chamar({
     action: "ad_hoc_planejar",
     prompt: pergunta,
-    dicionario: rec.dicionario,
+    // ⭐ Ids de base e o agente escolhido pelo A2, como o front manda desde o
+    // B20. ⚠️ Mandar `dicionario` aqui (o contrato antigo) mediria um caminho
+    // que ninguém executa mais — e o servidor recusaria com "bases obrigatorias".
+    bases: rec.bases,
+    agente: rec.agente,
     vocabularios: rec.vocabularios,
     sessaoId,
     turnoId,
@@ -99,10 +103,45 @@ async function rodarTurno(pergunta: string, sessaoId: string, turnoId: string) {
     prompt: pergunta,
     pedidos: pl.pedidos,
     presuncoes: pl.presuncoes,
+    bases: rec.bases,
     sessaoId,
     turnoId,
   });
   return { etapa: "executar" as const, rec, pl, ex };
+}
+
+/**
+ * O que o A2 encaminhador **tem** de ter produzido — a parte mecanizável.
+ *
+ * ⚠️⚠️ **O QUE ESTA SUÍTE NÃO CONSEGUE AFIRMAR, e é melhor dizer do que fingir:**
+ * que uma pergunta de tendência escolhe um A3 especialista. O `REGISTRO_DE_TESTE`
+ * com o `a3_tendencia` de mentira vive no código e a suíte fala com a função
+ * **publicada**, cujo registro é o de produção — e aceitar registro pelo corpo da
+ * requisição daria ao cliente uma porta para injetar agente, que é exatamente o
+ * que a D-054 fecha ao dizer que o dono do registro é o administrador.
+ *
+ * ⇒ A falsificabilidade do ROTEAMENTO fica na unidade
+ * (`adhoc/encaminhador_core.test.ts`), onde o registro é injetável sem expor
+ * nada. O que sobra aqui, e vale, é provar que o A2 **rodou** e **decidiu** —
+ * sem isso o turno teria voltado ao comportamento pré-B20 sem ninguém ver.
+ */
+function conferirEncaminhamento(rec: Resultado | null): string[] {
+  const falhas: string[] = [];
+  if (!rec || rec.status !== "ok") return falhas;
+
+  const bases = rec.bases;
+  if (!Array.isArray(bases) || !bases.length) {
+    falhas.push("o encaminhador não devolveu base nenhuma");
+  }
+  if (typeof rec.agente !== "string" || !rec.agente) {
+    falhas.push("o encaminhador não devolveu agente");
+  }
+  // ⛔ Dicionário no corpo significa que o contrato antigo voltou — e com ele os
+  // N dicionários atravessando o cliente.
+  if (rec.dicionario !== undefined) {
+    falhas.push("`dicionario` voltou ao corpo da 1ª invocação (contrato pré-B20)");
+  }
+  return falhas;
 }
 
 /** Toda agregação que aparece no `select` de todos os pedidos. */
@@ -241,7 +280,7 @@ describe.skipIf(!CONFIGURADO)("avaliação do ad_hoc (B17)", () => {
   for (const q of PERGUNTAS) {
     it(`${q.id} — ${q.texto}`, async () => {
       const turnoId = crypto.randomUUID();
-      const { etapa, pl, ex } = await rodarTurno(q.texto, sessaoId, turnoId);
+      const { etapa, rec, pl, ex } = await rodarTurno(q.texto, sessaoId, turnoId);
 
       // ⭐ A metade de JULGAMENTO sai por aqui, sempre, mesmo quando a mecânica
       // passa: é isto que o 👤 lê para dar a nota. Sem o dump, um verde só diz
@@ -254,13 +293,22 @@ describe.skipIf(!CONFIGURADO)("avaliação do ad_hoc (B17)", () => {
           `porque:    ${q.porque}`,
           `turno_id:  ${turnoId}`,
           `parou em:  ${etapa} (status ${pl?.status ?? "—"})`,
+          // ⭐ A escolha do A2, que é a única superfície de julgamento dele: "ele
+          // escolheu a base que eu escolheria?" não é mecanizável, e é a pergunta
+          // que importa.
+          `encaminhou: agente=${String(rec?.agente ?? "—")} ` +
+            `bases=${JSON.stringify(rec?.bases ?? null)} ` +
+            `presunção=${String(rec?.presuncaoDoEncaminhador ?? "—")}`,
           `presunções: ${JSON.stringify(pl?.presuncoes ?? [])}`,
           `plano:     ${JSON.stringify(pl?.pedidos ?? pl?.mensagem ?? null)}`,
           `resposta:  ${String(ex?.resposta ?? ex?.mensagem ?? "—")}`,
         ].join("\n"),
       );
 
-      const falhas = conferirMecanica(q, pl);
+      const falhas = [
+        ...conferirEncaminhamento(rec),
+        ...conferirMecanica(q, pl),
+      ];
       expect(falhas, `${q.id}: ${falhas.join(" · ")}`).toEqual([]);
     }, TIMEOUT_MS);
   }

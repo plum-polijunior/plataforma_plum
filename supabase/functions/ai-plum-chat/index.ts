@@ -58,6 +58,9 @@ import {
   TETO_DE_LINHAS_BRUTAS,
 } from "../_shared/orcamento.ts";
 import { chamar, type UsoDeTokens } from "../_shared/llm.ts";
+import { nomearBases, resolverBase, TODAS_AS_BASES } from "../_shared/bases.ts";
+import { encaminhar } from "./adhoc/encaminhador.ts";
+import { resolver as resolverAgente } from "../_shared/agentes.ts";
 import { dataDeHoje } from "../_shared/hoje.ts";
 // ⭐ O A2 saiu do caminho no B15: quem diz o que a base significa agora é o
 // dicionário escrito no cadastro, conferido por gente (D-049).
@@ -73,7 +76,6 @@ import { dataDeHoje } from "../_shared/hoje.ts";
 import {
   colunasComVocabulario,
   lerDicionario,
-  normalizarDicionario,
 } from "../_shared/dicionario.ts";
 // ⭐ A mesma regra determinística que o `ai-agents` usa para sugerir
 // `vocabulario_util` ao Agente 1. Divergir faria o dicionário afirmar que uma
@@ -179,6 +181,44 @@ interface OpcoesDeExecucao {
    * margem porque seu cargo não tem acesso" (o A4 diz, e o resto responde).
    */
   lote?: { id: string; plano: unknown; tipo?: string }[];
+  /**
+   * ⭐ Ids de dataset do turno multi-base (B19), escolhidos pelo A2.
+   *
+   * Ausente ⇒ UMA base, a do `datasetId`. É o caminho do dashboard e do chat
+   * legado, e ele sai daqui idêntico ao que sempre foi.
+   *
+   * ⚠️ **Chegam pelo cliente** (o turno é partido em três invocações), então são
+   * tratados como entrada hostil: filtrados por `organization_id` e por cargo
+   * antes de qualquer coisa. Id que não passar é descartado, não recusado — o
+   * turno responde com o que sobrou.
+   */
+  bases?: string[];
+}
+
+/**
+ * A linha de `datasets` que o turno usa — declarada porque `nomearBases` é
+ * genérico e o cliente do Supabase devolve `any` para estas colunas.
+ *
+ * ⚠️ Sem o tipo explícito, `porNome.get(...)` volta como a **restrição** do
+ * genérico (`DatasetParaNome`, que só tem `id` e `name`) e o acesso a
+ * `google_sheet_id` deixa de compilar — mas só num `deno check`, que este repo
+ * ainda não roda no CI (I-11). Tipar aqui é o que faz o erro aparecer cedo.
+ */
+interface DatasetDoTurno {
+  id: string;
+  name: string | null;
+  google_sheet_id: string | null;
+  google_sheet_tab: string | null;
+  google_sheet_gid: number | null;
+  schema_metadata: unknown;
+}
+
+/** A mesma linha, no que a invocação 1 precisa dela. */
+interface DatasetCandidato {
+  id: string;
+  name: string | null;
+  schema_metadata: unknown;
+  vocabulario_exposto: boolean | null;
 }
 
 async function handleExecutePlan(
@@ -228,38 +268,67 @@ async function handleExecutePlan(
     return json({ error: "plan obrigatorio" }, 400);
   }
 
-  const { data: dataset, error: datasetErr } = await supabase
+  // ── As bases deste turno ─────────────────────────────────────────────────
+  //
+  // ⭐ `opcoes.bases` é o modo multi-base (B19). Ausente, é UMA base — o caminho
+  // do dashboard e do chat legado, que sai daqui idêntico ao que sempre foi.
+  const idsPedidos = opcoes.bases?.length ? opcoes.bases : [datasetId];
+
+  const { data: datasetsCrus, error: datasetErr } = await supabase
     .from("datasets")
     .select(
       "id, name, organization_id, google_sheet_id, google_sheet_tab, google_sheet_gid, schema_metadata",
     )
-    .eq("id", datasetId)
-    .eq("organization_id", profile.organization_id)
-    .maybeSingle();
+    .in("id", idsPedidos)
+    .eq("organization_id", profile.organization_id);
 
-  if (!dataset) {
+  // ⚠️ Ordem estável por `id`, e não é estética: `nomearBases` desempata nome
+  // repetido por ordem de entrada, e um sufixo que troca de dono entre
+  // requisições faria o `allowed_columns` apontar para a base errada. O
+  // Postgres não promete ordem sem `order by`.
+  const datasets = ((datasetsCrus ?? []) as DatasetDoTurno[])
+    .filter((d) => d.google_sheet_id)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  if (!datasets.length) {
     console.error(
-      "execute_plan: base nao encontrada. datasetId recebido=%s profile.organization_id=%s erro=%s",
-      datasetId, profile.organization_id, JSON.stringify(datasetErr),
+      "execute_plan: nenhuma base utilizavel. ids=%s org=%s achados=%d erro=%s",
+      JSON.stringify(idsPedidos), profile.organization_id,
+      datasetsCrus?.length ?? 0, JSON.stringify(datasetErr),
     );
-    return json({ error: "base nao encontrada" }, 403);
-  }
-  if (!dataset.google_sheet_id) {
-    return json(
-      { error: "Esta base precisa ser reconectada: falta o link da planilha." },
-      409,
-    );
+    // ⚠️ A distinção importa para quem lê: base que não existe (ou é de outra
+    // organização) é 403; base achada sem `google_sheet_id` é cadastro pela
+    // metade, e a frase tem de dizer o que fazer.
+    return datasetsCrus?.length
+      ? json({ error: "Esta base precisa ser reconectada: falta o link da planilha." }, 409)
+      : json({ error: "base nao encontrada" }, 403);
   }
 
-  const { data: perm } = await supabase
+  // ── As permissões, POR BASE ──────────────────────────────────────────────
+  //
+  // ⛔⛔ **Uma lista por base, nunca uma lista do turno.** Uma lista global seria
+  // a união das permissões de bases diferentes: quem pode ver `salario` em RH
+  // passaria a poder pedir `salario` de Vendas, e a comparação de conjuntos não
+  // veria nada de errado, porque o nome está na lista. O RBAC é por dataset
+  // (`role_permissions`) e esta barreira tem de ter a mesma forma.
+  const { data: perms } = await supabase
     .from("role_permissions")
-    .select("allowed_columns")
+    .select("dataset_id, allowed_columns")
     .eq("role_id", profile.role_id)
-    .eq("dataset_id", dataset.id)
-    .maybeSingle();
+    .in("dataset_id", datasets.map((d) => d.id));
 
-  const allowedColumns: string[] = perm?.allowed_columns ?? [];
-  if (allowedColumns.length === 0) {
+  const permitidasPorId = new Map<string, string[]>();
+  for (const p of perms ?? []) {
+    const cols = ((p.allowed_columns ?? []) as string[]).filter(Boolean);
+    if (cols.length) permitidasPorId.set(p.dataset_id as string, cols);
+  }
+
+  // ⭐ Base sem nenhuma coluna liberada é DESCARTADA, não fatal. Num turno
+  // multi-base, derrubar tudo porque uma das seis não foi liberada esconderia as
+  // respostas que ainda dão — e o A2 escolheu as bases sem saber do cargo.
+  const usaveis = datasets.filter((d) => permitidasPorId.has(d.id));
+
+  if (!usaveis.length) {
     return json({
       result: {
         status: "forbidden",
@@ -273,6 +342,18 @@ async function handleExecutePlan(
     });
   }
 
+  // ⭐ O NOME é o que o `from` do plano casa, e sai daqui — nunca do LLM. É o
+  // mesmo `nomeDaBase` que a invocação 2 usou para mostrar os nomes ao A3, e é
+  // por isso que ele vive em `_shared/bases.ts`: três lugares precisam
+  // concordar, e derivar o nome em cada um os fazia divergir em silêncio.
+  const porNome = nomearBases<DatasetDoTurno>(usaveis);
+  const nomePorId = new Map([...porNome].map(([nome, d]) => [d.id, nome]));
+
+  // A base "principal" — a que os campos do topo do payload descrevem, e a única
+  // que existe no caminho de uma base só.
+  const dataset = usaveis[0];
+  const allowedColumns = permitidasPorId.get(dataset.id)!;
+
   // ⭐ `metadados` não tem plano, então não há o que autorizar por plano: as
   // colunas pedidas são as que o cargo já pode ver, e o RBAC continua sendo o
   // `allowed_columns`. Fingir um veredito aqui, em vez de desviar, faria
@@ -283,12 +364,38 @@ async function handleExecutePlan(
   const plansDoLote: Record<string, unknown>[] = [];
   const colunasDoLote = new Set<string>();
 
+  // {nome da base: colunas que o lote precisa dela} — é o que decide quais bases
+  // entram no payload. Base que nenhum pedido nomeia não é lida.
+  const colunasPorBase = new Map<string, Set<string>>();
+
   if (opcoes.lote) {
     for (const p of opcoes.lote) {
-      const v = authorizePlan(p.plano as QueryPlan, allowedColumns);
+      // ⭐⭐ **Primeiro QUAL BASE, depois a autorização — nesta ordem.**
+      //
+      // Autorizar antes de saber a base obrigaria a usar alguma lista "geral", e
+      // é exatamente a união de permissões que este bloco existe para não ter.
+      const alvo = resolverBase(p.plano, porNome.keys());
+      if (!alvo) {
+        // ⚠️ NÃO é negação por cargo: o planejador nomeou uma base que não veio.
+        // Chamar isso de RBAC mandaria a investigação para o lugar errado, e a
+        // frase para o usuário seria mentira.
+        console.warn("[ad_hoc] pedido sem base", JSON.stringify({
+          id: p.id,
+          from: (p.plano as Record<string, unknown> | null)?.from ?? null,
+          disponiveis: [...porNome.keys()],
+        }));
+        negados.push({
+          id: p.id,
+          motivo: "não consegui identificar de qual base este recorte falava",
+        });
+        continue;
+      }
+
+      const permitidas = permitidasPorId.get(porNome.get(alvo.nome)!.id)!;
+      const v = authorizePlan(p.plano as QueryPlan, permitidas);
       if (!v.allowed) {
         console.warn("[ad_hoc] pedido negado por RBAC", JSON.stringify({
-          id: p.id, negadas: v.forbidden, roleId: profile.role_id,
+          id: p.id, base: alvo.nome, negadas: v.forbidden, roleId: profile.role_id,
         }));
         negados.push({
           id: p.id,
@@ -297,13 +404,33 @@ async function handleExecutePlan(
         });
         continue;
       }
+
       plansDoLote.push({
         card_id: p.id,
-        plan: p.plano,
+        // ⭐⭐ **O `from` é REESCRITO com o nome canônico.**
+        //
+        // Sem isto o Python teria de reaplicar a mesma regra de resolução —
+        // duas implementações da decisão de "qual base", em dois idiomas, que
+        // divergiriam em silêncio (D-017). Aqui a decisão é tomada UMA vez,
+        // nesta linha, e a barreira 4 do executor só a *verifica* achando
+        // correspondência exata. A ponte de compatibilidade dele nunca é
+        // exercitada no caminho `ad_hoc`.
+        plan: { ...(p.plano as Record<string, unknown>), from: alvo.nome },
         resolved_columns: v.required,
         ...(p.tipo ? { tipo: p.tipo } : {}),
       });
-      for (const c of v.required) colunasDoLote.add(c);
+
+      for (const c of v.required) {
+        colunasDoLote.add(c);
+        const cols = colunasPorBase.get(alvo.nome) ?? new Set<string>();
+        cols.add(c);
+        colunasPorBase.set(alvo.nome, cols);
+      }
+      // ⚠️ Pedido sem coluna nenhuma (`registro` de plano vazio, p. ex.) ainda
+      // precisa da base no payload, senão o executor não acha a tabela.
+      if (!colunasPorBase.has(alvo.nome)) {
+        colunasPorBase.set(alvo.nome, new Set<string>());
+      }
     }
 
     // ⚠️ Todos negados: nada a executar. Devolve 200 com os negados para o A4
@@ -390,6 +517,42 @@ async function handleExecutePlan(
     formatting_rules: formattingRulesFromSchema(dataset.schema_metadata, new Set(veredito.required)),
     max_rows: org?.dashboard_max_rows ?? 200_000,
     issued_at: Math.floor(Date.now() / 1000),
+    // ── ⭐ MULTI-BASE (B19) ────────────────────────────────────────────────
+    //
+    // Preenchido, ELE MANDA no executor: os campos do topo passam a ser
+    // ignorados, e cada pedido é autorizado contra a base que o `from` nomeia.
+    // Vazio, o executor sintetiza uma base dos campos do topo — que é o caminho
+    // do dashboard e do chat legado, intocado.
+    //
+    // ⚠️ Só as bases que o lote de fato nomeou. Mandar as seis faria o executor
+    // ler seis planilhas para usar uma — latência e cota do Sheets de graça.
+    //
+    // ⛔ `allowed_columns` vem do `permitidasPorId`, por base. Repetir
+    // `allowedColumns` aqui reintroduziria a lista global pela porta dos fundos.
+    ...(opcoes.lote && colunasPorBase.size
+      ? {
+        bases: [...colunasPorBase.keys()].map((nome) => {
+          const ds = porNome.get(nome)!;
+          const permitidas = permitidasPorId.get(ds.id)!;
+          return {
+            nome,
+            sheet_id: ds.google_sheet_id,
+            tab: ds.google_sheet_tab ?? "Sheet1",
+            // `?? null` e não `|| null`, pelo mesmo motivo do campo do topo:
+            // gid 0 é a primeira aba, um valor legítimo.
+            tab_gid: ds.google_sheet_gid ?? null,
+            allowed_columns: permitidas,
+            // ⚠️ Regras DESTA base. As de outra limpariam a coluna errada — e
+            // "moeda_brl" aplicado a uma coluna de texto não erra alto, erra
+            // devolvendo número onde havia nome.
+            formatting_rules: formattingRulesFromSchema(
+              ds.schema_metadata,
+              colunasPorBase.get(nome)!,
+            ),
+          };
+        }),
+      }
+      : {}),
   };
 
   try {
@@ -1189,9 +1352,17 @@ async function handleAdHocReconhecer(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return json({ error: "sessao invalida" }, 401);
 
+  // ⚠️ `role_id` entra aqui desde o B20: o filtro por cargo passou a acontecer
+  // NESTA invocação, porque uma base que o cargo não vê não pode nem aparecer no
+  // índice que vai ao A2.
   const { data: profile } = await supabase
-    .from("profiles").select("organization_id").eq("id", auth.user.id).single();
+    .from("profiles").select("organization_id, role_id").eq("id", auth.user.id).single();
   if (!profile?.organization_id) return json({ error: "perfil sem organizacao" }, 403);
+  if (!profile.role_id) {
+    // Sem cargo não existe `allowed_columns`, e "sem permissão" nunca pode virar
+    // "todas as permissões" — mesma regra do `handleExecutePlan`.
+    return json({ error: "seu usuario ainda nao tem um cargo definido" }, 403);
+  }
 
   const { data: org } = await supabase
     .from("organizations").select("remake_habilitado")
@@ -1222,23 +1393,76 @@ async function handleAdHocReconhecer(
     return json({ habilitado: true, status: "bloqueado", mensagem: porteiro.mensagem });
   }
 
-  // ── O dicionário, do banco ───────────────────────────────────────────────
-  const { data: dataset } = await supabase
-    .from("datasets")
-    .select("schema_metadata, vocabulario_exposto")
-    .eq("id", datasetId)
-    .maybeSingle();
+  // ── As bases candidatas ──────────────────────────────────────────────────
+  //
+  // ⭐ `datasetId === TODAS_AS_BASES` é o "Todas as minhas bases" do seletor: o
+  // A2 escolhe entre tudo que o cargo alcança. Um id específico mantém o
+  // comportamento de hoje, e é o que torna o A2 **comparável** com o status quo.
+  //
+  // ⚠️⚠️ **O filtro por CARGO é aqui, não depois.** Uma base que o cargo não vê
+  // não pode nem aparecer no índice que vai ao modelo: o nome da planilha e os
+  // nomes das colunas dela já são informação, e o A2 a mencionaria na presunção.
+  const { data: candidatasCruas } = datasetId === TODAS_AS_BASES
+    ? await supabase
+      .from("datasets")
+      .select("id, name, schema_metadata, vocabulario_exposto")
+      .eq("organization_id", profile.organization_id)
+      .eq("status", "active")
+    : await supabase
+      .from("datasets")
+      .select("id, name, schema_metadata, vocabulario_exposto")
+      .eq("id", datasetId)
+      .eq("organization_id", profile.organization_id);
 
-  const dicionario = lerDicionario(dataset?.schema_metadata ?? null);
+  const { data: permsDaOrg } = await supabase
+    .from("role_permissions")
+    .select("dataset_id, allowed_columns")
+    .eq("role_id", profile.role_id)
+    .in("dataset_id", (candidatasCruas ?? []).map((d) => d.id));
 
-  // ⚠️ Base sem coluna descrita nenhuma para o turno, e é o único caso em que
-  // esta etapa falha. `lerDicionario` nunca lança e sempre devolve forma
-  // completa, então zero coluna significa `schema_metadata` vazio de verdade —
-  // base em rascunho, ou base cujo cadastro não terminou. O A3 não tem o que
-  // planejar sem nome de coluna.
-  if (!Object.keys(dicionario.colunas).length) {
+  const comColuna = new Set(
+    (permsDaOrg ?? [])
+      .filter((p) => ((p.allowed_columns ?? []) as string[]).filter(Boolean).length)
+      .map((p) => p.dataset_id as string),
+  );
+
+  // Ordem estável por `id`: `nomearBases` desempata nome repetido pela ordem de
+  // entrada, e o nome tem de ser o mesmo aqui e no `handleExecutePlan`.
+  const candidatas = ((candidatasCruas ?? []) as DatasetCandidato[])
+    .filter((d) => comColuna.has(d.id))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  if (!candidatas.length) {
     await registrar({
-      etapa: "planejador",
+      etapa: "encaminhador",
+      status: "erro",
+      codigoErro: "sem_base",
+      latenciaMs: 0,
+    });
+    return json({
+      habilitado: true,
+      status: "inviavel",
+      mensagem: "Você não tem acesso liberado a nenhuma coluna de nenhuma base.",
+    });
+  }
+
+  const porNomeDaOrg = nomearBases<DatasetCandidato>(candidatas);
+  const dicionarios = new Map(
+    [...porNomeDaOrg].map(([nome, ds]) => [nome, lerDicionario(ds.schema_metadata)]),
+  );
+
+  // ⚠️ Bases sem coluna descrita nenhuma saem do índice. `lerDicionario` nunca
+  // lança e sempre devolve forma completa, então zero coluna significa
+  // `schema_metadata` vazio de verdade — base em rascunho, ou cadastro que não
+  // terminou. Oferecê-la ao A2 faria ele escolher uma base sobre a qual o A3 não
+  // tem nome de coluna para planejar.
+  const comDicionario = [...porNomeDaOrg.keys()].filter(
+    (nome) => Object.keys(dicionarios.get(nome)!.colunas).length,
+  );
+
+  if (!comDicionario.length) {
+    await registrar({
+      etapa: "encaminhador",
       status: "erro",
       codigoErro: "dicionario_vazio",
       latenciaMs: 0,
@@ -1246,17 +1470,80 @@ async function handleAdHocReconhecer(
     return json({ habilitado: true, status: "erro", etapa: "dicionario" });
   }
 
+  // ── A2 · Encaminhador ────────────────────────────────────────────────────
+  //
+  // ⭐ **O lugar dele é forçado, não escolhido.** A busca de vocabulário abaixo
+  // depende de saber quais colunas importam, que depende de saber quais bases.
+  // Ele tem de vir antes.
+  //
+  // ⚠️ Isto deixa esta invocação com três idas à rede (LLM, LLM, Lambda). A
+  // versão de antes de 2026-08-21 tinha CINCO e a função morria antes de
+  // responder — está dentro do orçamento, e a latência entra na verificação.
+  const t2 = Date.now();
+  const { encaminhamento, llm: llmA2 } = await encaminhar({
+    pergunta,
+    bases: comDicionario.map((nome) => ({ nome, dicionario: dicionarios.get(nome)! })),
+  });
+
+  await registrar({
+    etapa: "encaminhador",
+    status: encaminhamento.inviavel ? "inviavel" : "ok",
+    // ⭐ `agenteInvalido` é o modelo pedindo um A3 que não existe. Não é erro
+    // para o usuário — cai no generalista — mas um fallback que ninguém mede é
+    // um roteador que parou de funcionar sem avisar.
+    codigoErro: llmA2.erro?.codigo ??
+      (encaminhamento.agenteInvalido ? "agente_invalido" : null),
+    modelo: llmA2.modelo,
+    provedor: llmA2.provedor,
+    tokensEntrada: llmA2.tokens.entrada,
+    tokensSaida: llmA2.tokens.saida,
+    latenciaMs: Date.now() - t2,
+    // ⚠️ A decisão é da ORGANIZAÇÃO, não de uma base — no modo "todas" o
+    // `dataset_id` do turno é o sentinela e não aponta para dataset nenhum.
+    // Qual base saiu escolhida está aqui, no `resposta`.
+    respostaAgente: {
+      agente: encaminhamento.agente.id,
+      bases: encaminhamento.bases,
+      presuncao: encaminhamento.presuncao,
+      inviavel: encaminhamento.inviavel || undefined,
+      bases_descartadas: encaminhamento.basesDescartadas.length
+        ? encaminhamento.basesDescartadas
+        : undefined,
+      candidatas: comDicionario,
+    },
+  });
+
+  // ⭐ Inviável é RESPOSTA, não falha — o front já trata assim. E dizer isso aqui
+  // é mais barato que deixar o A3 inventar um `from` sobre a base menos errada.
+  if (encaminhamento.inviavel) {
+    return json({
+      habilitado: true,
+      status: "inviavel",
+      mensagem: encaminhamento.inviavel,
+    });
+  }
+
+  const escolhidas = encaminhamento.bases;
+  const dicionarioPrincipal = dicionarios.get(escolhidas[0])!;
+
   // ── Coleta determinística: vocabulário (B04) ─────────────────────────────
   // Sem LLM. As colunas vêm do que o DICIONÁRIO marcou — antes era o A2 — e as
   // três travas do B04 continuam valendo: `allowed_columns` (conferido pedido a
   // pedido no `handleExecutePlan`), a flag da base, e o teto de cardinalidade
   // que o executor aplica.
+  //
+  // ⚠️ **Só da PRIMEIRA base escolhida**, e é limitação declarada: o pedido de
+  // vocabulário carrega o nome da coluna como `card_id`, e duas bases com uma
+  // coluna homônima colidiriam nessa chave — o A3 receberia os valores de uma
+  // como se fossem da outra. Resolver exige prefixar a chave pelo nome da base,
+  // o que muda o contrato do `lerVocabulario`. Fica para o bloco do cruzamento.
   const vocabularios: Record<string, ValorDoVocabulario[]> = {};
-  const querVocabulario = colunasComVocabulario(dicionario);
+  const dsPrincipal = porNomeDaOrg.get(escolhidas[0])!;
+  const querVocabulario = colunasComVocabulario(dicionarioPrincipal);
 
-  if (dataset?.vocabulario_exposto && querVocabulario.length) {
+  if (dsPrincipal.vocabulario_exposto && querVocabulario.length) {
     const t3 = Date.now();
-    const resp = await handleExecutePlan(req, datasetId, {}, {
+    const resp = await handleExecutePlan(req, dsPrincipal.id, {}, {
       caminho: "ad_hoc",
       lote: querVocabulario.slice(0, 4).map((col) => ({
         id: col,
@@ -1281,6 +1568,7 @@ async function handleAdHocReconhecer(
       respostaAgente: {
         vocabularios_pedidos: querVocabulario,
         obtidos: Object.keys(vocabularios),
+        base: escolhidas[0],
       },
     });
   }
@@ -1288,10 +1576,14 @@ async function handleAdHocReconhecer(
   return json({
     habilitado: true,
     status: "ok",
-    // ⚠️ `cacheHit` continua no corpo, sempre `false`: não há mais A2 para
-    // cachear, e o front ainda lê o campo. Removê-lo é limpeza de outro bloco.
+    // ⚠️ `cacheHit` continua no corpo, sempre `false`: o A2 novo não cacheia (ver
+    // D-054) e o front ainda lê o campo. Removê-lo é limpeza de outro bloco.
     cacheHit: false,
-    dicionario,
+    // ⭐ **Ids de dataset, não dicionários.** O servidor relê o `schema_metadata`
+    // na 2ª invocação — ver o comentário de `bases` no corpo da requisição.
+    bases: escolhidas.map((nome) => porNomeDaOrg.get(nome)!.id),
+    agente: encaminhamento.agente.id,
+    presuncaoDoEncaminhador: encaminhamento.presuncao || undefined,
     vocabularios,
   });
 }
@@ -1325,27 +1617,114 @@ async function handleAdHocReconhecer(
 async function handleAdHocPlanejar(
   req: Request,
   pergunta: unknown,
-  dicionarioCru: unknown,
+  basesCruas: unknown,
+  agenteCru: unknown,
   vocabularios: unknown,
   turno: Partial<DadosDoTurno>,
 ): Promise<Response> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return json({ error: "sem credencial" }, 401);
-  if (typeof pergunta !== "string" || !pergunta.trim() || !dicionarioCru) {
-    return json({ error: "prompt e dicionario obrigatorios" }, 400);
+  if (typeof pergunta !== "string" || !pergunta.trim()) {
+    return json({ error: "prompt obrigatorio" }, 400);
   }
+  const ids = (Array.isArray(basesCruas) ? basesCruas : [])
+    .filter((x): x is string => typeof x === "string" && !!x);
+  if (!ids.length) return json({ error: "bases obrigatorias" }, 400);
 
   const registrar = criarRegistrador(authHeader, turno, "ad_hoc");
   const voc = (vocabularios ?? {}) as Record<string, ValorDoVocabulario[]>;
 
-  const t0 = Date.now();
-  // ⚠️ Passa por `lerDicionario` de novo, e não é redundante: o dicionário faz
-  // uma volta pelo cliente entre as duas invocações (ver o cabeçalho), então o
-  // que chega aqui é JSON de fora. Normalizar na entrada é o que garante que
-  // `paraPrompt` receba a forma completa — e `lerDicionario` nunca lança.
-  const dicionario = normalizarDicionario(dicionarioCru);
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
 
-  const { plano, llm: llmA3 } = await planejar({ pergunta, dicionario, vocabularios: voc });
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) return json({ error: "sessao invalida" }, 401);
+
+  const { data: profile } = await supabase
+    .from("profiles").select("organization_id, role_id").eq("id", auth.user.id).single();
+  if (!profile?.organization_id) return json({ error: "perfil sem organizacao" }, 403);
+  if (!profile.role_id) {
+    return json({ error: "seu usuario ainda nao tem um cargo definido" }, 403);
+  }
+
+  // ── ⭐⭐ O DICIONÁRIO É RELIDO AQUI, NÃO RECEBIDO ─────────────────────────
+  //
+  // Até 2026-08-28 o dicionário fazia uma volta pelo cliente entre as duas
+  // invocações, e esta função o renormalizava por desconfiança. Com N bases,
+  // seriam N dicionários indo e voltando pelo navegador — payload grande de dado
+  // que ele não usa, e N renormalizações defensivas.
+  //
+  // ⚠️ O que chega agora são **ids**, e eles são entrada hostil: o cliente pode
+  // mandar qualquer uuid. O filtro por `organization_id` e por cargo é o que
+  // impede que um id de outra base responda a pergunta.
+  const { data: crus } = await supabase
+    .from("datasets")
+    .select("id, name, schema_metadata")
+    .in("id", ids)
+    .eq("organization_id", profile.organization_id);
+
+  const { data: perms } = await supabase
+    .from("role_permissions")
+    .select("dataset_id, allowed_columns")
+    .eq("role_id", profile.role_id)
+    .in("dataset_id", (crus ?? []).map((d) => d.id));
+
+  const comColuna = new Set(
+    (perms ?? [])
+      .filter((p) => ((p.allowed_columns ?? []) as string[]).filter(Boolean).length)
+      .map((p) => p.dataset_id as string),
+  );
+
+  // Ordem estável por `id` — o mesmo critério da invocação 1 e do
+  // `handleExecutePlan`. Sem ela o desempate de nome repetido trocaria de dono
+  // entre as invocações, e o `from` que o A3 emitisse apontaria para outra base.
+  const datasets = ((crus ?? []) as { id: string; name: string | null; schema_metadata: unknown }[])
+    .filter((d) => comColuna.has(d.id))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  // ⛔ Id descartado é LOGADO, não fatal: o cliente pode ter mandado lixo, ou uma
+  // base pode ter sido revogada entre as duas invocações. O turno responde com o
+  // que sobrou — mas o descarte não é silencioso.
+  if (datasets.length !== ids.length) {
+    console.warn("[a3] bases descartadas", JSON.stringify({
+      pedidas: ids,
+      aceitas: datasets.map((d) => d.id),
+    }));
+  }
+
+  if (!datasets.length) {
+    await registrar({
+      etapa: "planejador",
+      status: "erro",
+      codigoErro: "sem_base_valida",
+      latenciaMs: 0,
+    });
+    return json({ status: "erro", etapa: "planejador" });
+  }
+
+  // ⭐ O MESMO `nomearBases` das outras duas etapas. É o que faz o nome que o A3
+  // vê no prompt ser o nome que a barreira 3 vai casar com o `from` — ver o
+  // cabeçalho de `_shared/bases.ts`.
+  const porNome = nomearBases<{ id: string; name: string | null; schema_metadata: unknown }>(datasets);
+  const dicionariosPorNome = new Map(
+    [...porNome].map(([nome, ds]) => [nome, lerDicionario(ds.schema_metadata)]),
+  );
+
+  // ⚠️ Revalidado contra o registro, e **de novo**: o id do agente voltou pelo
+  // cliente. Hoje o registro tem um A3 só, então isto sempre resolve para o
+  // generalista — e é justamente por isso que o teste do roteamento usa o
+  // `REGISTRO_DE_TESTE`.
+  const { agente, caiuNoPadrao } = resolverAgente(agenteCru);
+
+  const t0 = Date.now();
+  const { plano, llm: llmA3 } = await planejar({
+    pergunta,
+    bases: [...dicionariosPorNome].map(([nome, dicionario]) => ({ nome, dicionario })),
+    vocabularios: voc,
+  });
 
   const registrarA3 = async (status: StatusLog) => {
     await registrar({
@@ -1366,11 +1745,18 @@ async function handleAdHocPlanejar(
       // conferidas. Prefixo `_` marca que não veio do modelo.
       respostaAgente: {
         ...plano,
-        _dicionario: {
-          versao: dicionario.versao,
-          conferido: dicionario.conferido,
-          colunas: Object.keys(dicionario.colunas).length,
-        },
+        // ⚠️ Passou a ser POR BASE no B20: com N bases, uma versão só não diz
+        // nada — uma base v2 conferida e uma v1 crua no mesmo turno fariam a
+        // média mentir nas duas direções.
+        _dicionario: [...dicionariosPorNome].map(([nome, d]) => ({
+          base: nome,
+          versao: d.versao,
+          conferido: d.conferido,
+          colunas: Object.keys(d.colunas).length,
+        })),
+        // ⭐ Qual A3 planejou, e se o id veio inválido do cliente. Sem isto o
+        // roteamento não é auditável depois do fato.
+        _agente: { id: agente.id, caiu_no_padrao: caiuNoPadrao },
       },
     });
   };
@@ -1423,6 +1809,7 @@ async function handleAdHocExecutar(
   datasetId: unknown,
   pedidos: unknown,
   presuncoes: unknown,
+  basesCruas: unknown,
   turno: Partial<DadosDoTurno>,
 ): Promise<Response> {
   if (typeof pergunta !== "string" || !Array.isArray(pedidos) || !pedidos.length) {
@@ -1445,20 +1832,82 @@ async function handleAdHocExecutar(
     { global: { headers: { Authorization: authHeader ?? "" } } },
   );
 
+  // ⚠️ Filtrado aqui só quanto à FORMA. Quem valida contra `organization_id` e
+  // contra o cargo é o `handleExecutePlan` — dois lugares filtrando o mesmo id
+  // por critérios diferentes é como se perde a noção de qual deles protege.
+  const idsDeBase = (Array.isArray(basesCruas) ? basesCruas : [])
+    .filter((x): x is string => typeof x === "string" && !!x);
+
   let negadosPorOrcamento: { id: string; motivo: string }[] = [];
   let aprovados = lista;
 
   if (lista.some((p) => consomeOrcamento(p.tipo))) {
-    const gasto = await saldoDaJanela(supabase, turno.datasetId);
-    const veredito = aprovarLote(lista, gasto.saldo, TETO_POR_PEDIDO);
+    // ── ⭐⭐ O ORÇAMENTO É POR BASE, NÃO POR TURNO (§B4) ────────────────────
+    //
+    // Uma pergunta que lê duas planilhas com 5 linhas de cada são 10 linhas, e
+    // debitar de uma cota só faria o teto virar sugestão assim que alguém
+    // perguntasse cruzando.
+    //
+    // ⛔ E há um motivo mecânico: `turno.datasetId` é `null` no modo "todas", e
+    // `saldoDaJanela(null)` consulta `dataset_id = ""` — que falha o cast de uuid
+    // e cai no fail-closed (saldo 0). Sem isto, TODA pergunta com `registro` no
+    // modo "Todas" seria negada com a frase "você já viu o máximo de linhas",
+    // que é mentira.
+    //
+    // ⚠️ Base sem saldo nega os pedidos DELA; os das outras seguem. É a negação
+    // parcial que o produto promete.
+    const idsParaOrcamento = idsDeBase.length
+      ? idsDeBase
+      : (turno.datasetId ? [turno.datasetId] : []);
 
-    aprovados = veredito.aprovados as Pedido[];
-    negadosPorOrcamento = veredito.negados;
+    // O saldo de cada base, em paralelo — são leituras independentes.
+    const saldos = new Map<string, number>();
+    let saldoMinimo = 0;
+    let gastoMaximo = 0;
+
+    if (!idsParaOrcamento.length) {
+      // Nenhuma base identificável e há pedido que consome: fail-closed. É o
+      // mesmo critério do `saldoDaJanela` — orçamento que abre quando não sabe
+      // contra o que medir não é orçamento.
+      console.error("[orcamento] pedido que consome sem base identificavel");
+      aprovados = [];
+      negadosPorOrcamento = lista.filter((p) => consomeOrcamento(p.tipo)).map((p) => ({
+        id: p.id,
+        motivo: "não consegui medir sua cota de linhas detalhadas desta base",
+      }));
+    } else {
+      const medidos = await Promise.all(
+        idsParaOrcamento.map(async (id) => [id, await saldoDaJanela(supabase, id)] as const),
+      );
+      for (const [id, g] of medidos) {
+        saldos.set(id, g.saldo);
+        gastoMaximo = Math.max(gastoMaximo, g.gasto);
+      }
+      // ⚠️⚠️ **O mais apertado manda no lote, e isto é DÍVIDA REGISTRADA** —
+      // ver "Dívidas conhecidas" em `contexto/20-pendencias.md`. Não conserte
+      // sem ler o porquê lá.
+      //
+      // `aprovarLote` decide por saldo único, e um pedido não declara de qual
+      // base ele lê — quem sabe isso é o `from`. Usar o menor saldo erra para o
+      // lado seguro: nunca entrega mais do que a base mais gasta permite.
+      //
+      // ⛔ O conserto óbvio (chamar `resolverBase` aqui) põe a decisão de "qual
+      // base" em DOIS lugares deste arquivo, e a divergência entre eles não é
+      // erro de coluna — é autorizar contra a base A e executar sobre a B. O
+      // caminho certo é `aprovarLote` receber `{base: saldo}` e o pedido carregar
+      // a base que a barreira 3 já resolveu.
+      saldoMinimo = Math.min(...idsParaOrcamento.map((id) => saldos.get(id) ?? 0));
+
+      const veredito = aprovarLote(lista, saldoMinimo, TETO_POR_PEDIDO);
+      aprovados = veredito.aprovados as Pedido[];
+      negadosPorOrcamento = veredito.negados;
+    }
 
     if (negadosPorOrcamento.length) {
       console.warn(
         `[orcamento] ${negadosPorOrcamento.length} pedido(s) negados — ` +
-          `gasto ${gasto.gasto}/${TETO_DE_LINHAS_BRUTAS} na janela`,
+          `pior gasto ${gastoMaximo}/${TETO_DE_LINHAS_BRUTAS} na janela, ` +
+          `bases ${JSON.stringify(idsParaOrcamento)}`,
       );
     }
   }
@@ -1486,6 +1935,7 @@ async function handleAdHocExecutar(
   const resp = await handleExecutePlan(req, datasetId, {}, {
     caminho: "ad_hoc",
     lote: aprovados.map((p) => ({ id: p.id, plano: p.plano, tipo: p.tipo })),
+    ...(idsDeBase.length ? { bases: idsDeBase } : {}),
   });
   const corpo = await resp.json().catch(() => null);
   const results = (corpo?.results ?? []) as Record<string, unknown>[];
@@ -1563,6 +2013,18 @@ async function handleAdHocExecutar(
   if (!comDados.length) {
     return json({
       status: negadosRbac.length ? "negado" : "erro",
+      // ⭐⭐ `etapa` ENTRA AQUI, e a ausência dela já custou uma investigação.
+      //
+      // Este retorno gravava `etapa: "executor"` no log logo acima e devolvia a
+      // resposta HTTP **sem** o campo — então o front caía no default dele
+      // (`?? 'interprete'`, `PlumChat.tsx`) e a tela acusava o A4 de uma falha
+      // que foi do executor. Em 2026-08-28 isso mandou o diagnóstico para o
+      // agente errado, com o log dizendo a coisa certa ao lado.
+      //
+      // ⚠️ Sem queda para o legado, a mensagem na tela É a principal superfície
+      // de diagnóstico — um default que adivinha a etapa derrota o mecanismo que
+      // essa decisão criou.
+      etapa: "executor",
       mensagem: negadosRbac.length
         ? "Seu cargo não tem acesso às colunas necessárias para responder isso."
         : null,
@@ -1658,14 +2120,43 @@ Deno.serve(async (req: Request) => {
       // motivo que o `plan` acima: o `authorizePlan` roda no servidor para cada
       // pedido e a barreira 4 do Lambda reconfere. Plano é candidato, nunca
       // verdade (§4 regra 1).
-      pedidos, presuncoes, dicionario, vocabularios,
+      pedidos, presuncoes, vocabularios,
+      // ⭐ Multi-base (B19/B20). `bases` são ids de dataset escolhidos pelo A2 na
+      // 1ª invocação; `agente` é o id do A3 que ele escolheu.
+      //
+      // ⚠️ Vêm do cliente porque o turno é partido em três invocações — e por
+      // isso são revalidados no servidor: `bases` contra `organization_id` e
+      // contra o cargo, `agente` contra o registro de `_shared/agentes.ts`.
+      // Continuação de estado que passa pelo navegador é entrada, não memória.
+      //
+      // ⛔ `dicionario` SAIU do corpo em 2026-08-28: o servidor relê o
+      // `schema_metadata` das bases escolhidas. Com N bases, N dicionários
+      // fazendo essa volta era payload grande no navegador para dado que ele não
+      // usa — e obrigava a renormalizar cada um por desconfiança.
+      bases, agente,
       // Identificam a conversa e a pergunta, para o log costurar as etapas.
       // Gerados no cliente — ver `20260818110000_plum_logs.sql`. Opcionais de
       // propósito: front antigo continua funcionando, só sem registro.
       sessaoId, turnoId,
     } = await req.json();
 
-    const turno = { sessaoId, turnoId, datasetId };
+    // ⛔⛔ **O SENTINELA NÃO PODE ENTRAR NO `turno`.**
+    //
+    // `plum_logs.dataset_id` é uuid com foreign key para `datasets`, e o
+    // registrador escreve `turno.datasetId` direto nele. Com `"todas"` ali,
+    // TODO insert de log do turno falharia no cast — e log é best-effort, então
+    // as linhas simplesmente não apareceriam. O modo "Todas as minhas bases"
+    // ficaria invisível no `plum_logs`, que é justamente onde ele precisa ser
+    // auditado (I-12: conferir no banco, não na tela).
+    //
+    // ⭐ `null` é o valor certo, não um id inventado: no modo "todas" a decisão
+    // é da ORGANIZAÇÃO. Qual base o A2 escolheu está no `resposta` da etapa
+    // `encaminhador`.
+    const turno = {
+      sessaoId,
+      turnoId,
+      datasetId: datasetId === TODAS_AS_BASES ? null : datasetId,
+    };
     const authHeader = req.headers.get("Authorization");
 
     if (action === "execute_plan") {
@@ -1721,11 +2212,11 @@ Deno.serve(async (req: Request) => {
       return await handleAdHocReconhecer(req, prompt, datasetId, turno);
     }
     if (action === "ad_hoc_planejar") {
-      return await handleAdHocPlanejar(req, prompt, dicionario, vocabularios, turno);
+      return await handleAdHocPlanejar(req, prompt, bases, agente, vocabularios, turno);
     }
     if (action === "ad_hoc_executar") {
       return await handleAdHocExecutar(
-        req, prompt, datasetId, pedidos, presuncoes, turno,
+        req, prompt, datasetId, pedidos, presuncoes, bases, turno,
       );
     }
     if (action === "guard" || action === "plan_query" || action === "synthesize_answer") {

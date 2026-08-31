@@ -28,10 +28,26 @@ import { dataDeHoje } from "../../_shared/hoje.ts";
  * Pro. Voltar é uma linha em `MODELO_POR_PAPEL`.
  */
 
-export interface EntradaDoPlanejador {
-  pergunta: string;
+export interface BaseDoPlanejador {
+  /**
+   * ⭐ O nome que o A3 deve escrever no `from`, vindo de `nomeDaBase`
+   * (`_shared/bases.ts`). **Não é o nome da planilha** e não vem do modelo — é o
+   * mesmo valor que a barreira 3 vai casar. Ver o cabeçalho daquele módulo.
+   */
+  nome: string;
   /** ⭐ Lido do `schema_metadata` por `lerDicionario`. Sem LLM no caminho. */
   dicionario: Dicionario;
+}
+
+export interface EntradaDoPlanejador {
+  pergunta: string;
+  /**
+   * As bases que o A2 escolheu, com o dicionário COMPLETO de cada uma.
+   *
+   * ⭐ Aqui vai o dicionário cheio, ao contrário do índice que o A2 recebeu — e é
+   * onde a economia do encaminhador aparece: forma completa, poucas bases.
+   */
+  bases: readonly BaseDoPlanejador[];
   /** `{coluna: valores}` — das colunas que o dicionário marcou e a base liberou. */
   vocabularios: Record<string, ValorDoVocabulario[]>;
 }
@@ -84,7 +100,7 @@ export async function planejar(
  * subiu, e a defasagem cresceria em silêncio até alguém republicar. É o tipo de
  * erro que não aparece em teste nenhum, porque em teste o processo é novo.
  */
-function montarEntrada({ pergunta, dicionario, vocabularios }: EntradaDoPlanejador): string {
+function montarEntrada({ pergunta, bases, vocabularios }: EntradaDoPlanejador): string {
   // ⚠️ `dataDeHoje()`, não `toISOString()`: aquele devolve UTC, e das 21h à
   // meia-noite o Brasil ainda é ontem lá. Ver `_shared/hoje.ts`.
   const hoje = dataDeHoje();
@@ -99,8 +115,31 @@ function montarEntrada({ pergunta, dicionario, vocabularios }: EntradaDoPlanejad
     // ninguém descreveu — omitir faria a coluna parecer inexistente — e
     // acrescenta o aviso de dicionário não conferido, que é o que substituiu a
     // `confianca` por coluna. Toda essa lógica vive num lugar só.
-    paraPrompt(dicionario),
+    // ⭐ `paraPrompt` de cada base, prefixado pelo NOME que o `from` usa. Com uma
+    // base só o prefixo também vai: omiti-lo no caso comum faria o prompt ter
+    // duas formas, e a que roda menos é a que quebra sem ninguém ver.
+    ...bases.flatMap(({ nome, dicionario }) => [
+      "",
+      `=== BASE "${nome}" ===`,
+      `⚠️ Use exatamente \`"from": "${nome}"\`` +
+      " nos pedidos que consultarem esta base.",
+      paraPrompt(dicionario),
+    ]),
   ];
+
+  if (bases.length > 1) {
+    // ⚠️ Com várias bases o `from` deixa de ser detalhe e passa a ser o modo de
+    // falha mais provável: nome errado devolve erro de tabela inexistente, e o
+    // pedido inteiro se perde. Vale gastar linhas dizendo isso.
+    partes.push(
+      "",
+      "⚠️⚠️ HÁ MAIS DE UMA BASE. Todo pedido PRECISA de \"from\" com um dos nomes " +
+      `acima, escrito exatamente assim: ${bases.map((b) => `"${b.nome}"`).join(", ")}.`,
+      "⛔ NUNCA misture colunas de bases diferentes no mesmo pedido: cada pedido lê " +
+      "UMA base. Para comparar duas, emita DOIS pedidos e deixe a comparação para " +
+      "quem escreve a resposta.",
+    );
+  }
 
   const comVocabulario = Object.entries(vocabularios).filter(([, v]) => v.length);
   if (comVocabulario.length) {

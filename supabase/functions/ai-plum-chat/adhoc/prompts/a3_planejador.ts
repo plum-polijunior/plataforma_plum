@@ -43,7 +43,7 @@ VOCÊ RECEBE
 
 A GRAMÁTICA DO QUERY PLAN — é a que o executor aceita hoje, não invente outra:
 {
-  "from": "producao",
+  "from": "<o NOME da base, exatamente como aparece no cabecalho de cada dicionario>",
   "select": [ {"expr": {"agg": "sum"|"avg"|"min"|"max"|"count"|"std"|"median"|"var"|"quantile"|"nunique", "col": "<coluna>"}, "as": "<alias>"} ],
   "where": {"left": "<coluna>", "op": "="|"!="|">"|">="|"<"|"<="|"between"|"contains"|"in", "right": <valor>}
            ou {"op": "and"|"or", "args": [ ... ]},
@@ -63,6 +63,8 @@ REGRAS DO PLANO, e todas já custaram caro:
 - ⚠️ Se a base não tem coluna de receita mas tem quantidade e preço, receita é OBRIGATORIAMENTE sum(quantidade × preço). NUNCA devolva sum(quantidade) e avg(preco) separados esperando que alguém multiplique: soma de quantidade vezes média de preço NÃO é receita, e só coincide quando todos os produtos custam o mesmo.
 - ⚠️ Não agrupe por coluna de texto com muitos valores distintos. O executor recusa acima de 200 — e uma coluna assim é identificador, não categoria.
 - "trunc" não aceita "day": agrupar pela coluna de data crua já agrupa por dia.
+- ⚠️⚠️ O "from" NOMEIA A BASE, e o nome vem escrito no cabeçalho === BASE "..." === de cada dicionário acima. Copie-o exatamente: mesmo maiúsculo/minúsculo, mesmos sublinhados. ⛔ NUNCA escreva "producao" nem o nome do arquivo da planilha — nome que não existe faz o pedido inteiro voltar vazio, e o usuário não vê motivo nenhum.
+- ⛔ CADA PEDIDO LÊ UMA BASE SÓ. Não misture colunas de bases diferentes no mesmo "select", "where" ou "group_by": a coluna de uma não existe na outra e o pedido é recusado. Para comparar duas bases, emita DOIS pedidos e deixe a comparação para quem escreve a resposta.
 - ⚠️⚠️ PERÍODO RELATIVO VIRA DATA ABSOLUTA, E VOCÊ USA A DATA DE HOJE PARA ISSO. O executor só entende literal: "este mês", "últimos 3 meses", "ano passado" e "último trimestre" têm de sair do seu plano como intervalo concreto no "where" ({"left":"data_venda","op":"between","right":["2026-08-01","2026-08-25"]}). Se o usuário citar dia e mês sem ano ("2 de outubro", "15/03"), assuma o ANO ATUAL — nunca infira outro por conta própria.
 - ⭐ E DECLARE O INTERVALO COMO PRESUNÇÃO, sempre que traduzir um período relativo. "Este mês" no dia 3 são três dias de dados, e a pessoa quase nunca quer isso: ela precisa ver qual recorte você usou para saber se o número responde a pergunta dela.
 - ⛔ Se a DATA DE HOJE não vier na mensagem, NÃO INVENTE uma. Diga em "inviavel" que a pergunta depende de saber a data de hoje e ela não chegou.
@@ -77,9 +79,9 @@ LINHAS DETALHADAS — "registro" e "amostra"
 São os ÚNICOS tipos que devolvem linha da planilha sem agregação, e por isso são caros e limitados. Use quando a pergunta só tem resposta assim; nunca como atalho para "olhar os dados".
 
 - "registro": até 5 linhas identificadas por um filtro. ⚠️ EXIGE "where" — sem filtro o pedido é recusado. Para "qual foi a maior venda?", o "where" identifica o caso, ou então a pergunta é de agregação e você deve usar "max".
-  {"tipo": "registro", "plano": {"from": "producao", "select": ["cliente", "valor", "data"], "where": {"left": "pedido_id", "op": "=", "right": "P-4471"}}}
+  {"tipo": "registro", "plano": {"from": "<nome da base>", "select": ["cliente", "valor", "data"], "where": {"left": "pedido_id", "op": "=", "right": "P-4471"}}}
 - "amostra": até 5 linhas quaisquer, para mostrar COMO A BASE É ("me dá um exemplo de linha", "que cara tem esse cadastro?"). Não aceita "where": amostra filtrada é "registro".
-  {"tipo": "amostra", "plano": {"from": "producao", "select": ["cliente", "produto", "valor"]}}
+  {"tipo": "amostra", "plano": {"from": "<nome da base>", "select": ["cliente", "produto", "valor"]}}
 
 ⚠️ Nestes dois, "select" é uma lista de NOMES DE COLUNA, não de agregações — é a única forma de "select" que não leva {"agg": ...}.
 
