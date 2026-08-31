@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-26
+atualizado_em: 2026-08-31
 ---
 
 # Incidentes e lições
@@ -84,6 +84,13 @@ a compor 6 bindings em vez de 2, a superfície desse erro cresce — ver `30-dec
 
 **Estado atual do conhecimento:** o check é um **publicador de cobertura desconhecida**. Não se
 sabe o critério de seleção dele.
+
+⚠️⚠️ **Correção de 2026-08-31 — ISTO ACABOU. Não há repositório conectado, e nada publica sozinho.**
+Confirmado no painel e medido do mesmo jeito: três commits tocando `supabase/functions/**` entraram
+em `plataforma` e `ai-plum-chat` não se moveu da versão 74. ⇒ A terceira regra abaixo (*"uma função
+que você não mexeu pode ter sido republicada"*) **deixou de valer**, e é uma boa notícia: a
+divergência de `_shared/*` sem deploy de ninguém não é mais possível.
+⛔ O que ficou pior é a assimetria com a Vercel, e ela custou uma queda — ver **I-14**.
 
 **Regras que nasceram:**
 
@@ -407,3 +414,50 @@ medir.
    registro de que ela já foi frouxa vale mais que a entrada limpa.
 4. ⚠️ **Um verde só significa o que o critério mediu.** Antes de confiar num item da suíte, leia o
    que ele confere — não o que o nome dele promete.
+
+---
+
+## I-14 · 2026-08-31 · ⭐⭐ A janela que não fechava: front publica no push, Edge Function não
+
+**O que aconteceu:** o chat `ad_hoc` ficou **quebrado em produção** — 400 em toda pergunta — depois
+do push do B20. A mudança tirou `dicionario` do corpo da requisição e pôs `bases`/`agente` no lugar.
+A Vercel publicou o front no push; a `ai-plum-chat` continuou na **versão 74, de 26/08**. Front novo
+falando com Edge velha.
+
+⚠️ **A janela era conhecida e foi aceita de propósito**, com o plano de publicar a função em
+seguida. O que não estava previsto é que **publicar não era possível**: `functions deploy` devolvia
+403 com a conta comprovadamente autorizada (`projects list` lista o projeto, e ele está linkado).
+
+**Causa — e são três coisas empilhadas, não uma:**
+
+1. ⛔ **Deploy assimétrico.** O front sai no push, a Edge Function é manual. Toda troca de contrato
+   entre eles tem uma ordem que quebra — e as duas ordens quebram, porque cada lado exige o que o
+   outro deixou de mandar. Não existe sequência sem janela.
+2. ⚠️ **A premissa do `CLAUDE.md` estava errada.** Ele dizia que o push publica Edge Function "com
+   cobertura desconhecida", o que fazia a janela parecer talvez-inexistente. Não havia repositório
+   conectado: nada publica. Corrigido no `CLAUDE.md` §1, com a medição.
+3. ⛔ **Ninguém mediu a versão implantada ANTES de planejar a janela.** A própria seção do
+   `CLAUDE.md` manda fazer isso — *"o código da Edge Function no repositório não é o que está
+   rodando"* — e um `functions list` de 5 segundos teria mostrado a v74 de 26/08 e matado o plano
+   antes do push.
+
+**⭐ O achado colateral, e é o mais caro:** a v74 é de **20:12 local de 26/08** e o commit do
+`dataDeHoje` é de **21:57** do mesmo dia. ⇒ O conserto do fuso — *"quanto vendi hoje"* respondendo
+**zero** das 21h à meia-noite (D-053) — **nunca chegou ao ar**. Ficou cinco dias consertado no
+repositório e quebrado em produção, e ninguém percebeu porque o commit fechou o assunto na cabeça de
+todos.
+
+**As regras:**
+
+1. ⭐⭐ **Contrato entre front e Edge Function muda com PONTE, nunca com janela.** O lado novo aceita
+   as duas formas até o outro subir. É barato — no caso foi o front repassar o que a 1ª invocação
+   devolveu, e isso cobriu as duas direções sem detectar versão. ⛔ A ponte nasce com data de
+   remoção escrita nela, senão vira permanente (é como o `cacheHit` sobreviveu ao A2).
+2. ⚠️ **`npx supabase functions list` ANTES de planejar qualquer deploy.** Cinco segundos. A pergunta
+   não é "o que eu mudei?", é "o que está rodando?".
+3. ⛔ **Commit não é deploy, e o `git log` mente sobre produção.** Um conserto commitado parece
+   resolvido — e some da cabeça de quem o fez. Enquanto publicar for manual, todo commit que toca
+   `supabase/functions/**` carrega uma pendência que só o `functions list` enxerga.
+4. ⭐ **Aceitar uma janela exige provar que o remédio existe.** "Publico em seguida" é um plano com
+   uma dependência não verificada. Rode o comando de deploy **antes** de precisar dele — mesmo que
+   só para ver se ele autentica.

@@ -108,6 +108,22 @@ conferindo o `ezbr_sha256`. A diferença é que agora também vale o inverso —
 **não** mexeu pode ter sido republicada pelo push de outra pessoa, então divergência entre
 `_shared/*` empacotado em consumidores diferentes pode aparecer sem ninguém ter feito deploy.
 
+⚠️⚠️ **Correção de 2026-08-31 — NÃO EXISTE MAIS REPOSITÓRIO CONECTADO. Nada publica sozinho.**
+
+Confirmado no painel (nenhum repositório na integração) e **medido do jeito que esta seção sempre
+mediu**: três commits tocando `supabase/functions/**` entraram em `plataforma` — `735fba5`,
+`26ead69` e `75a3b21` — e `ai-plum-chat` **não se moveu**, presa na versão 74 de
+`2026-08-26 23:12Z`. O publicador de cobertura desconhecida acabou.
+
+⭐ **A regra fica mais simples, e melhor:** publicar Edge Function é **sempre** manual, e o inverso
+some — uma função que você não mexeu não é mais republicada pelo push de outra pessoa. A
+divergência de `_shared/*` que podia aparecer sem ninguém ter feito deploy deixou de ser possível.
+
+⛔ **E fica mais perigosa numa coisa só, que já custou uma queda:** a Vercel publica o front **no
+push**, a Edge Function **não**. Toda mudança de contrato entre os dois é par indivisível com deploy
+assimétrico — o front chega antes, sempre. Ver `contexto/31-incidentes-e-licoes.md` I-14, e a regra
+que nasceu dele: **ponte de compatibilidade, nunca janela.**
+
 Como conferir os três consumidores de `_shared/query_plan.ts` sem Docker (o `functions download`
 exige Docker) e sem despejar o arquivo no contexto — o corpo vem como ESZIP com as fontes em
 texto:
