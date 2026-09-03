@@ -335,23 +335,47 @@ def _colunas_da_expressao(no: object, _profundidade: int = 0) -> list:
     return fora
 
 
-def _serie_numerica(df: pd.DataFrame, col: str) -> pd.Series:
+def _como_numero(s: pd.Series) -> pd.Series:
     """
-    A coluna como número, para entrar numa conta.
+    Uma série como número, para entrar numa conta. ⭐ **O único conversor.**
 
-    No caminho normal ela já chega tipada: `apply_formatting_rules` roda antes do
-    executor e converte pelo `type` do Agente 3. O fallback com
+    No caminho normal a coluna já chega tipada: `apply_formatting_rules` roda
+    antes do executor e converte pelo `type` do Agente 3. O fallback com
     `_parse_ptbr_number` cobre a coluna que ficou em `type: "nenhuma"` e chegou
     como texto — sem ele, "R$ 57,50" viraria NaN e a receita daria zero.
 
-    NaN NÃO vira 0 aqui, de propósito: numa soma o pandas já ignora NaN (mesmo
-    efeito de zero), e numa média `fillna(0)` puxaria o resultado para baixo
-    contando linha vazia como venda de R$ 0.
+    ── ⛔ NaN NÃO VIRA 0, E ISSO VALE PARA TODAS AS AGREGAÇÕES ────────────────
+
+    Numa **soma** o pandas já ignora NaN, que dá no mesmo que somar zero — é o
+    único caso em que `fillna(0)` seria inofensivo. Nos outros ele mente:
+
+    | agregação | com `fillna(0)` |
+    |---|---|
+    | `avg` | ⛔ o zero entra no DENOMINADOR e puxa a média para baixo |
+    | `min` | ⛔ vira `0` — *"a menor venda foi R$ 0,00"* |
+    | `max` | ⛔ vira `0` quando todos os valores são negativos |
+
+    ⚠️ **Esta regra estava escrita aqui e desobedecida a dois arquivos de
+    distância.** Até 2026-08-31 só o caminho das expressões aritméticas a
+    seguia; `_scalar_agg` e `_coerce_numeric_for_agg` faziam
+    `pd.to_numeric(...).fillna(0)` por conta própria — e com o parser fraco, que
+    transforma "R$ 57,50" em NaN e depois em zero. A mesma coluna dava resultados
+    diferentes conforme a pergunta pedisse `sum(qtd*preco)` ou `sum(receita)`.
+
+    ⚠️ **Data não é número.** `datetime64` não é `is_numeric_dtype`, então sem a
+    guarda abaixo uma coluna de data cairia no parser de texto e viraria lixo —
+    e `min(data_venda)` devolveria um inteiro de nanossegundos ou zero.
     """
-    s = df[col]
     if pd.api.types.is_numeric_dtype(s):
         return s.astype("float64")
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return s
     return _parse_ptbr_number(s)
+
+
+def _serie_numerica(df: pd.DataFrame, col: str) -> pd.Series:
+    """A coluna como número. Ver `_como_numero`, que é onde mora a regra."""
+    return _como_numero(df[col])
 
 
 def _avaliar_expressao(
@@ -1030,7 +1054,17 @@ def _coerce_numeric_for_agg(
             and not pd.api.types.is_numeric_dtype(df[col])
             and func in ("sum", "avg", "mean", "min", "max")
         ):
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            # ⛔ **Coluna declaradamente de TEXTO fica como estava — é a C10, e o
+            # motivo dela é PRIVACIDADE, não compatibilidade.** Destravar a
+            # coerção aqui faria `min`/`max` devolverem o LITERAL: o primeiro
+            # nome de cliente por região, saindo por dentro de um agregado. É o
+            # mesmo vazamento que o `metadados` fecha ao recusar `min`/`max`
+            # sobre texto (B03). O `0` de hoje é feio e é resposta errada, mas
+            # não entrega dado — e trocá-lo exige a decisão que a C10 registra.
+            if _is_text(col, roles):
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            else:
+                df[col] = _como_numero(df[col])
 
 
 def _grouped_agg(
@@ -1126,7 +1160,22 @@ def _scalar_agg(
     if func in ("sum", "avg", "mean") and (
         s.dtype == object or _is_text(col, roles)
     ):
-        s = pd.to_numeric(s, errors="coerce").fillna(0)
+        if _is_text(col, roles):
+            # ⛔ C10 — coluna declaradamente de texto. Intocada de propósito; ver
+            # a guarda gêmea em `_coerce_numeric_for_agg`.
+            s = pd.to_numeric(s, errors="coerce").fillna(0)
+        else:
+            # ⭐ `_como_numero`, não `pd.to_numeric` cru: o parser de lá entende
+            # "R$ 57,50", que o `to_numeric` transformava em NaN — e o
+            # `.fillna(0)` que vinha depois transformava em zero. Ver a tabela no
+            # docstring dele.
+            s = _como_numero(s).dropna()
+            # ⚠️ Coluna que deveria ser número e não tem UM valor utilizável não
+            # tem resultado. `None` é o que este caminho já usa para coluna
+            # vazia. Com `.fillna(0)` isto era invisível: soma 0 e média 0, que
+            # se leem como fatos sobre a base.
+            if len(s) == 0:
+                return None
     if func == "sum":
         return float(s.sum())
     if func in ("avg", "mean"):
