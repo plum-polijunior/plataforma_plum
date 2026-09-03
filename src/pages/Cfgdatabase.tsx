@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import DatabasePipeline from "@/components/DatabasePipeline";
 import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { colunaNova } from "@/lib/dicionario";
+import {
+  colunaNova,
+  PAPEIS,
+  vocabularioEfetivo,
+  type ColunaDoSchema,
+  type PapelAnalitico,
+  type SchemaMetadata,
+} from "@/lib/dicionario";
 import {
   ehLinkPublicado,
   extrairSheetRef,
@@ -25,9 +35,11 @@ export default function DatabasePage() {
   const [isEditingSchema, setIsEditingSchema] = useState(false);
   const [editSheetUrl, setEditSheetUrl] = useState("");
   const [refinePrompt, setRefinePrompt] = useState("");
-  const [refineContextPrompt, setRefineContextPrompt] = useState("");
   const [isRefining, setIsRefining] = useState(false);
-  const [editedSchema, setEditedSchema] = useState<any>(null);
+  // ⭐ Tipado desde o B23. Era `any`, e com a tela passando a escrever grão,
+  // observações, papel e vocabulário isso deixaria de pegar exatamente os erros
+  // que importam — um `papel_analitico` fora do enum, uma coluna sem `columns`.
+  const [editedSchema, setEditedSchema] = useState<SchemaMetadata | null>(null);
   const [isSavingSchema, setIsSavingSchema] = useState(false);
 
   /**
@@ -217,7 +229,10 @@ export default function DatabasePage() {
 
       const colunas = (res.data.colunas ?? []) as { original: string; nome: string }[];
       const naPlanilha = colunas.map((c) => c.nome);
-      const noDicionario = Object.keys(selectedDataset.schema_metadata?.columns ?? {});
+      // Mesma fonte que o "Aplicar" vai usar — ver `handleAplicarReconciliacao`.
+      const noDicionario = Object.keys(
+        editedSchema?.columns ?? selectedDataset.schema_metadata?.columns ?? {},
+      );
 
       setDiff({
         novas: naPlanilha.filter((n) => !noDicionario.includes(n)),
@@ -252,10 +267,15 @@ export default function DatabasePage() {
     if (!selectedDataset || !diff || !organization) return;
     setAplicando(true);
     try {
-      const atual = selectedDataset.schema_metadata ?? {};
-      const colunasAtuais = (atual.columns ?? {}) as Record<string, unknown>;
+      // ⚠️ **A base é o que está NA TELA, não o que está salvo** — e desde o
+      // B23 isso importa. O painel passou a editar grão, observações, papel e
+      // vocabulário; partir do schema salvo faria a reconciliação descartar tudo
+      // o que a pessoa digitou e ainda não gravou, sem avisar. Ela só cai no
+      // salvo se o painel de edição nem estiver aberto.
+      const atual = (editedSchema ?? selectedDataset.schema_metadata ?? {}) as SchemaMetadata;
+      const colunasAtuais = (atual.columns ?? {}) as Record<string, ColunaDoSchema>;
 
-      const columns: Record<string, unknown> = {};
+      const columns: Record<string, ColunaDoSchema> = {};
       // ⭐ As iguais passam INTOCADAS — definição semântica, papel analítico e
       // vocabulário sobrevivem. É o que separa isto de recadastrar.
       for (const nome of diff.iguais) columns[nome] = colunasAtuais[nome];
@@ -303,7 +323,8 @@ export default function DatabasePage() {
       // ── 2 · e só então o dicionário ───────────────────────────────────────
       const { error: erroSchema } = await supabase
         .from('datasets')
-        .update({ schema_metadata: novoSchema })
+        // Mesmo cast de fronteira do `gravarSchema` — ver o porquê lá.
+        .update({ schema_metadata: novoSchema as unknown as Json })
         .eq('id', selectedDataset.id);
       if (erroSchema) throw erroSchema;
 
@@ -331,6 +352,224 @@ export default function DatabasePage() {
       setAplicando(false);
     }
   };
+
+  /**
+   * ⭐⭐ **O dicionário v2 de uma base ATIVA** (B23, fecha a C17).
+   *
+   * Até agora `grao`, `observacoes`, `papel_analitico` e `vocabulario_util` só
+   * existiam durante o cadastro: quem quisesse acrescentar uma observação ou
+   * corrigir o papel de uma coluna numa base pronta não tinha por onde — e
+   * recadastrar custa os cards do dashboard (C13).
+   *
+   * ⚠️ **Base v1 não tem esses campos**, e não é erro: o leitor inventa defaults
+   * (papel deduzido do tipo de formatação, vocabulário ligado em toda dimensão).
+   * A tela mostra esses defaults para a pessoa confirmar ou corrigir — mas
+   * mostrá-los NÃO é o mesmo que alguém tê-los conferido. É por isso que salvar
+   * não promove a versão; ver `handleMarcarConferida`.
+   */
+  const grao: string = typeof editedSchema?.grao === "string" ? editedSchema.grao : "";
+  const observacoes: string[] = Array.isArray(editedSchema?.observacoes)
+    ? editedSchema.observacoes
+    : [];
+  const colunasDoSchema: Record<string, ColunaDoSchema> = editedSchema?.columns ?? {};
+  const baseConferida = Number(editedSchema?.versao ?? 1) >= 2;
+
+  /**
+   * Escreve no clone sem mutar o objeto anterior.
+   *
+   * ⛔ **O código daqui fazia `{ ...editedSchema }` e mexia em
+   * `updated.columns[col].x`** — spread raso, então `updated.columns` era o
+   * MESMO objeto e a edição mutava o estado anterior. Funcionava por acidente,
+   * porque `editedSchema` já nasce de um clone profundo do `selectedDataset`.
+   *
+   * ⚠️ Deixou de funcionar por acidente no B24: o refino precisa comparar o que
+   * está na tela com o que está SALVO, e uma referência para dentro de um objeto
+   * que se automuta não é linha de base nenhuma.
+   */
+  const mexerNaColuna = (col: string, campos: Partial<ColunaDoSchema>) => {
+    setEditedSchema((antes) => antes && ({
+      ...antes,
+      columns: {
+        ...antes.columns,
+        [col]: { ...antes.columns[col], ...campos },
+      },
+    }));
+  };
+
+  const papelDaColuna = (col: string): PapelAnalitico => {
+    const declarado = colunasDoSchema[col]?.papel_analitico;
+    return PAPEIS.some((p) => p.valor === declarado)
+      ? (declarado as PapelAnalitico)
+      : "dimensao";
+  };
+
+  /**
+   * O dicionário como vai para o banco.
+   *
+   * `versao` entra por parâmetro porque há dois chamadores com intenções
+   * diferentes: salvar (preserva o que estava) e marcar como conferida (grava 2).
+   */
+  const montarSchema = (versao: number): SchemaMetadata => {
+    const columns: Record<string, ColunaDoSchema> = {};
+    for (const [col, dados] of Object.entries(colunasDoSchema)) {
+      const papel = papelDaColuna(col);
+      columns[col] = {
+        ...dados,
+        papel_analitico: papel,
+        // ⚠️ Mesma regra do cadastro, e o porquê mora em `vocabularioEfetivo`:
+        // o interruptor some fora de dimensão, então um `true` pode ter sobrado
+        // de quando a coluna era dimensão e ninguém tem como desligá-lo.
+        vocabulario_util: vocabularioEfetivo(papel, dados?.vocabulario_util),
+      };
+    }
+    return {
+      ...(editedSchema as SchemaMetadata),
+      versao,
+      grao: grao.trim(),
+      // Vazias somem: uma linha em branco criada por engano não vira observação.
+      observacoes: observacoes.map((o) => String(o).trim()).filter(Boolean),
+      columns,
+    };
+  };
+
+  const gravarSchema = async (schema: SchemaMetadata, mensagem: string) => {
+    setIsSavingSchema(true);
+    try {
+      const { error } = await supabase
+        .from('datasets')
+        // ⚠️ O cast fica AQUI, na fronteira com o banco. A coluna é `jsonb` e o
+        // tipo gerado é `Json`, que exige assinatura de índice — acrescentá-la
+        // ao `SchemaMetadata` afrouxaria justamente o tipo que faz esta tela
+        // pegar um papel analítico fora do enum.
+        .update({ schema_metadata: schema as unknown as Json })
+        .eq('id', selectedDataset.id);
+      if (error) throw error;
+
+      const atualizado = { ...selectedDataset, schema_metadata: schema };
+      setSelectedDataset(atualizado);
+      setEditedSchema(JSON.parse(JSON.stringify(schema)));
+      // ⚠️ A lista só recarrega quando `showPipeline` muda — atualizar à mão,
+      // senão o card continua mostrando a contagem de colunas antiga.
+      setDatasets((antes) => antes.map((d) => (d.id === atualizado.id ? atualizado : d)));
+      toast({ title: mensagem });
+    } catch (e) {
+      toast({
+        title: "Não consegui salvar",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSchema(false);
+    }
+  };
+
+  /**
+   * ⭐ **As colunas cuja definição foi editada nesta sessão** — o diff do B24.
+   *
+   * A linha de base aqui é o que está **salvo no banco**, não a saída de um
+   * agente: numa base ativa o dicionário já passou por gente, e o que interessa
+   * é o que mudou desde a última gravação.
+   *
+   * ⚠️ Depende de o `mexerNaColuna` não mutar o objeto anterior. Enquanto o
+   * `editedSchema` compartilhava `columns` com o `selectedDataset`, editar a
+   * tela alterava a linha de base junto e este diff daria sempre vazio.
+   */
+  const definicoesEditadas = (): string[] => {
+    const salvas = (selectedDataset?.schema_metadata?.columns ?? {}) as Record<string, ColunaDoSchema>;
+    return Object.entries(colunasDoSchema)
+      .filter(([col, dados]) => (dados?.semantic_definition ?? "") !== (salvas[col]?.semantic_definition ?? ""))
+      .map(([col]) => col);
+  };
+
+  /**
+   * Agente 2 — melhora a redação do que a PESSOA escreveu, só nas colunas que
+   * ela editou (B24, fecha a C16).
+   *
+   * ⛔ **A resposta é parcial ⇒ merge, e só das chaves que foram mandadas.** O
+   * Agente 2 não tem por que inventar coluna, mas aceitar chave desconhecida
+   * criaria definição para coluna que não existe nesta base.
+   */
+  const handleRefinarSemantica = async () => {
+    const editadas = definicoesEditadas();
+    if (!editadas.length) return;
+
+    setIsRefining(true);
+    try {
+      const paraRefinar: Record<string, string> = {};
+      for (const col of editadas) {
+        paraRefinar[col] = editedSchema.columns[col]?.semantic_definition ?? "";
+      }
+
+      const res = await supabase.functions.invoke('ai-agents', {
+        body: { action: 'refine_semantics', columns: paraRefinar, dataSamples: [] }
+      });
+      if (res.error) throw res.error;
+
+      const refinadas = (res.data?.result ?? {}) as Record<string, string>;
+      setEditedSchema((antes) => {
+        if (!antes) return antes;
+        const columns = { ...antes.columns };
+        for (const col of editadas) {
+          if (typeof refinadas[col] === "string" && columns[col]) {
+            columns[col] = { ...columns[col], semantic_definition: refinadas[col] };
+          }
+        }
+        return { ...antes, columns };
+      });
+
+      toast({
+        title: "Contexto refinado",
+        description: "Revise o texto antes de salvar — o Agente 2 melhora a redação, não o conteúdo.",
+      });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Erro ao refinar contexto",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
+  /** Salvar edição. ⛔ **Nunca mexe na `versao`** — ver `handleMarcarConferida`. */
+  const handleSalvarDicionario = () =>
+    gravarSchema(montarSchema(Number(editedSchema?.versao ?? 1)), "Dicionário salvo");
+
+  /**
+   * ⭐⭐ **Marcar a base como conferida — e é um ATO, não uma inferência.**
+   *
+   * `conferido = versao >= 2` é lido por `paraPrompt` e muda uma coisa só: com
+   * `false`, o A3 recebe *"Este dicionário NÃO foi conferido por uma pessoa…
+   * declare presunção"*. Promover cala esse aviso.
+   *
+   * ⛔ **Por que não é automático.** A tentação é promover quando "toda coluna
+   * tem papel". Numa base v1 as colunas **não têm papel nenhum** — a tela mostra
+   * o default deduzido pela máquina, e um salvamento qualquer gravaria esses
+   * defaults e promoveria a base sem ninguém ter lido nada. Silenciaria
+   * exatamente o aviso que existe para dizer que ninguém leu.
+   *
+   * ⚠️ **Não contradiz a decisão do B22** (a reconciliação não promove): lá o
+   * que acontece é um casamento de nomes de coluna, sem pessoa afirmando nada.
+   * Aqui há alguém clicando num botão que diz o que ele está afirmando.
+   *
+   * O grão é pré-requisito porque é o campo que mais muda resposta e o que a IA
+   * mais erra: "uma venda" e "um dia por loja" fazem a mesma soma significar
+   * coisas diferentes. Base conferida sem grão declarado seria a pior
+   * combinação — o A3 confiando num dicionário que não diz o que é uma linha.
+   */
+  const handleMarcarConferida = () =>
+    gravarSchema(
+      montarSchema(2),
+      "Base marcada como conferida — o chat vai confiar neste dicionário",
+    );
+
+  const handleMarcarNaoConferida = () =>
+    gravarSchema(
+      montarSchema(1),
+      "Base marcada como não conferida — o chat volta a declarar presunção",
+    );
 
   const handleDeleteDataset = async (id: string) => {
     if (!window.confirm("Atenção: Tem certeza que deseja excluir permanentemente esta base de dados? Esta ação não pode ser desfeita.")) {
@@ -371,7 +610,7 @@ export default function DatabasePage() {
 
   if (showPipeline) {
     return (
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-[70.4rem] mx-auto space-y-6">
         <Button variant="ghost" onClick={() => setShowPipeline(false)} className="mb-4">
           ← Voltar para Minhas Bases de Dados
         </Button>
@@ -389,7 +628,7 @@ export default function DatabasePage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20">
+    <div className="max-w-[70.4rem] mx-auto space-y-8 pb-20">
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Bases de Dados</h1>
@@ -699,83 +938,229 @@ export default function DatabasePage() {
                   )}
                 </div>
 
-                {/* 2. Refinar Contexto */}
+                {/*
+                  ⭐⭐ 1-ter. A BASE (B23) — grão, observações e o estado da revisão.
+
+                  Antes da lista de colunas, na mesma ordem da etapa 4 do
+                  cadastro: quem conhece uma tela reconhece a outra. Os textos
+                  são os mesmos de lá de propósito — são os mesmos conceitos, e
+                  redigi-los diferente faria parecer que são coisas diferentes.
+                */}
                 <div className="space-y-4 border-t border-border pt-6">
-                  <h4 className="font-semibold text-foreground">Refinar Contexto Semântico (Agente 2)</h4>
-                  <p className="text-xs text-muted-foreground">Edite manualmente o que a IA entende por cada coluna, ou peça ajuda do agente abaixo.</p>
-                  
-                  <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2 border border-border p-3 rounded-xl bg-background/50">
-                    {Object.entries(editedSchema.columns).map(([colName, colData]: [string, any]) => (
-                      <div key={colName} className="flex flex-col gap-1">
-                        <label className="text-xs font-bold font-mono text-primary">{colName}</label>
-                        <textarea
-                          className="w-full text-sm p-2 rounded-md border border-border bg-background resize-y min-h-[60px]"
-                          value={colData.semantic_definition || ''}
-                          onChange={(e) => {
-                            const updated = { ...editedSchema };
-                            updated.columns[colName].semantic_definition = e.target.value;
-                            setEditedSchema(updated);
-                          }}
-                        />
+                  <h4 className="font-semibold text-foreground">A base</h4>
+
+                  <div>
+                    <Label htmlFor="grao-da-base-ativa" className="text-sm font-semibold">
+                      O que UMA LINHA da planilha representa?
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1 mb-2">
+                      É o grão da base. Ex.: "uma venda", "um dia por loja", "um atendimento".
+                      É o campo que mais muda resposta: "uma venda" e "um dia por loja" fazem a
+                      mesma soma significar coisas diferentes.
+                    </p>
+                    <Input
+                      id="grao-da-base-ativa"
+                      value={grao}
+                      onChange={(e) => setEditedSchema((antes) => antes && ({ ...antes, grao: e.target.value }))}
+                      placeholder="Ex: uma venda"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-semibold">Observações sobre a base</Label>
+                    <p className="text-xs text-muted-foreground mt-1 mb-2">
+                      Contexto que muda a leitura de um número, em prosa. É onde entra a regra que
+                      só você sabe — <em>"considere apenas vendas faturadas para a receita"</em> —
+                      e o chat a declara como presunção ao usá-la.
+                    </p>
+                    {observacoes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">
+                        Nenhuma observação nesta base. Você pode escrever a primeira.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {observacoes.map((obs, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <Input
+                              value={obs}
+                              onChange={(e) => setEditedSchema((antes) => antes && ({
+                                ...antes,
+                                observacoes: observacoes.map((o, i) => (i === idx ? e.target.value : o)),
+                              }))}
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditedSchema((antes) => antes && ({
+                                ...antes,
+                                observacoes: observacoes.filter((_, i) => i !== idx),
+                              }))}
+                            >
+                              Remover
+                            </Button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setEditedSchema((antes) => antes && ({
+                        ...antes,
+                        observacoes: [...observacoes, ""],
+                      }))}
+                    >
+                      <Plus className="mr-1 h-3 w-3" /> Acrescentar observação
+                    </Button>
+                  </div>
+
+                  {/*
+                    ⭐⭐ O ESTADO DA REVISÃO — e o botão é um ato separado do salvar.
+
+                    Ver `handleMarcarConferida`: promover a versão é a pessoa
+                    afirmando que leu, não algo que a tela deduz de o objeto
+                    "parecer completo".
+                  */}
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      {baseConferida ? "Esta base está conferida" : "Esta base ainda não foi conferida"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {baseConferida
+                        ? "O chat confia neste dicionário e só declara presunção quando a pergunta realmente exige interpretar alguma coluna."
+                        : "O chat avisa o planejador de que os conceitos abaixo foram deduzidos por máquina, e pede que ele declare presunção sempre que usar uma coluna que precisou interpretar."}
+                    </p>
+                    {baseConferida ? (
+                      <Button variant="outline" size="sm" disabled={isSavingSchema} onClick={handleMarcarNaoConferida}>
+                        Marcar como não conferida
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isSavingSchema || !grao.trim()}
+                          onClick={handleMarcarConferida}
+                        >
+                          Marcar como conferida
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground">
+                          {grao.trim()
+                            ? "Ao marcar, você afirma que leu o papel de cada coluna e o grão desta base. Salva o dicionário junto."
+                            : "Preencha o grão acima para poder marcar: base conferida sem dizer o que é uma linha é a pior combinação."}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. As colunas — definição, papel e vocabulário */}
+                <div className="space-y-4 border-t border-border pt-6">
+                  <h4 className="font-semibold text-foreground">Colunas</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Corrija o que a IA não podia saber — só você conhece regras como "lucro não
+                    inclui impostos". O papel decide o que o planejador PODE fazer com a coluna.
+                  </p>
+
+                  <div className="flex flex-col gap-3 max-h-[32rem] overflow-y-auto pr-2 border border-border p-3 rounded-xl bg-background/50">
+                    {Object.entries(colunasDoSchema).map(([colName, colData]) => {
+                      const papel = papelDaColuna(colName);
+                      return (
+                        <div key={colName} className="flex flex-col md:flex-row gap-3 pb-3 border-b border-border/50 last:border-0 last:pb-0">
+                          <div className="md:flex-1 flex flex-col gap-1">
+                            <label className="text-xs font-bold font-mono text-primary">{colName}</label>
+                            <textarea
+                              className="w-full text-sm p-2 rounded-md border border-border bg-background resize-y min-h-[60px]"
+                              value={colData.semantic_definition || ''}
+                              onChange={(e) => mexerNaColuna(colName, { semantic_definition: e.target.value })}
+                              placeholder="Ex: Representa o lucro líquido..."
+                            />
+                          </div>
+
+                          {/*
+                            ⭐ `papel_analitico` decide o que o planejador PODE
+                            fazer: medida entra em soma, dimensão entra em
+                            agrupamento, identificador não entra em nenhum dos
+                            dois. Marcar um identificador como dimensão faz o
+                            chat tentar agrupar por CPF e devolver uma linha por
+                            pessoa.
+
+                            ⚠️ O vocabulário só aparece em dimensão, porque é a
+                            única em que faz sentido: é a lista de valores que
+                            permite casar "joão silva" com o literal da base. Em
+                            medida ou data não há lista a consultar.
+                          */}
+                          <div className="md:w-52 shrink-0">
+                            <select
+                              value={papel}
+                              onChange={(e) => mexerNaColuna(colName, {
+                                papel_analitico: e.target.value as PapelAnalitico,
+                              })}
+                              className="w-full bg-background border border-border rounded-md p-1.5 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50"
+                            >
+                              {PAPEIS.map((opcao) => (
+                                <option key={opcao.valor} value={opcao.valor}>{opcao.rotulo}</option>
+                              ))}
+                            </select>
+                            <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                              {PAPEIS.find((opcao) => opcao.valor === papel)?.ajuda}
+                            </p>
+                            {papel === 'dimensao' && (
+                              <div className="flex items-start gap-2 mt-3">
+                                <Switch
+                                  id={`vocabulario-ativa-${colName}`}
+                                  checked={Boolean(colData.vocabulario_util)}
+                                  onCheckedChange={(ligado) => mexerNaColuna(colName, { vocabulario_util: ligado })}
+                                  className="mt-0.5 shrink-0"
+                                />
+                                <Label
+                                  htmlFor={`vocabulario-ativa-${colName}`}
+                                  className="text-[11px] font-normal text-muted-foreground leading-snug cursor-pointer"
+                                >
+                                  O chat pode consultar a lista de valores desta coluna
+                                </Label>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-2 justify-between">
-                    <div className="flex gap-2 flex-1">
-                      <Input 
-                        value={refineContextPrompt} 
-                        onChange={(e) => setRefineContextPrompt(e.target.value)} 
-                        placeholder="Ordem para o Agente 2 (Opcional)"
-                      />
-                      <Button variant="secondary" disabled={isRefining || !refineContextPrompt.trim()} onClick={async () => {
-                        setIsRefining(true);
-                        try {
-                          const currentDefs = Object.entries(editedSchema.columns).reduce((acc: any, [k, v]: [string, any]) => {
-                            acc[k] = v.semantic_definition;
-                            return acc;
-                          }, {});
-                          
-                          const res = await supabase.functions.invoke('ai-agents', {
-                            body: { action: 'refine_semantics', columns: currentDefs, dataSamples: [] }
-                          });
-                          
-                          if (res.error) throw res.error;
-                          
-                          const newDefs = res.data.result;
-                          const updatedSchema = { ...editedSchema };
-                          Object.keys(newDefs).forEach(col => {
-                            if (updatedSchema.columns[col]) {
-                              updatedSchema.columns[col].semantic_definition = newDefs[col];
-                            }
-                          });
-                          setEditedSchema(updatedSchema);
-                          setRefineContextPrompt("");
-                          alert("Contexto refinado pela IA! Revise antes de salvar.");
-                        } catch (err) {
-                          alert("Erro ao refinar contexto.");
-                          console.error(err);
-                        } finally {
-                          setIsRefining(false);
-                        }
-                      }}>
-                        {isRefining ? "Processando..." : "Agente 2"}
-                      </Button>
-                    </div>
+                    {/*
+                      ⭐ **O Agente 2 recebe só o que foi editado** (B24, C16).
+                      Antes ia o mapa inteiro, e ele devolvia doze frases
+                      reescritas para quem tinha mexido em uma — reescrevendo
+                      definição que a pessoa já tinha aprovado.
 
-                    <Button 
-                      disabled={isSavingSchema}
-                      onClick={async () => {
-                        setIsSavingSchema(true);
-                        try {
-                          const { error } = await supabase.from('datasets').update({ schema_metadata: editedSchema }).eq('id', selectedDataset.id);
-                          if (error) throw error;
-                          setSelectedDataset({...selectedDataset, schema_metadata: editedSchema});
-                          alert("Esquema salvo com sucesso!");
-                        } catch(e) { console.error(e); } finally { setIsSavingSchema(false); }
-                      }}
+                      ⛔ Aqui não há campo de ordem, e a remoção é deliberada: o
+                      que existia ("Ordem para o Agente 2") travava o botão
+                      quando vazio e NUNCA era enviado — a ação não lê prompt
+                      nenhum. E não é para consertar mandando: o prompt do
+                      Agente 2 diz "PRESERVE O CONTEÚDO, você melhora a redação,
+                      não o conteúdo". Ele existe para deixar legível o que a
+                      pessoa escreveu, não para reescrever sob encomenda.
+                    */}
+                    <Button
+                      variant="secondary"
+                      disabled={isRefining || definicoesEditadas().length === 0}
+                      title={definicoesEditadas().length === 0
+                        ? "Edite alguma descrição para o Agente 2 ter o que melhorar"
+                        : undefined}
+                      onClick={handleRefinarSemantica}
                     >
-                      Salvar Contexto
+                      {isRefining
+                        ? "Processando..."
+                        : definicoesEditadas().length === 0
+                          ? "Nada editado para refinar"
+                          : `Refinar o que editei (${definicoesEditadas().length})`}
+                    </Button>
+
+                    <Button disabled={isSavingSchema} onClick={handleSalvarDicionario}>
+                      {isSavingSchema && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Salvar dicionário
                     </Button>
                   </div>
                 </div>
@@ -849,11 +1234,53 @@ export default function DatabasePage() {
             ) : selectedDataset.schema_metadata && selectedDataset.schema_metadata.columns ? (
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase">Dicionário Semântico Extraído</h4>
+
+                {/*
+                  ⭐ **A leitura mostra o que a edição edita** (B23). Até agora
+                  exibia só definição e formatação — então grão, observações,
+                  papel e vocabulário eram campos que sumiam ao fechar a edição,
+                  e não havia como conferir uma base sem entrar no modo de
+                  editá-la.
+                */}
+                <div className="rounded-lg border border-border bg-background p-4 space-y-3 text-sm">
+                  <div>
+                    <span className="text-xs text-muted-foreground font-semibold uppercase block mb-1">Uma linha representa</span>
+                    <span className="text-foreground/90">
+                      {selectedDataset.schema_metadata.grao || 'Não declarado'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-semibold uppercase block mb-1">Observações</span>
+                    {Array.isArray(selectedDataset.schema_metadata.observacoes)
+                      && selectedDataset.schema_metadata.observacoes.length > 0 ? (
+                      <ul className="list-disc pl-5 text-foreground/90 space-y-0.5">
+                        {selectedDataset.schema_metadata.observacoes.map((obs: string, i: number) => (
+                          <li key={i}>{obs}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="text-foreground/70">Nenhuma</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-semibold uppercase block mb-1">Revisão</span>
+                    <span className="text-foreground/70">
+                      {Number(selectedDataset.schema_metadata.versao ?? 1) >= 2
+                        ? 'Conferida por uma pessoa — o chat confia neste dicionário.'
+                        : 'Não conferida — o chat pede ao planejador que declare presunção.'}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3">
                   {Object.entries(selectedDataset.schema_metadata.columns).map(([colName, colData]: [string, any]) => (
                     <div key={colName} className="p-4 rounded-lg border border-border bg-background flex flex-col md:flex-row gap-4">
                       <div className="md:w-1/4">
                         <span className="font-mono text-sm font-bold text-primary">{colName}</span>
+                        <span className="block text-xs text-muted-foreground mt-1">
+                          {PAPEIS.find((opcao) => opcao.valor === colData.papel_analitico)?.rotulo ?? 'Dimensão'}
+                          {colData.vocabulario_util ? ' · vocabulário ligado' : ''}
+                        </span>
                       </div>
                       <div className="md:w-3/4 space-y-2 text-sm">
                         <div>

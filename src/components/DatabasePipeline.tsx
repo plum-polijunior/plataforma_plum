@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
+import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code, Plus } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +26,10 @@ import { normalizarNomeDeColuna } from "@/lib/colunas";
 // ⭐ Saíram daqui no B22: o "Editar Esquema" passou a escrever dicionário
 // também, e duas definições de "coluna sem formatação" divergiriam em silêncio.
 import {
+  PAPEIS,
   REGRA_SEM_FORMATACAO,
   VERSAO_DO_DICIONARIO,
+  vocabularioEfetivo,
   type FormattingRule,
   type PapelAnalitico,
 } from "@/lib/dicionario";
@@ -44,14 +46,6 @@ interface DatabasePipelineProps {
    */
   onAbrirBase?: (datasetId: string) => void;
 }
-
-/** O rótulo de cada papel na tela, e o que ele significa para quem revisa. */
-const PAPEIS: { valor: PapelAnalitico; rotulo: string; ajuda: string }[] = [
-  { valor: "medida", rotulo: "Medida", ajuda: "serve para somar ou tirar média" },
-  { valor: "dimensao", rotulo: "Dimensão", ajuda: "serve para agrupar ou filtrar" },
-  { valor: "identificador", rotulo: "Identificador", ajuda: "aponta uma linha específica" },
-  { valor: "temporal", rotulo: "Temporal", ajuda: "data, mês ou ano" },
-];
 
 /**
  * Valor de célula como texto, para a tabela antes-vs-depois do passo 2.
@@ -123,6 +117,19 @@ export default function DatabasePipeline({
   const [observacoes, setObservacoes] = useState<string[]>([]);
   const [papeis, setPapeis] = useState<Record<string, PapelAnalitico>>({});
   const [querVocabulario, setQuerVocabulario] = useState<Record<string, boolean>>({});
+
+  /**
+   * ⭐ **A saída do Agente 1, como ela veio — a linha de base do B24.**
+   *
+   * O "Refinar" mandava ao Agente 2 **todas** as definições, inclusive as que a
+   * pessoa não tocou (C16). Duas consequências, e a segunda é a que incomoda:
+   * gastava tokens no que já estava bom, e **reescrevia texto que ela aprovou**
+   * — clicava pensando numa coluna e voltava com doze frases diferentes.
+   *
+   * ⚠️ Sem guardar isto não há como saber o que foi editado: depois do primeiro
+   * refino a versão anterior sumia do estado e do rascunho.
+   */
+  const [definicoesOriginais, setDefinicoesOriginais] = useState<Record<string, string>>({});
 
   // Helpers
   // Movido para `@/lib/colunas` em 2026-08-11. Esta normalizacao nao e
@@ -260,6 +267,9 @@ export default function DatabasePipeline({
         if (Array.isArray(sketch.observacoes)) setObservacoes(sketch.observacoes);
         if (sketch.papeis) setPapeis(sketch.papeis);
         if (sketch.querVocabulario) setQuerVocabulario(sketch.querVocabulario);
+        // ⚠️ Rascunho anterior ao B23 não tem esta chave. Ver `colunasEditadas`:
+        // sem linha de base, o refino volta a mandar tudo, como antes.
+        if (sketch.definicoesOriginais) setDefinicoesOriginais(sketch.definicoesOriginais);
 
         const destino = passoParaRetomar(sketch, cab.colisoes);
         setStep(destino);
@@ -451,6 +461,7 @@ export default function DatabasePipeline({
             observacoes: extraData.observacoes ?? observacoes,
             papeis: extraData.papeis ?? papeis,
             querVocabulario: extraData.querVocabulario ?? querVocabulario,
+            definicoesOriginais: extraData.definicoesOriginais ?? definicoesOriginais,
           }
         })
         .eq('id', datasetId);
@@ -587,19 +598,70 @@ export default function DatabasePipeline({
     }
   };
 
+  /**
+   * ⭐ **As colunas que a pessoa realmente editou** — o diff do B24.
+   *
+   * ⚠️ **Sem linha de base, devolve TODAS**, que é o comportamento anterior ao
+   * B23. É o caso de um rascunho salvo antes desta versão: ele não tem
+   * `definicoesOriginais`, e um diff contra `{}` marcaria toda coluna como
+   * editada — o que dá no mesmo, mas por acidente. Explicitar evita que alguém
+   * "conserte" isto depois achando que é um bug.
+   */
+  const colunasEditadas = (): string[] => {
+    const colunas = Object.keys(semanticDefinitions);
+    if (!Object.keys(definicoesOriginais).length) return colunas;
+    return colunas.filter((col) => semanticDefinitions[col] !== definicoesOriginais[col]);
+  };
+
+  /**
+   * Agente 2 — melhora a redação do que a PESSOA escreveu.
+   *
+   * ⭐ **Manda só o que ela editou** (B24, fecha a C16). Antes ia o mapa inteiro,
+   * e o Agente 2 devolvia doze frases reescritas para quem tinha mexido em uma.
+   * Reescrever definição aprovada é pior que gastar token à toa: a pessoa não
+   * tem como saber o que mudou, e o que ela escreveu é a única fonte daquele
+   * conhecimento de negócio.
+   *
+   * ⛔ **A resposta é PARCIAL, então o merge é obrigatório.** Até o B23 isto era
+   * `setSemanticDefinitions(result)` — substituição total, que funcionava só
+   * porque o envio também era total. Com envio parcial, substituir apagaria as
+   * definições das colunas que não foram mandadas.
+   */
   const handleRefineSemantics = async () => {
+    const editadas = colunasEditadas();
+    if (!editadas.length) return;
+
     setIsProcessing(true);
     try {
-      toast({ title: "Agente 2 operando...", description: "Refinando descrições para o padrão Otimizado." });
+      toast({
+        title: "Agente 2 operando...",
+        description: editadas.length === 1
+          ? "Refinando a descrição que você editou."
+          : `Refinando as ${editadas.length} descrições que você editou.`,
+      });
+
+      const paraRefinar: Record<string, string> = {};
+      for (const col of editadas) paraRefinar[col] = semanticDefinitions[col];
+
       const refineRes = await supabase.functions.invoke('ai-agents', {
         body: {
           action: 'refine_semantics',
-          columns: semanticDefinitions
+          columns: paraRefinar
         }
       });
       if (refineRes.error) throw new Error(refineRes.error.message || "Erro no Agente de Refinamento");
-      setSemanticDefinitions(refineRes.data.result);
-      saveSketch(3, { semanticDefinitions: refineRes.data.result });
+
+      const refinadas = (refineRes.data?.result ?? {}) as Record<string, string>;
+      // ⚠️ Só as chaves que foram MANDADAS são aceitas de volta. O Agente 2 não
+      // tem por que inventar coluna, mas aceitar chave desconhecida criaria uma
+      // definição para uma coluna que não existe no cadastro.
+      const merged = { ...semanticDefinitions };
+      for (const col of editadas) {
+        if (typeof refinadas[col] === "string") merged[col] = refinadas[col];
+      }
+
+      setSemanticDefinitions(merged);
+      saveSketch(3, { semanticDefinitions: merged });
       toast({ title: "Refinamento concluído!" });
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -762,6 +824,10 @@ export default function DatabasePipeline({
       }
 
       setSemanticDefinitions(definicoes);
+      // ⭐ A linha de base do B24, gravada no mesmo instante em que nasce. É o
+      // MESMO objeto que vai para `semanticDefinitions`, e é por isso que o
+      // diff começa vazio: nada foi editado ainda.
+      setDefinicoesOriginais(definicoes);
       setPapeis(novosPapeis);
       setQuerVocabulario(novoVocabulario);
       setGrao(dicionario.grao ?? "");
@@ -770,6 +836,7 @@ export default function DatabasePipeline({
       // logo acima não estão visíveis aqui ainda.
       saveSketch(3, {
         semanticDefinitions: definicoes,
+        definicoesOriginais: definicoes,
         grao: dicionario.grao ?? "",
         observacoes: Array.isArray(dicionario.observacoes) ? dicionario.observacoes : [],
         papeis: novosPapeis,
@@ -817,24 +884,11 @@ export default function DatabasePipeline({
             semantic_definition: semanticDefinitions[col] || "",
             formatting_rule: formattingRules[col] || REGRA_SEM_FORMATACAO,
             papel_analitico: papel,
-            // ⚠️ **Só dimensão pode ter vocabulário, e a checagem é aqui porque a
-            // tela não a faz.** O interruptor só é renderizado em dimensão —
-            // então `querVocabulario[col]` pode ter sobrado `true` de quando a
-            // coluna era dimensão, e o controle que o desligaria não está mais
-            // visível para a pessoa desligar.
-            //
-            // ⭐ O estrago era no chat, e silencioso: `lerDicionario` respeita o
-            // booleano como declarado, então `colunasComVocabulario` mandaria
-            // pedir a lista de valores de uma coluna numérica em TODA pergunta
-            // daquela base — desperdiçando um dos 4 pedidos de vocabulário, ou
-            // (abaixo de 200 distintos) entregando ao planejador uma lista de
-            // números apresentada como vocabulário de categoria.
-            //
-            // ⛔ Não limpar no `onChange` do papel: quem trocasse para medida por
-            // engano e voltasse para dimensão perderia a escolha, com o
-            // interruptor reaparecendo desligado. O salvamento é o único ponto
-            // onde a combinação precisa ser coerente.
-            vocabulario_util: papel === "dimensao" && Boolean(querVocabulario[col]),
+            // ⚠️ Só dimensão pode ter vocabulário, e a checagem é no SALVAMENTO
+            // porque a tela não a faz. O porquê inteiro mora em
+            // `vocabularioEfetivo` — desde o B23 o "Editar Esquema" aplica a
+            // mesma regra, e ela não podia ficar escrita só aqui.
+            vocabulario_util: vocabularioEfetivo(papel, querVocabulario[col]),
           };
           return acc;
         }, {})
@@ -1306,7 +1360,7 @@ export default function DatabasePipeline({
                 </p>
                 {observacoes.length === 0 ? (
                   <p className="text-xs text-muted-foreground italic">
-                    A IA não apontou nenhuma observação.
+                    A IA não apontou nenhuma observação. Você pode escrever a primeira.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -1330,6 +1384,24 @@ export default function DatabasePipeline({
                     ))}
                   </div>
                 )}
+                {/*
+                  ⭐ **Acrescentar não existia, e era um buraco** (B23): só dava
+                  para editar ou apagar o que o Agente 1 tinha escrito. Se ele
+                  não apontasse nada, a base nunca ganhava a primeira observação
+                  — e é justamente a que mais vale, porque é a regra de negócio
+                  que só a pessoa sabe ("considere apenas vendas faturadas").
+
+                  Vazias somem no salvamento (`filter(Boolean)`), então uma linha
+                  em branco criada por engano não vira observação.
+                */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setObservacoes((antes) => [...antes, ""])}
+                >
+                  <Plus className="mr-1 h-3 w-3" /> Acrescentar observação
+                </Button>
               </div>
             </div>
 
@@ -1412,9 +1484,23 @@ export default function DatabasePipeline({
                 à esquerda, e este era o único passo com o rodapé assim. */}
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setStep(2)} disabled={isProcessing}>Voltar</Button>
-              <Button variant="secondary" onClick={handleRefineSemantics} disabled={isProcessing}>
+              {/*
+                ⚠️ Desabilitado quando nada foi editado: sem diff o Agente 2 não
+                tem o que fazer, e a chamada só gastaria cota devolvendo o texto
+                que já estava na tela.
+              */}
+              <Button
+                variant="secondary"
+                onClick={handleRefineSemantics}
+                disabled={isProcessing || colunasEditadas().length === 0}
+                title={colunasEditadas().length === 0
+                  ? "Edite alguma descrição para o Agente 2 ter o que melhorar"
+                  : undefined}
+              >
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                Refinar Descrições (Agente 2)
+                {colunasEditadas().length === 0
+                  ? "Nada editado para refinar"
+                  : `Refinar o que editei (${colunasEditadas().length})`}
               </Button>
               <Button
                 onClick={handleFinalizeAndSave}
