@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-18
+atualizado_em: 2026-09-03
 ---
 
 # Plataforma × Implementação
@@ -156,7 +156,7 @@ uma demo quebrada custa uma venda.
 ⚠️ **É a armadilha mais fácil deste repositório, e ela pega quem já leu a frase 4 do
 `00-LEIA-PRIMEIRO`.** Saber que "a plataforma é uma demo" não basta: dá para saber disso e ainda
 assim planejar como se os clientes estivessem conectados aqui. Aconteceu em 2026-08-18, na primeira
-redação do `zz_remake_implementation/PLANO-implementacao-remake_V3.md` — metade do documento era
+redação do `zz_remake/zz_remake_implementation/PLANO-implementacao-remake_V3.md` — metade do documento era
 proteção contra um dano impossível. Ver `03-erros-comuns.md`.
 
 ---

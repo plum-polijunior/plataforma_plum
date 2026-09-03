@@ -363,9 +363,16 @@ pergunta, e este precisa dela.
    teste e **não** o generalista. Sem isso o roteamento não está testado — está
    só instalado.
 
-### B21 · 🔧 Planilha já cadastrada para de virar base duplicada
+### B21 · 🔧 Planilha já cadastrada para de virar base duplicada — ✅ **FEITO em 2026-09-03**
 
-**O bloco mais barato e o que mais dói hoje** (§A4).
+**O bloco mais barato e o que mais dói hoje** (§A4). Ver
+`execucao/B21-base-duplicada/MANUAL.md` e a **D-055**.
+
+⭐ **Entrou uma coisa que não estava no plano, e era pré-requisito:** o link de "Publicar na web"
+(`/spreadsheets/d/e/2PACX-…`) devolvia `id: "e"` para **toda** planilha publicada. Enquanto o `id` era
+só parâmetro de leitura isso era falha isolada; virando **chave de identidade**, duas planilhas
+publicadas diferentes viravam "a mesma base". Fechado junto, com a segunda porta (o "Salvar URL" do
+Editar Esquema, que apontava uma base ativa para o sheet+aba de outra sem conferir nada).
 
 `handleConectarPlanilha` procura por `google_sheet_id` **+ `google_sheet_gid`**,
 em qualquer `status`:
@@ -381,10 +388,17 @@ em qualquer `status`:
 **Testes:** `vitest` sobre `extrairSheetRef` — os quatro formatos de link do mesmo
 documento dão o mesmo `id`.
 
-### B22 · 🔧 "Editar esquema" relê a planilha e reconcilia (C13)
+### B22 · 🔧 "Editar esquema" relê a planilha e reconcilia (C13) — ✅ **FEITO em 2026-09-03**
 
-Substitui a edição manual proposta no V3 (§A5). Em `Cfgdatabase.tsx`, sobre uma
-base **ativa**:
+Substitui a edição manual proposta no V3 (§A5). Ver
+`execucao/B22-reler-e-reconciliar/MANUAL.md` e a **D-056**.
+
+⭐ **Duas decisões que o plano deixou em aberto e foram fechadas na execução:** a *ordem* dos dois
+updates substitui a transação que o cliente Supabase não tem (permissão primeiro, dicionário depois —
+a ordem inversa é que produziria a C12), e a **`versao` do dicionário é preservada, nunca promovida**:
+reconciliar não é conferir.
+
+Em `Cfgdatabase.tsx`, sobre uma base **ativa**:
 
 - **Reler** chama `cabecalhos_da_planilha` e mostra o diff: colunas novas,
   colunas que sumiram, colunas iguais.
@@ -417,15 +431,23 @@ as colunas não enviadas.
 
 ## Ordem e o que cada bloco publica
 
-| bloco | migration | deploy Edge | Lambda | front |
-|---|---|---|---|---|
-| B18 | — | — | **sim** | — |
-| B19 | — | `ai-plum-chat` | — | — |
-| B20 | — | `ai-plum-chat` | — | sim |
-| B21 | — | — | — | **sim** |
-| B22 | — | `ai-plum-chat` | — | **sim** |
-| B23 | — | — | — | **sim** |
-| B24 | — | — | — | **sim** |
+| bloco | migration | deploy Edge | Lambda | front | estado |
+|---|---|---|---|---|---|
+| B18 | — | — | **sim** | — | ✅ 2026-08-31 |
+| B19 | — | `ai-plum-chat` | — | — | ✅ 2026-08-31 |
+| B20 | — | `ai-plum-chat` | — | sim | ✅ 2026-08-31 |
+| B21 | — | — | — | **sim** | ✅ 2026-09-03 |
+| B22 | — | ⚠️ **— (ver abaixo)** | — | **sim** | ✅ 2026-09-03 |
+| B23 | — | — | — | **sim** | |
+| B24 | — | — | — | **sim** | |
+
+⚠️ **Correção de 2026-09-03: o B22 NÃO precisa de deploy de `ai-plum-chat`**, e esta tabela dizia que
+sim. A ação `cabecalhos_da_planilha` já servia base ativa — `exigirAdminDaBase` confere organização,
+cargo e status **da pessoa**, nunca o `datasets.status`. Não havia nada a mudar do lado do servidor.
+
+⭐ **O que isso muda na prática:** B21 e B22 são **front puro**, então a assimetria de deploy do I-14
+(Vercel publica no push, Edge Function não) simplesmente não existe neles. Nenhuma ponte, nenhuma
+janela.
 
 ⭐ **B21 primeiro, apesar de ser o último na numeração temática.** Ele é de um
 dia, não depende de nada, e resolve o problema que morde hoje. Numerar por tema e
@@ -442,9 +464,11 @@ dois pedidos leem a mesma planilha.
 
 | | como |
 |---|---|
-| **C13** — reconferir base ativa sem uuid novo | ⭐ B22, e o B13 já a tinha tornado natural ao fazer da planilha a identidade |
-| **C12** — `allowed_columns` não revalidado | B22 remove a coluna que sumiu da matriz junto |
-| **`plum_reconhecimento` vestigial** | B20 volta a usá-la |
+| **C13** — reconferir base ativa sem uuid novo | ✅ B22, e o B13 já a tinha tornado natural ao fazer da planilha a identidade |
+| **C12** — `allowed_columns` não revalidado | ✅ B22 remove a coluna que sumiu da matriz junto |
+| **C14** — recadastrar a mesma planilha não avisava nada | ✅ B21. ⚠️ E o texto da C14 estava errado: dizia que a detecção não podia ser pela URL |
+| **C15** — mudar coluna no Sheets obrigava a recadastrar | ✅ B22 |
+| **`plum_reconhecimento` vestigial** | ⚠️ **resolvido pelo oposto do que esta linha previa.** Ela dizia *"B20 volta a usá-la"*; o B20 a **dropou** (`20260827120000_drop_plum_reconhecimento.sql`), porque o que ela guardava deixou de ser uma chamada de LLM — o índice do A2 sai de um `select` no `schema_metadata`. O §A3 já dizia isso; esta tabela é que ficou para trás |
 
 ---
 
@@ -455,10 +479,11 @@ dois pedidos leem a mesma planilha.
   grão declarado, que agora existe.
 - **Chamar o Agente 1 para as colunas novas** do B22 — depois de a reconciliação
   manual funcionar.
-- ⚠️ **A família de bugs do `fillna(0)` no executor**, achada em 2026-08-25:
-  `avg` e `min` tratam valor ilegível como zero, `count` conta linha que somou
-  zero, e o caminho escalar diverge do agrupado. **Não é Etapa 3** — é correção
-  independente e mais urgente que esta etapa inteira, porque produz número errado
-  hoje, com uma planilha só. Ver o plano em
-  `C:\Users\berna\.claude\plans\` ou reabrir a investigação.
+- ~~**A família de bugs do `fillna(0)` no executor**~~ — ✅ **RESOLVIDA em 2026-09-03**, commit
+  `db52921`, no Lambda desde 12:38Z. Um conversor único (`_como_numero`) para os três caminhos:
+  `avg` deixa de contar a célula ilegível no denominador, `min` deixa de virar R$ 0,00, `max` deixa
+  de virar 0 quando tudo é negativo, e coluna inteiramente ilegível devolve `None` em vez de soma 0.
+  ⛔ A **C10 ficou intocada** de propósito — o motivo dela é privacidade, não compatibilidade.
+  ⚠️ Era pré-requisito do B22: toda coluna que a reconciliação acrescenta nasce em
+  `formatting_rule.type = "nenhuma"`, que é exatamente o caso que o bug atingia.
 - **As 25–30 perguntas de avaliação** continuam bloqueantes e sem dono (D-052).

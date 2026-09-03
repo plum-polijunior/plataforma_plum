@@ -157,7 +157,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `src/hooks/use-org-access.ts` | ⭐ estado de acesso derivado das **claims do JWT**, não do banco |
 | `src/integrations/supabase/types.ts` | ⚠️ atualizar **SEMPRE** junto com migrations (§4.12) |
 | `src/integrations/supabase/client.ts` | gerado; URL e anon key hardcoded (dívida, §8) |
-| `src/pages/Cfgdatabase.tsx` | datasets + matriz de permissões (`?tab=permissoes`) + edição de schema |
+| `src/pages/Cfgdatabase.tsx` | datasets + edição de esquema. ⚠️ **Não tem a matriz de permissões** (nem `?tab=permissoes`): ela vive em `Dashboard.tsx`, e mover é a pendência P9. Desde o B22, é aqui que fica o **Reler a planilha**, que reconcilia o dicionário com o cabeçalho de hoje preservando o `id` da base |
 | `src/pages/Auth.tsx` | entrar / primeiro acesso / criar organização. Login pousa em **`/inicio`**, não em `/dashboard` (§7); "Entrar com Email" só **existe** quando e-mail e senha passam na validação local. Desde 2026-08-12, sem painel lateral decorativo — só o formulário, centralizado |
 | `src/pages/Index.tsx` (landing) | rota `/`. Desde 2026-08-12 roda no `:root` claro (sem `.dark`) — ver §7. Seções em `src/components/sections/`; `plum-chat`/`DataPlaygroundSection` ("Simule o Plum") foram removidos, não confundir com `ai-plum-chat` |
 | `src/components/DatabasePipeline.tsx` | pipeline de importação em **4** etapas (eram 5 até o B13; não há mais upload de arquivo); a tabela antes-vs-depois do passo 2 nasceu em 2026-08-25 e é a revisão do R-06; rascunhos em `datasets.sketch` |

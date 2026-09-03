@@ -6,7 +6,8 @@ Autoritativos:
 |---|---|---|
 | **V6** | `zz_remake/` | as **decisões** do remake |
 | **V7** | `zz_remake/` | a **spec** do `ad_hoc` |
-| ⭐ **PLANO-implementacao-remake_V3.md** | `zz_remake_implementation/` | o **plano de execução** |
+| ⭐ **PLANO-implementacao-remake_V3.md** | `zz_remake_implementation/` (subpasta daqui) | o **plano de execução** |
+| ⭐ **PROXIMO-PASSO.md** | `zz_remake_implementation/` | **estado**, não histórico — o primeiro a ler ao retomar |
 
 O resto dos arquivos desta pasta são discussões e conversas, com propostas que se contradizem entre
 si de propósito. Não são especificação.
@@ -25,5 +26,10 @@ A V2 fica, marcada como superada (D-041: superado é marcado, não apagado). Ela
 ambiente paralelo passo a passo e continua sendo o **plano B**; a branch `newnew_plum` está parada
 em `1a0b67e` esperando exatamente isso.
 
-⛔ **Não confunda os dois "V3".** O V3 desta pasta é conversa. O V3 de `zz_remake_implementation/` é
-o plano. Distinga pela pasta, nunca pelo número.
+⛔ **Não confunda os dois "V3", e desde 2026-09-03 a pasta não desambigua mais** — o
+`zz_remake_implementation/` passou a ser **subpasta desta**. Distinga pelo NOME do arquivo:
+
+| arquivo | o que é |
+|---|---|
+| `REMAKE-PLUM-tese-e-arquitetura_V3.md` | conversa, aqui na raiz. Ignore |
+| `zz_remake_implementation/PLANO-implementacao-remake_V3.md` | ⭐ o plano de execução |

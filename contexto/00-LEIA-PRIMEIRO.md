@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-26
+atualizado_em: 2026-09-03
 ---
 
 # LEIA PRIMEIRO
@@ -34,16 +34,24 @@ atualizado_em: 2026-08-26
 
 | Não leia | Por quê |
 |---|---|
-| `zz_remake/` | Rascunhos da discussão do remake (V1 a V4 e os comentários). ⚠️ **Contêm propostas contraditórias entre si, de propósito** — são a conversa, não a conclusão. A conclusão está em `contexto/` |
+| `zz_remake/*.md` (a raiz da pasta) | Rascunhos da discussão do remake (`REMAKE-PLUM-tese-e-arquitetura_V1..V7`). ⚠️ **Contêm propostas contraditórias entre si, de propósito** — são a conversa, não a conclusão. A conclusão está em `contexto/` |
+| `zz_remake_2/` | Trabalho **fora de escopo** enquanto o remake não terminar — o próprio `LEIA-PRIMEIRO.md` de lá diz isso. Não é continuação: é outra coisa, guardada para depois |
 
-⭐⭐ **`zz_remake_implementation/` é o oposto: leia.** É onde vive o plano de execução autoritativo
-(`PLANO-implementacao-remake_V3.md`, que **substitui a V2**), o `PLANO-etapa-3.md` e os `MANUAL.md`
-de cada bloco executado (B10..B17) — que registram armadilha de deploy que não está em mais lugar
-nenhum.
+⭐⭐ **`zz_remake/zz_remake_implementation/` é o oposto: leia.** É onde vive o plano de
+execução autoritativo (`PLANO-implementacao-remake_V3.md`, que **substitui a V2**), os
+`PLANO-etapa-N.md` e os `MANUAL.md` de cada bloco executado (B10..B20) — que registram armadilha de
+deploy que não está em mais lugar nenhum. ⭐ E o `PROXIMO-PASSO.md`, que é **estado, não histórico**:
+é o primeiro arquivo a ler ao retomar.
 
-⛔ **Distinga as duas pastas pelo caminho, nunca pelo número da versão.** Existem dois documentos
-chamados "V3": o de `zz_remake/` é conversa, o de `zz_remake_implementation/` é o plano. Ver
-`03-erros-comuns.md`.
+⛔ **Distinga os dois "V3" pelo NOME DO ARQUIVO, não pela pasta.** Existem dois documentos com V3 no
+nome, e desde 2026-09-03 os dois estão **dentro de `zz_remake/`** — a pasta deixou de desambiguar:
+
+| arquivo | o que é |
+|---|---|
+| `REMAKE-PLUM-tese-e-arquitetura_V3.md` | conversa. Ignore |
+| `PLANO-implementacao-remake_V3.md` | ⭐ o plano de execução autoritativo |
+
+Ver `03-erros-comuns.md`.
 
 ⚠️ **`docs/` e `contexto/90-arquivo/` não existem mais** — foram apagados em 2026-08-14, depois de o
 **fato** e o **porquê** de cada coisa terem sido extraídos para `30-decisoes.md` e

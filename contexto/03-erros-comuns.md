@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-27
+atualizado_em: 2026-09-03
 ---
 
 # Erros comuns — o que se acredita e é falso
@@ -107,10 +107,14 @@ atualizado_em: 2026-08-27
 | ❌ Crença errada | ✅ Verdade |
 |---|---|
 | `zz_remake/V1`, `V2`, `V3` são especificação | São a **conversa** do remake, com propostas que se contradizem de propósito ao longo das versões. A conclusão está em `contexto/` |
-| ⭐⭐ "V3 é conversa, então posso ignorar" | ⛔ **Existem DOIS documentos chamados V3, em pastas diferentes.** `zz_remake/V3` é conversa e se ignora. `zz_remake_implementation/PLANO-implementacao-remake_V3.md` é o **plano de execução autoritativo** — ele substitui o V2, e é citado por `02-plataforma-vs-implementacao.md` e por `30-decisoes.md` D-046. ⭐ **Distinga pela pasta, nunca pelo número:** `zz_remake/` = tese; `zz_remake_implementation/` = execução |
+| ⭐⭐ "V3 é conversa, então posso ignorar" | ⛔ **Existem DOIS documentos com V3 no nome.** `REMAKE-PLUM-tese-e-arquitetura_V3.md` é conversa e se ignora. `PLANO-implementacao-remake_V3.md` é o **plano de execução autoritativo** — substitui o V2, e é citado por `02-plataforma-vs-implementacao.md` e por `30-decisoes.md` D-046. ⚠️ **Distinga pelo NOME, nunca pela pasta nem pelo número:** desde 2026-09-03 os dois vivem dentro de `zz_remake/`, e a antiga regra "distinga pela pasta" deixou de funcionar |
+| Um caminho `zz_remake_implementation/…` citado por aí ainda existe | ⚠️ A pasta virou `zz_remake/zz_remake_implementation/` em 2026-09-03. As **migrations aplicadas** (`20260818100000`, `20260818110000`) ainda citam o caminho antigo e **não foram corrigidas de propósito**: migration aplicada é imutável. Traduza o caminho ao ler |
 | O V2 do plano de implementação ainda vale | **Superado pelo V3**, que tirou o remake do ambiente paralelo e o pôs direto em produção — cai a Etapa 0 inteira da V2 (Supabase novo, Lambda de dev, service account nova). A V2 fica marcada, não apagada (D-041), como plano B; a branch `newnew_plum` está parada em `1a0b67e` |
 | `contexto/12-visao-tecnologica.md` descreve o que está no ar | Descreve **para onde vamos**. O que está no ar é o `CLAUDE.md` |
 | Existe uma pasta de arquivo histórico | Existia (`docs/`, `contexto/90-arquivo/`) e foi **apagada em 2026-08-14**. O porquê ficou em `30-decisoes.md`; a narrativa, só no `git log` |
+| `Cfgdatabase.tsx` tem a matriz de permissões, numa aba `?tab=permissoes` | ⛔ **Não tem, e nunca teve.** Não há `Tabs` nem `useSearchParams` naquela página. A matriz mora em `Dashboard.tsx` (que é "Minha Organização", aba "Cargos & Permissões") — e movê-la para lá é a pendência **P9**, nunca aplicada. O `CLAUDE.md` da raiz e o `src/CLAUDE.md` afirmavam isso; corrigido em 2026-09-03 |
+| Para saber se a planilha já foi cadastrada, é preciso comparar as colunas | ⛔ **Não é** — e comparar colunas é justamente o que o B13 abandonou (duas planilhas diferentes com as mesmas colunas se confundiam). O mesmo documento dá o mesmo `google_sheet_id` em qualquer forma de link; a chave é `id` + `gid` (D-055). ⚠️ A pendência C14 afirmava o contrário e estava errada |
+| Uma base v1 vira v2 quando alguém relê a planilha | ⛔ **Não vira, de propósito.** `conferido = versao >= 2` afirma que uma PESSOA conferiu papel e grão de cada coluna; a reconciliação do B22 só casa nomes. Promover faria o A3 parar de declarar presunção sobre conceitos que ninguém leu (D-056) |
 
 ---
 

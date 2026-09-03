@@ -167,7 +167,7 @@ o B02 passa a barrar. Não são regras concorrentes: o teto de cardinalidade do 
 ## §C · Os nove blocos
 
 Ordem mantida do V3. Cada bloco fecha pela §0.3 do V3 e produz `DIARIO.md` + `MANUAL.md` em
-`zz_remake_implementation/execucao/B0X-.../`.
+`execucao/B0X-.../`, ao lado deste arquivo.
 
 | # | Bloco | Depende | Sem | Alcança o legado? |
 |---|---|---|---|---|

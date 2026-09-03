@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-31
+atualizado_em: 2026-09-03
 ---
 
 # Decisões
@@ -461,7 +461,7 @@ maior que o remake, e que jogaria fora a customização já entregue.
 ⚠️ **Consequência que reordena o plano de implementação:** sem usuário real nesta plataforma, o
 remake **perde o sinal de qualidade** que viria do uso (`presuncao_corrigida`, taxa de `inviavel`).
 O conjunto de 25–30 perguntas de avaliação deixa de ser insumo e vira o **único critério de parada**.
-Ver `zz_remake_implementation/PLANO-implementacao-remake_V3.md` §0-ter.
+Ver `zz_remake/zz_remake_implementation/PLANO-implementacao-remake_V3.md` §0-ter.
 **Status:** vigente.
 
 ### D-047 · 2026-08-25 · Os seis agentes do cadastro vão para o modelo de raciocínio
@@ -714,6 +714,101 @@ distingue roteador funcionando de roteador quebrado — o primeiro teste real se
 segundo A3 sobe. Por isso o registro aceita uma entrada **só de teste**, para a suíte afirmar que uma
 pergunta de tendência escolhe o especialista e não o generalista. É o I-13 aplicado antes do erro.
 
-**Status:** proposta — é a Etapa 3. Ver `PLANO-etapa-3.md` §A3 e bloco B20.
+**Status:** vigente desde 2026-08-31 — o B20 está no ar (`ai-plum-chat` v75). Ver `PLANO-etapa-3.md` §A3 e o `MANUAL.md` do B20.
 
 
+### D-055 · 2026-09-03 · ⭐ A identidade de uma base é `google_sheet_id` + `gid` — não a assinatura de colunas
+
+**Decisão.** Para decidir se a planilha que alguém está colando **já é** uma base cadastrada, casa-se
+o par `(google_sheet_id, google_sheet_gid)`, em qualquer `status`. É o que o B21 fez, e é o que fecha
+a C14.
+
+**Por quê.** O `id` do documento é estável e único: o mesmo Sheets colado de `/edit`, de
+`?usp=sharing`, com `#gid=0` ou com `?gid=N` produz sempre o mesmo `id` — há teste disso em
+`src/lib/google-sheets.test.ts`. Uma consulta resolve, sem heurística.
+
+⚠️ **E a `gid` entra na chave porque uma base é uma ABA** (§B1 da Etapa 3). Duas abas do mesmo
+arquivo são duas bases legítimas, com cabeçalho, grão e formatação próprios. Casar só pelo arquivo
+recusaria a segunda aba como se fosse repetição.
+
+**O que foi rejeitado — e é o mais importante daqui.** Comparar o **conjunto de cabeçalhos**, que era
+o que a própria pendência C14 mandava fazer (*"a detecção não pode ser pela URL… tem de ser pelo
+conteúdo"*). ⛔ Isso é literalmente o casamento por assinatura de colunas que o **B13 abandonou de
+propósito**: duas planilhas diferentes com as mesmas colunas se confundiam, e era o furo que a
+inversão do cadastro fechou. A premissa da C14 — de que o mesmo Sheets tem vários links
+incomparáveis — era falsa; ela confundiu *link* com *identificador*.
+
+⛔ **Rejeitada também a constraint `UNIQUE` no banco.** Não há nenhuma hoje, e acrescentar uma
+transformaria o caso em erro `23505` no meio de um `insert` — que chega ao usuário como falha
+técnica, não como *"essa planilha já é a base Vendas, quer abrir?"*. A checagem tem de acontecer
+**antes** de inserir para poder virar uma pergunta.
+
+── ⚠️ **O efeito colateral que isto criou, e que teve de ser fechado junto** ──
+
+Enquanto o `id` era só um **parâmetro de leitura**, um id errado dava erro barulhento na API. Virando
+**chave de identidade**, ele passou a decidir se duas coisas são a mesma — e aí uma colisão deixa de
+parecer erro.
+
+⛔ O link de **"Publicar na web"** (`/spreadsheets/d/e/2PACX-…`) devolvia `id: "e"` para **toda**
+planilha publicada, porque a regex para no primeiro `/`. ⇒ Duas planilhas publicadas diferentes
+viravam "a mesma base", e a segunda seria recusada apontando para a primeira. Agora é recusado antes,
+com mensagem própria — a genérica manda *"copie o endereço da barra"*, que é exatamente o que quem
+publicou acredita ter feito.
+
+⭐ **A lição generalizável:** promover um valor de *parâmetro* a *identificador* muda a classe de erro
+que ele produz, de barulhento para silencioso. Todo campo que ganha esse papel precisa que se
+pergunte antes **quais entradas diferentes colapsam nele**.
+
+**Status:** vigente. Ver `PLANO-etapa-3.md` §A4 e `execucao/B21-base-duplicada/MANUAL.md`.
+
+### D-056 · 2026-09-03 · ⭐ Reconciliar o esquema com a planilha, em vez de deixar editar o nome da coluna
+
+**Decisão.** Uma base ativa se reconcilia **relendo a planilha** e aplicando o diff (colunas novas,
+colunas que sumiram, colunas iguais). O `id` do dataset é preservado. É o B22, e fecha C13, C15 e
+C12 de uma vez.
+
+**O que foi rejeitado.** A proposta do V3, que era permitir **editar o nome da coluna e acrescentar
+coluna à mão** em "minha base de dados". O problema que ela ataca é real e era o mais caro dos cinco;
+a solução, não:
+
+⛔ O nome normalizado é contrato com **três** lados — as chaves do `schema_metadata`, os valores de
+`role_permissions.allowed_columns` e o cabeçalho real da planilha, que o executor normaliza na
+leitura. Editar à mão quebra os três de uma vez, e a falha é **muda**: "coluna não encontrada".
+⛔ E "acrescentar coluna" criaria uma coluna que **não existe na planilha** — o executor a procuraria
+no cabeçalho e não acharia.
+
+⇒ O que se quer é reconciliar **com a planilha**, e é a planilha que tem a resposta. A capacidade já
+existia (`cabecalhos_da_planilha`, do B12), e o B13 já tinha tornado isto natural ao fazer da
+planilha a identidade da base.
+
+── ⭐ **Duas escolhas dentro do bloco, e as duas são sobre falhar bem** ──
+
+**1 · A ORDEM DOS UPDATES SUBSTITUI A TRANSAÇÃO.** Remover uma coluna toca duas tabelas
+(`schema_metadata` e o `allowed_columns` de N cargos) e o cliente Supabase **não tem transação**.
+Como não dá para torná-las atômicas, escolhe-se o lado seguro de falhar: a **permissão sai primeiro**,
+o dicionário depois.
+
+⚠️ Na ordem inversa, uma falha no meio produz exatamente a **C12** — a matriz citando coluna que o
+dicionário não tem mais, que é silenciosa e envelhece até alguém pedir aquela coluna. Nesta ordem, a
+falha deixa a coluna no dicionário e fora da permissão: aparece na matriz, e refazer resolve.
+
+⛔ **Rejeitada uma RPC `plpgsql` transacional.** Seria atômica de verdade, mas custa uma migration a
+aplicar à mão no SQL Editor e tira o bloco de "front puro" — e a ordem já entrega a propriedade que
+importa, que é *nunca falhar na direção silenciosa*. (Precedente no próprio repo: o salvamento da
+matriz de permissões em `Dashboard.tsx` é `delete`-então-`insert`, também sem transação.)
+
+**2 · ⛔ A RECONCILIAÇÃO NÃO PROMOVE A `versao` DO DICIONÁRIO.** Reler uma base v1 não a torna v2.
+`conferido = versao >= 2` afirma que **uma pessoa conferiu papel analítico e grão de cada coluna**, e
+a reconciliação não pergunta nada disso — ela casa nomes. Promover faria o A3 **parar de declarar
+presunção** sobre conceitos que ninguém leu, que é o oposto do que a versão existe para dizer.
+
+⭐ A coluna nova é gravada na **forma** v2 mesmo assim (`papel_analitico`, `vocabulario_util`), porque
+`lerDicionario` lê esses campos independentemente da `versao`. A `versao` governa se **alguém
+conferiu**, não qual é o formato — e confundir as duas coisas é o que faria a promoção parecer
+inofensiva.
+
+⭐ **Coluna nova vai só para o cargo Admin.** Permissão é sempre explícita (CLAUDE.md §3); liberar
+para todo cargo daria acesso que ninguém concedeu. O Admin precisa porque ele nunca aparece no
+formulário de permissões do `Dashboard.tsx`, que assume acesso irrestrito para ele.
+
+**Status:** vigente. Ver `execucao/B22-reler-e-reconciliar/MANUAL.md`.

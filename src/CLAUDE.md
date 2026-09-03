@@ -55,7 +55,9 @@ constantes.
   dashboard de dados é **`/inicio`**.
 - **Todo login pousa em `/inicio`** — três caminhos em `Auth.tsx` (senha, SSO, criar organização) que
   **não compartilham constante**. Mexeu em um, mexa nos três.
-- `Cfgdatabase.tsx` = datasets + matriz de permissões (`?tab=permissoes`) + edição de schema.
+- ⚠️ **`Cfgdatabase.tsx` NÃO tem a matriz de permissões** — não há `Tabs` nem `?tab=permissoes` ali.
+  Ela é datasets + edição de esquema (definições, formatação e o **Reler a planilha** do B22). A
+  matriz mora em `Dashboard.tsx`; movê-la para cá é a pendência P9, nunca aplicada.
 
 ## 7. Convenções
 
