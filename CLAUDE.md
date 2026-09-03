@@ -513,6 +513,10 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   de qualquer chamada ao Lambda; o Lambda em si não confia em `organization_id`/`dataset_id`
   de ninguém, só em `allowed_columns` já resolvido no payload assinado.
 - **R-06** O dicionário semântico é revisado por humano. **R-08** Validação alerta, nunca corrige.
+  ⚠️ **Uma exceção desde 2026-09-03, e só ela:** em "Editar Esquema" (base **já ativa**) os agentes
+  2 e 3.1 gravam sem revisão prévia — a tela não tem botão de salvar, grava sozinha, e a correção é
+  posterior. O R-06 continua inteiro no **chat** (nenhuma IA escreve) e no **cadastro** (o
+  dicionário só vale no "Finalizar e Salvar"). Ver `contexto/30-decisoes.md` D-058 e o I-15.
 - **R-11 Limites do plano:** colunas ∈ `allowed_cols`, agg ∈ {sum,avg,min,max,count},
   `limit` 1..500, **joins bloqueados**. Desde 2026-08-11 o `col` de uma agregação também
   aceita uma **expressão aritmética** — `{"agg":"sum","col":{"op":"mul","args":["qtd","preco"]}}`

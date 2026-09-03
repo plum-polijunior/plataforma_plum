@@ -855,3 +855,54 @@ conferida sem dizer o que é uma linha seria a pior combinação — o A3 confia
 não declara o próprio grão.
 
 **Status:** vigente. Ver `execucao/B23-dicionario-na-base-ativa/MANUAL.md`.
+
+
+### D-058 · 2026-09-03 · ⭐ O "Editar Esquema" grava sozinho, e a IA escreve direto — exceção ao R-06, só ali
+
+**Decisão.** Na tela de edição de dicionário de uma base ativa, **não existe mais botão de salvar**.
+Toda alteração — digitada ou produzida por agente — é gravada automaticamente ~900 ms depois, por um
+caminho único. Um indicador no topo do painel diz "Salvando…" / "Tudo salvo" / erro; o botão só
+reaparece **no erro**, como "Tentar de novo".
+
+⇒ Os agentes 2 e 3.1 passaram a escrever no banco sem revisão prévia. Quem corrige, corrige depois.
+
+**Por quê.** O botão era ignorado na prática, e ignorá-lo custava o trabalho inteiro — foi o que
+produziu o **I-15**. Um botão que precisa ser lembrado para o dado não se perder é um botão que vai
+ser esquecido; a persistência não pode depender de disciplina.
+
+⚠️ **É uma exceção consciente ao R-06** (*"o dicionário semântico é revisado por humano"*), e a
+fronteira precisa ficar clara: a exceção é **desta tela**, não do produto. O R-06 continua inteiro
+onde importa — no **chat**, nenhuma IA escreve coisa alguma, e no **cadastro** o dicionário só vale
+depois de "Finalizar e Salvar". Aqui a base já está ativa, já foi revisada uma vez, e o que a IA faz
+é reescrever a redação de um texto que a pessoa está olhando naquele instante.
+
+**O que foi rejeitado:**
+
+⛔ **Manter o botão** e apenas fazer o Agente 2 gravar direto também. Fecharia o sintoma e manteria a
+causa: duas formas de o dado chegar ao banco na mesma tela (I-15, regra 1).
+
+⛔ **"Desfazer refino"** — guardar o texto anterior e oferecer a volta até a próxima ação. Foi
+proposto por ser barato e cobrir exatamente o caso em que gravar sozinho é pior que o botão (a IA
+reescrevendo doze definições aprovadas). 👤 recusou: corrigir na mão. ⚠️ Fica registrado porque a
+proposta volta na primeira vez que um refino sair ruim.
+
+⭐ **A mitigação que sobrou no lugar do desfazer** é o refino ter virado **um botão por coluna**: a
+IA nunca reescreve mais de uma definição por vez, então o estrago máximo é um campo. Não foi
+escolhido por isso — o motivo foi que o diff "o que editei desde o último salvamento" fica sempre
+vazio quando tudo é salvo sempre — mas é o efeito que torna a ausência de desfazer suportável.
+
+**Duas coisas que a gravação automática NÃO passou a fazer:**
+
+- ⛔ **Promover a `versao`.** "Marcar como conferida" continua ato explícito (**D-057**). O que virou
+  automático foi a persistência, não a decisão: o clique muda o estado, e o autosave o leva ao banco
+  como qualquer outra edição.
+- ⛔ **Gravar ao abrir o painel.** O teste de "há algo a gravar" é contra um retrato de como o
+  dicionário veio do banco — e não contra a carga montada, que materializa papéis deduzidos e numa
+  base v1 difere do armazenado já no primeiro render. Sem essa guarda, abrir a tela gravaria.
+
+⚠️ **Efeito colateral aceito:** os papéis deduzidos passam a ser materializados na primeira edição em
+vez de no clique em Salvar. Não muda comportamento — o leitor já derivava o mesmo valor — mas congela
+o default, e a base deixa de distinguir "papel deduzido" de "papel declarado". A proteção que importa
+segue de pé, porque `conferido` depende só da `versao`.
+
+**Status:** vigente.

@@ -1,6 +1,6 @@
 # ▶ Próximo passo — onde o remake parou
 
-**Atualizado:** 2026-09-03, com a **Etapa 3 escrita inteira** (B18..B24) ·
+**Atualizado:** 2026-09-03, com a **Etapa 3 escrita inteira** (B18..B24) e o I-15 fechado ·
 **Leia isto primeiro ao retomar.**
 
 Este arquivo existe porque o agendador do Claude Code morre junto com a sessão: um
@@ -30,7 +30,7 @@ aws lambda get-function-configuration --function-name plum-query-engine --region
 | `dashboard-execute` | 48 | 2026-08-31 |
 | `dashboard-agent` | 18 | 2026-08-31 |
 | **Lambda `plum-query-engine`** | — | 2026-09-03 12:38Z (o `fillna(0)`) |
-| **front (Vercel)** | — | 2026-09-03, commit `ef17ae1` (B23 + B24) |
+| **front (Vercel)** | — | 2026-09-03, commit `31afbed` (o I-15) |
 
 ✅ **As quatro Edge Functions continuam sincronizadas com o repositório** — nenhum
 commit desde 2026-08-31 tocou `supabase/functions/**`. ⭐ E os quatro blocos da
@@ -133,7 +133,7 @@ tema, ou eu escrevo o `PLANO-etapa-4.md` a partir do V3.**
 
 ## Pontas soltas
 
-- ⚠️⚠️ **`contexto/30-decisoes.md` está em 857 linhas** (teto 400) — mais que o
+- ⚠️⚠️ **`contexto/30-decisoes.md` está em 908 linhas** (teto 400) — mais que o
   dobro. Divisão limpa: `D-001..D-030` × `D-031+`. **Decisão sua**, e piora a cada
   bloco. É a ponta solta mais antiga desta lista.
 - ⚠️⚠️ **NADA typechecava `supabase/functions/`, e `npm run build` não typecheca
@@ -143,13 +143,18 @@ tema, ou eu escrevo o `PLANO-etapa-4.md` a partir do V3.**
   ⇒ Sobra **um** erro pré-existente: `src/pages/PlumChat.tsx:382` (`unknown` →
   `Json`). Ligar o typecheck no `build` esbarra nele — e é o mesmo padrão que o
   B23 resolveu no `Cfgdatabase.tsx` com um cast de fronteira.
-- ⚠️ **`Cfgdatabase.tsx` mistura dois estilos de aviso:** as seções antigas usam
-  `alert()`/`window.confirm()` crus, as do B22/B23 usam `useToast`. Visível na
-  mesma tela.
-- ⚠️ **As seções de formatação e de contexto do "Editar Esquema" podem se
-  sobrescrever:** "Aplicar Ordem" (Agente 3.1) lê de `selectedDataset` e salva
-  direto, sem confirmação, enquanto o resto do painel edita `editedSchema`. É
-  anterior ao B23, e o B23 encostou nisso.
+- ~~**As seções de formatação e de contexto do "Editar Esquema" podem se
+  sobrescrever**~~ — ⭐ **era o I-15, e fechou em 2026-09-03.** Não era "podem":
+  o Agente 3.1 partia do schema salvo e apagava o refino semântico não gravado,
+  no banco e na tela. Hoje há um caminho único de escrita (`salvarAgora`) e a
+  tela grava sozinha (D-058).
+- ⚠️ **`Cfgdatabase.tsx` ainda mistura dois estilos de aviso:** o "Salvar URL" e a
+  exclusão usam `alert()`/`window.confirm()` crus; o resto migrou para `useToast`.
+  Encolheu bastante, mas ainda é visível na mesma tela.
+- ⚠️ **A gravação automática não cobre a aba fechada em menos de 900 ms.** Trocar
+  de base e fechar o painel descarregam o pendente; fechar o navegador no meio de
+  uma frase, não. Um `beforeunload` resolveria — não foi feito por não valer o
+  ruído até alguém reclamar.
 - ⚠️ **O modelo de raciocínio é `-preview`**, e o **cadastro** também depende dele
   desde o D-047. Se for aposentado: chat quebrado com `etapa: planejador` **e** 400
   em toda geração de dicionário.

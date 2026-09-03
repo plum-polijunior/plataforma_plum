@@ -55,16 +55,20 @@ a mandar tudo.
 definições, como antes — é o comportamento anterior, deliberado. Sem linha de base não há diff, e
 travar o botão deixaria alguém preso num rascunho válido.
 
-### 3. Na base ativa (Editar Esquema)
+### 3. ⚠️ Na base ativa é diferente — e mudou no mesmo dia
 
-Mesma coisa, com a linha de base sendo **o que está salvo**: abra **Bases de Dados** → base →
-**Editar Esquema**, edite uma definição no bloco **Colunas** e clique em **Refinar o que editei**.
+O "Editar Esquema" também tinha o defeito, e ganhou o conserto junto. **Mas horas depois a tela
+inteira mudou** (I-15 / D-058): ela passou a gravar sozinha, e com isso o diff "o que editei desde o
+último salvamento" ficaria sempre vazio.
 
-⭐ Só ela muda. E depois de **Salvar dicionário**, o contador volta a zero — porque o salvo passou a
-ser o que está na tela.
+⇒ Lá **não há botão em lote**. Cada coluna tem o seu **Melhorar**, ao lado do nome:
 
-⚠️ **Este lugar não estava no plano do bloco**, que falava só do cadastro. Tinha o mesmo defeito, na
-mesma tela que o B23 estava alterando.
+- clicar refina **aquela** definição só, e a alteração é gravada sozinha em seguida;
+- coluna sem definição escrita é recusada — o Agente 2 melhora a redação do que **você** escreveu;
+- ⛔ e não há desfazer. Se o texto voltar ruim, reescreva o campo (decisão registrada na D-058).
+
+⭐ O efeito colateral bom: a IA nunca reescreve mais de uma definição por vez, então o estrago máximo
+de um refino ruim é um campo — e não as doze que o defeito original produzia.
 
 ### 4. ⛔ O campo "Ordem para o Agente 2" sumiu, e é conserto
 
@@ -91,4 +95,4 @@ que você escreveu.
 | Refinei uma coluna e outra mudou também | ⛔ regressão: ou o envio voltou a ser total, ou a resposta está substituindo em vez de fazer merge |
 | Refinei e **nenhuma** mudou | o Agente 2 achou que o texto já estava bom, ou devolveu chave que não bate com a coluna. O console do navegador traz a resposta crua |
 | No cadastro o contador zera ao retomar rascunho | rascunho anterior a esta versão — comportamento esperado, manda tudo |
-| Salvei na base ativa e o contador não zerou | o `selectedDataset` local não foi atualizado no salvamento. Recarregue a página |
+| Na base ativa não acho o botão "Refinar o que editei" | ele não existe lá — é um **Melhorar** por coluna. Ver o item 3 |

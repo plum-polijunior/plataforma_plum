@@ -1,7 +1,7 @@
 ---
 status: vigente
 camada: ambos
-atualizado_em: 2026-08-31
+atualizado_em: 2026-09-03
 ---
 
 # Incidentes e lições
@@ -461,3 +461,49 @@ todos.
 4. ⭐ **Aceitar uma janela exige provar que o remédio existe.** "Publico em seguida" é um plano com
    uma dependência não verificada. Rode o comando de deploy **antes** de precisar dele — mesmo que
    só para ver se ele autentica.
+
+
+## I-15 · 2026-09-03 · ⭐⭐ Dois caminhos de escrita para o mesmo objeto, no mesmo painel
+
+**O que aconteceu:** o 👤 refinou as descrições semânticas de uma base ativa em "Editar Esquema" e o
+texto sumiu. Ele reportou como perda no F5.
+
+**Causa — e são três coisas empilhadas, sendo que a terceira já tinha apagado o trabalho antes do
+F5:**
+
+1. o refino do **Agente 2** só fazia `setEditedSchema`. Nada persistia até alguém clicar em **Salvar
+   dicionário** — um botão no rodapé de um painel longo;
+2. ⚠️ no **mesmo painel**, o refino de formatação (**Agente 3.1**) gravava **direto no banco**, sem
+   botão nenhum. Dois agentes lado a lado, com comportamentos opostos de persistência, e nada na
+   tela dizendo qual era qual;
+3. ⛔ e o 3.1 partia de `{ ...selectedDataset.schema_metadata }` — o schema **salvo** — ignorando o
+   que estava em edição, e no fim fazia `setEditedSchema(newSchema)`. ⇒ Refinar a semântica e em
+   seguida pedir uma ordem de formatação **gravava um schema sem o refino e destruía a cópia do
+   navegador junto**. Sem F5 nenhum. O spread ainda era raso, então a atribuição mutava o
+   `selectedDataset` no lugar.
+
+**⭐ O que torna isto instrutivo, e não só um bug:** nenhuma das três peças estava errada sozinha. O
+Agente 2 pedindo revisão antes de salvar é o R-06 funcionando; o 3.1 gravando direto é conveniência
+defensável; partir do schema salvo é o que ele sempre fez, e funcionava quando ele era o único a
+escrever. **O defeito nasceu da convivência**, e por isso não aparece lendo nenhum dos dois handlers
+isoladamente.
+
+⚠️ **E ele é invisível por construção.** Não há erro, não há log, não há teste que quebre: os dois
+caminhos gravam objetos válidos. A única testemunha é quem digitou o texto.
+
+**As regras:**
+
+1. ⭐⭐ **Um objeto persistido, um caminho de escrita.** Se duas ações da mesma tela gravam a mesma
+   coluna do banco, elas têm de passar pela mesma função — e essa função tem de ser a única que
+   conhece a tabela. Duas escritas coordenadas por convenção é perda de dado esperando data.
+2. ⚠️ **Quem grava tem de partir do que está NA TELA, nunca do que está salvo.** Ler o estado
+   persistido para montar a próxima escrita descarta silenciosamente tudo o que ainda não foi
+   gravado. É a mesma classe do `saveSketch` lendo estado pelo closure (a regra do `extraData`), e
+   dá o mesmo sintoma: grava a versão anterior.
+3. ⛔ **Spread raso não isola nada.** `{ ...schema }` compartilha `schema.columns`; escrever em
+   `copia.columns[x].y` muta o original. Onde o objeto tem dois níveis, o clone precisa ter dois.
+4. ⭐ **Persistência inconsistente na mesma tela é um defeito de produto, não de estilo.** Quem usa
+   generaliza do primeiro botão que aperta — se um agente grava sozinho, o outro também deveria.
+
+**O conserto** (mesmo dia): caminho único de escrita, gravação automática com debounce, o botão
+"Salvar dicionário" removido e um indicador no topo do painel. Ver **D-058**.

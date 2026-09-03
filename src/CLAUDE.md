@@ -55,7 +55,13 @@ Esquema"): `PAPEIS`, `REGRA_SEM_FORMATACAO`, `VERSAO_DO_DICIONARIO` e `vocabular
 ⚠️ O último não é açúcar: `colunasComVocabulario` (no leitor, Deno) filtra **só** por
 `vocabulario_util`, sem olhar o papel. Um `true` sobrando numa coluna de medida faz o chat pedir a
 lista de valores de uma coluna numérica em **toda** pergunta daquela base — e sobra fácil, porque a
-tela esconde o interruptor fora de dimensão. A checagem é no **salvamento**, nunca no `onChange`.
+tela esconde o interruptor fora de dimensão. A checagem é na **gravação**, nunca no `onChange` —
+mesmo agora que o "Editar Esquema" grava sozinho e os dois momentos distam ~900 ms. O estado guarda o
+valor cru, então trocar o papel e voltar devolve a escolha; é o banco que recebe o saneado.
+
+⚠️ **E naquela tela há UM caminho de escrita do `schema_metadata`** (`salvarAgora`), de propósito:
+dois caminhos no mesmo painel já apagaram o trabalho de alguém — `contexto/31-incidentes-e-licoes.md`
+I-15. Quem gravar tem de partir do que está na tela, nunca do que está salvo.
 
 ## 6. Rotas e nomes que enganam
 

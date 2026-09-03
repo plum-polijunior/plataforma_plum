@@ -39,7 +39,7 @@ A Vercel publica no push. Nenhum deploy de Edge Function: nada novo é pedido ao
 Numa coluna que hoje é **Dimensão**, o interruptor *"O chat pode consultar a lista de valores desta
 coluna"* aparece. Troque o papel para **Medida** ⇒ o interruptor **some**.
 
-Salve e confira no banco:
+Espere o indicador dizer *"Tudo salvo"* e confira no banco:
 
 ```sql
 select jsonb_pretty(schema_metadata -> 'columns' -> 'NOME_DA_COLUNA')
@@ -65,7 +65,7 @@ Escreva o grão (*"uma venda"*) e clique em **Acrescentar observação**. Escrev
 
 > considere apenas vendas faturadas para a receita
 
-Salve. Agora vá ao chat e pergunte algo sobre receita.
+Espere o *"Tudo salvo"*. Agora vá ao chat e pergunte algo sobre receita.
 
 ⭐ **O que deve acontecer:** a resposta **declara essa presunção**, citando a observação. É
 literalmente o comportamento que o chat já teve em 2026-08-25 — filtrar `status = FATURADO` e dizer
@@ -75,7 +75,7 @@ que filtrou.
 ou apagar o que o Agente 1 tivesse escrito. Se ele não apontasse nada, a base nunca ganhava a
 primeira observação — e é justamente a que mais vale, porque é a regra que só você sabe.
 
-Observação em branco some no salvamento, então uma linha criada por engano não vira observação.
+Observação em branco some na gravação, então uma linha criada por engano não vira observação — mas o campo vazio **continua na tela** enquanto você digita nele.
 
 ### 3. ⭐⭐ Marcar a base como conferida — o teste que exige entender o que se afirma
 
@@ -92,9 +92,10 @@ conferida"*.
 Marcar como conferida **cala esse aviso** e faz o chat confiar no dicionário.
 
 - O botão **só habilita com o grão preenchido**.
-- Ele **salva o dicionário junto** — não é preciso salvar antes.
 - É **reversível**: *"Marcar como não conferida"* volta.
-- ⛔ **Salvar dicionário nunca promove.** São ações separadas de propósito.
+- ⛔ **Nenhuma outra alteração promove.** A tela grava sozinha tudo o que você
+  mexe, mas a versão só muda neste botão — é ato explícito, não consequência de
+  ter editado (D-057).
 
 Confira: `select schema_metadata -> 'versao' from public.datasets where id = 'UUID';`
 
@@ -106,7 +107,7 @@ aviso que existe para dizer que ninguém leu. Ver **D-057**.
 
 ### 4. O modo leitura mostra o que o modo edição edita
 
-Feche a edição (**Cancelar Edição**). A visão do dicionário agora traz grão, observações, o estado da
+Feche a edição (**Concluir**). A visão do dicionário agora traz grão, observações, o estado da
 revisão, e por coluna o papel e se o vocabulário está ligado.
 
 ⚠️ Antes ela mostrava só definição e formatação — os campos novos sumiam quando você fechava a
@@ -114,11 +115,21 @@ edição, e não havia como conferir uma base sem entrar no modo de alterá-la.
 
 ### 5. ⚠️ Reler a planilha não descarta o que você digitou
 
-Edite o grão **sem salvar**, depois use **Reler a planilha** e **Aplicar ao dicionário**.
+Edite o grão, depois use **Reler a planilha** e **Aplicar ao dicionário**.
 
-⭐ O grão que você digitou tem de sobreviver. A reconciliação do B22 passou a partir do que está na
-tela, não do que está salvo — antes ela descartaria a edição em silêncio, e com o painel editando
-muitos mais campos isso passou a ser caro.
+⭐ O grão que você digitou tem de sobreviver. A reconciliação passou a partir do que está na tela,
+não do que está salvo — antes ela descartaria a edição em silêncio.
+
+### 6. ⭐⭐ Não existe botão de salvar — a tela grava sozinha
+
+⚠️ **Isto mudou depois que o B23 subiu** (I-15 / D-058). Onde havia "Salvar dicionário" agora há um
+indicador no topo do painel: *Salvando…* / *Tudo salvo* / erro com **Tentar de novo**.
+
+- Abrir "Editar Esquema" e **não tocar em nada** ⇒ nada é gravado.
+- Digitar e parar ⇒ grava sozinho em menos de um segundo. **F5 e está lá.**
+- **"Cancelar Edição" virou "Concluir"** — não há mais o que cancelar.
+- ⛔ E os agentes gravam junto: o que a IA escrever vai para o banco sem você
+  confirmar. Se sair ruim, corrija o campo (foi decisão, ver D-058).
 
 ## O que este bloco NÃO faz
 
@@ -138,5 +149,5 @@ do Agente 3.1 (formatação, que já existia).
 | O interruptor de vocabulário não aparece em nenhuma coluna | todas estão fora de `dimensao`. É o esperado — troque o papel para ver |
 | Marquei como conferida e o chat continua declarando presunção | presunção também nasce de outras causas (data ambígua, coluna que precisou interpretar). O `conferido` remove **o aviso genérico**, não toda presunção |
 | O botão "Marcar como conferida" está desabilitado | falta o grão. É pré-requisito: base conferida sem dizer o que é uma linha é a pior combinação |
-| Salvei e o card da base mostra a contagem de colunas antiga | a lista só recarrega ao entrar/sair do cadastro; o salvamento atualiza à mão. Recarregue e confira o banco |
+| O card da base mostra a contagem de colunas antiga | a lista só recarrega ao entrar/sair do cadastro; a gravação atualiza à mão. Recarregue e confira o banco |
 | Editei e o "Aplicar" do Reler apagou minha edição | ⛔ regressão do item 5 — a reconciliação voltou a partir do schema salvo |
