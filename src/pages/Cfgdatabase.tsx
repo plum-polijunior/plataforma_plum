@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import DatabasePipeline from "@/components/DatabasePipeline";
-import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { ShieldAlert, Lock, Plus, FileSpreadsheet, Clock, ArrowRight, Activity, Calendar, Trash2, RefreshCw, Loader2, Sparkles, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   PAPEIS,
   vocabularioEfetivo,
   type ColunaDoSchema,
+  type FormattingRule,
   type PapelAnalitico,
   type SchemaMetadata,
 } from "@/lib/dicionario";
@@ -22,6 +23,19 @@ import {
   ERRO_LINK_INVALIDO,
   ERRO_LINK_PUBLICADO,
 } from "@/lib/google-sheets";
+
+/**
+ * ⭐ Quanto tempo sem digitar antes de gravar.
+ *
+ * Curto o bastante para que fechar a aba logo depois de escrever raramente
+ * perca algo, e longo o bastante para não mandar um `update` por tecla. Quem
+ * troca de base ou fecha o painel não espera por ele: esses caminhos descarregam
+ * o pendente na hora (`descarregarPendente`).
+ */
+const ATRASO_DO_AUTOSAVE = 900;
+
+/** O que o indicador no topo do painel de edição mostra. */
+type EstadoDoSalvamento = "salvo" | "salvando" | "erro";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -40,7 +54,22 @@ export default function DatabasePage() {
   // observações, papel e vocabulário isso deixaria de pegar exatamente os erros
   // que importam — um `papel_analitico` fora do enum, uma coluna sem `columns`.
   const [editedSchema, setEditedSchema] = useState<SchemaMetadata | null>(null);
-  const [isSavingSchema, setIsSavingSchema] = useState(false);
+
+  const [estadoDoSalvamento, setEstadoDoSalvamento] = useState<EstadoDoSalvamento>("salvo");
+  /** Qual coluna está no Agente 2 agora. `null` = nenhuma. */
+  const [refinandoColuna, setRefinandoColuna] = useState<string | null>(null);
+
+  /**
+   * ⭐ **O retrato do dicionário como ele veio do banco** — é contra isto que a
+   * gravação automática decide se há algo a gravar.
+   *
+   * ⛔ Guardar aqui a CARGA gravada (e não o estado que a gerou) poria o autosave
+   * em laço: a carga é trimada e tem os papéis materializados, então ela nunca
+   * bate com o `editedSchema` cru.
+   */
+  const salvoNoBanco = useRef<string | null>(null);
+  /** Uma gravação por vez — ver `salvarAgora`. */
+  const salvandoAgora = useRef(false);
 
   /**
    * ⭐ A base que o cadastro mandou abrir (B21), esperando o refetch.
@@ -155,9 +184,11 @@ export default function DatabasePage() {
             if (alvo) {
               setSelectedDataset(alvo);
               setEditSheetUrl(alvo.google_sheet_url || alvo.google_sheet_id || "");
-              setEditedSchema(
-                alvo.schema_metadata ? JSON.parse(JSON.stringify(alvo.schema_metadata)) : null,
-              );
+              // ⚠️ Por `abrirDicionario`, nunca por `setEditedSchema` direto: é
+              // ele que guarda o retrato de referência. Sem o retrato, a
+              // gravação automática enxerga diferença já no primeiro render e
+              // grava a base só por ela ter sido aberta.
+              abrirDicionario(alvo);
               setIsEditingSchema(true);
             }
             idParaAbrir.current = null;
@@ -321,19 +352,13 @@ export default function DatabasePage() {
       }
 
       // ── 2 · e só então o dicionário ───────────────────────────────────────
-      const { error: erroSchema } = await supabase
-        .from('datasets')
-        // Mesmo cast de fronteira do `gravarSchema` — ver o porquê lá.
-        .update({ schema_metadata: novoSchema as unknown as Json })
-        .eq('id', selectedDataset.id);
-      if (erroSchema) throw erroSchema;
-
-      const atualizado = { ...selectedDataset, schema_metadata: novoSchema };
-      setSelectedDataset(atualizado);
+      //
+      // ⭐ Pelo caminho único de gravação, e AGORA em vez de esperar o debounce:
+      // a permissão já foi mexida acima, e uma aba fechada nesse intervalo
+      // deixaria a coluna fora do cargo mas ainda no dicionário. É a direção
+      // segura de falhar (D-056), mas não há motivo para provocá-la.
       setEditedSchema(JSON.parse(JSON.stringify(novoSchema)));
-      // ⚠️ A lista só recarrega quando `showPipeline` muda — atualizar à mão,
-      // senão o card continua mostrando a contagem de colunas antiga.
-      setDatasets((antes) => antes.map((d) => (d.id === atualizado.id ? atualizado : d)));
+      await salvarAgora(novoSchema);
       setDiff(null);
 
       toast({
@@ -406,10 +431,19 @@ export default function DatabasePage() {
   /**
    * O dicionário como vai para o banco.
    *
-   * `versao` entra por parâmetro porque há dois chamadores com intenções
-   * diferentes: salvar (preserva o que estava) e marcar como conferida (grava 2).
+   * ⚠️ **Ele materializa defaults**, e com a gravação automática isso passou a
+   * acontecer mais cedo: `papel_analitico` é gravado para TODA coluna, usando o
+   * papel deduzido da regra de formatação quando não há um declarado. Antes
+   * chegava ao banco quando alguém clicava em Salvar; agora chega ~1 s depois da
+   * primeira edição.
+   *
+   * ⭐ Não muda comportamento — o leitor já derivava o mesmo valor quando o campo
+   * faltava — mas congela o default, e a base deixa de distinguir "papel
+   * deduzido" de "papel declarado". A proteção que importa segue de pé:
+   * `conferido` depende só da `versao`, e a `versao` só muda no botão de marcar
+   * como conferida.
    */
-  const montarSchema = (versao: number): SchemaMetadata => {
+  const montarSchema = (): SchemaMetadata => {
     const columns: Record<string, ColunaDoSchema> = {};
     for (const [col, dados] of Object.entries(colunasDoSchema)) {
       const papel = papelDaColuna(col);
@@ -419,12 +453,17 @@ export default function DatabasePage() {
         // ⚠️ Mesma regra do cadastro, e o porquê mora em `vocabularioEfetivo`:
         // o interruptor some fora de dimensão, então um `true` pode ter sobrado
         // de quando a coluna era dimensão e ninguém tem como desligá-lo.
+        //
+        // ⭐ Continua sendo aplicado só na GRAVAÇÃO, e não no `onChange` do
+        // papel — mesmo agora que os dois momentos distam ~1 s. O estado guarda
+        // o `vocabulario_util` cru, então trocar para medida e voltar para
+        // dimensão devolve a escolha; é o banco que recebe o valor saneado.
         vocabulario_util: vocabularioEfetivo(papel, dados?.vocabulario_util),
       };
     }
     return {
       ...(editedSchema as SchemaMetadata),
-      versao,
+      versao: Number(editedSchema?.versao ?? 1),
       grao: grao.trim(),
       // Vazias somem: uma linha em branco criada por engano não vira observação.
       observacoes: observacoes.map((o) => String(o).trim()).filter(Boolean),
@@ -432,8 +471,41 @@ export default function DatabasePage() {
     };
   };
 
-  const gravarSchema = async (schema: SchemaMetadata, mensagem: string) => {
-    setIsSavingSchema(true);
+  /**
+   * ⭐⭐ **Grava o dicionário. É o ÚNICO caminho de escrita do `schema_metadata`
+   * nesta tela**, e ser único é metade do conserto.
+   *
+   * ⛔ **O que existia antes era duas coisas ao mesmo tempo**, e elas se
+   * destruíam: o refino semântico só mexia no estado e esperava um botão
+   * "Salvar dicionário"; o refino de formatação gravava direto no banco,
+   * partindo do schema **salvo** e ignorando o que estava em edição — e ainda
+   * fazia `setEditedSchema` com o resultado. Refinar a semântica e em seguida
+   * pedir uma ordem de formatação apagava o refino no banco **e** na tela, sem
+   * F5 nenhum. Ver `contexto/31-incidentes-e-licoes.md` I-15.
+   *
+   * ⚠️ **Não devolve o resultado para o estado**, e isso não é economia: o
+   * `montarSchema` faz `grao.trim()` e descarta observação vazia. Reescrever o
+   * estado com o que foi gravado comeria o espaço que a pessoa acabou de digitar
+   * e faria a observação em branco recém-criada sumir antes de receber texto.
+   * O que se atualiza depois de gravar é o `selectedDataset`, a lista e o
+   * retrato — nunca os campos.
+   *
+   * `schemaExplicito` existe para quem já montou o objeto (a reconciliação do
+   * B22) e precisa gravar **agora**, sem esperar o debounce.
+   */
+  const salvarAgora = async (schemaExplicito?: SchemaMetadata) => {
+    if (!editedSchema || !selectedDataset) return;
+    // ⚠️ Uma gravação por vez. Duas respostas fora de ordem gravariam a mais
+    // velha por último. Quem for barrado aqui volta pelo efeito: terminada esta,
+    // o estado muda e o retrato ainda difere, então ela é reagendada.
+    if (salvandoAgora.current) return;
+
+    const alvo = selectedDataset;
+    const retrato = JSON.stringify(schemaExplicito ?? editedSchema);
+    const carga = schemaExplicito ?? montarSchema();
+
+    salvandoAgora.current = true;
+    setEstadoDoSalvamento("salvando");
     try {
       const { error } = await supabase
         .from('datasets')
@@ -441,101 +513,129 @@ export default function DatabasePage() {
         // tipo gerado é `Json`, que exige assinatura de índice — acrescentá-la
         // ao `SchemaMetadata` afrouxaria justamente o tipo que faz esta tela
         // pegar um papel analítico fora do enum.
-        .update({ schema_metadata: schema as unknown as Json })
-        .eq('id', selectedDataset.id);
+        .update({ schema_metadata: carga as unknown as Json })
+        .eq('id', alvo.id);
       if (error) throw error;
 
-      const atualizado = { ...selectedDataset, schema_metadata: schema };
-      setSelectedDataset(atualizado);
-      setEditedSchema(JSON.parse(JSON.stringify(schema)));
-      // ⚠️ A lista só recarrega quando `showPipeline` muda — atualizar à mão,
-      // senão o card continua mostrando a contagem de colunas antiga.
-      setDatasets((antes) => antes.map((d) => (d.id === atualizado.id ? atualizado : d)));
-      toast({ title: mensagem });
+      // ⭐ O retrato é do ESTADO que gerou a gravação, não da carga. Guardar a
+      // carga faria o próximo teste acusar diferença para sempre (ela é trimada
+      // e tem os defaults materializados) — e o autosave entraria em laço.
+      salvoNoBanco.current = retrato;
+
+      const atualizado = { ...alvo, schema_metadata: carga };
+      // ⚠️ Guardado por id: a pessoa pode ter trocado de base durante a espera.
+      setSelectedDataset((s: any) => (s?.id === alvo.id ? atualizado : s));
+      setDatasets((antes) => antes.map((d) => (d.id === alvo.id ? atualizado : d)));
+      setEstadoDoSalvamento("salvo");
     } catch (e) {
-      toast({
-        title: "Não consegui salvar",
-        description: e instanceof Error ? e.message : String(e),
-        variant: "destructive",
-      });
+      console.error("[cfgdatabase] falha ao gravar o dicionario:", e);
+      setEstadoDoSalvamento("erro");
     } finally {
-      setIsSavingSchema(false);
+      salvandoAgora.current = false;
     }
   };
 
   /**
-   * ⭐ **As colunas cuja definição foi editada nesta sessão** — o diff do B24.
+   * ⭐ **A gravação automática.** Substituiu o botão "Salvar dicionário", que era
+   * fácil demais de ignorar — e ignorá-lo custava o trabalho inteiro num F5.
    *
-   * A linha de base aqui é o que está **salvo no banco**, não a saída de um
-   * agente: numa base ativa o dicionário já passou por gente, e o que interessa
-   * é o que mudou desde a última gravação.
+   * ⛔ **Abrir o painel não pode gravar.** Por isso o teste é entre o `editedSchema`
+   * e o retrato de como ele veio do banco, e não entre a carga e o que está lá:
+   * a carga materializa papéis deduzidos, então numa base v1 ela difere do
+   * armazenado já no primeiro render, e a tela gravaria só por ter sido aberta.
    *
-   * ⚠️ Depende de o `mexerNaColuna` não mutar o objeto anterior. Enquanto o
-   * `editedSchema` compartilhava `columns` com o `selectedDataset`, editar a
-   * tela alterava a linha de base junto e este diff daria sempre vazio.
+   * `useEffect` cru com `setTimeout`, e não `useMutation`: o repositório tem o
+   * `QueryClientProvider` montado e **zero** uso de react-query. Estrear a lib
+   * aqui seria inventar um padrão, não seguir um — o vizinho mais próximo é o
+   * `use-tema.ts`, que persiste sem botão com um efeito simples.
    */
-  const definicoesEditadas = (): string[] => {
-    const salvas = (selectedDataset?.schema_metadata?.columns ?? {}) as Record<string, ColunaDoSchema>;
-    return Object.entries(colunasDoSchema)
-      .filter(([col, dados]) => (dados?.semantic_definition ?? "") !== (salvas[col]?.semantic_definition ?? ""))
-      .map(([col]) => col);
+  useEffect(() => {
+    if (!editedSchema || !selectedDataset) return;
+    if (JSON.stringify(editedSchema) === salvoNoBanco.current) return;
+
+    const timer = setTimeout(() => { void salvarAgora(); }, ATRASO_DO_AUTOSAVE);
+    return () => clearTimeout(timer);
+    // ⚠️ `salvarAgora` fica FORA das dependências de propósito: ela é recriada a
+    // cada render, e incluí-la reiniciaria o timer em todo render — bastando uma
+    // re-renderização a cada 900 ms para a gravação nunca acontecer. O que
+    // precisa disparar o efeito é a mudança do dicionário, e o `setTimeout`
+    // sempre captura a versão mais recente da função.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editedSchema, selectedDataset]);
+
+  /**
+   * ⚠️ **Grava o que está pendente ANTES de trocar de base ou fechar o painel.**
+   *
+   * Os dois caminhos substituem o `editedSchema`, o que dispara a limpeza do
+   * efeito acima e cancela o timer — perdendo o que foi digitado nos últimos
+   * instantes. Chamada de dentro do handler, ela ainda enxerga pelo closure o
+   * `selectedDataset` **antigo**, que é exatamente o dono daquele texto.
+   */
+  const descarregarPendente = () => {
+    if (!editedSchema || !selectedDataset) return;
+    if (JSON.stringify(editedSchema) === salvoNoBanco.current) return;
+    void salvarAgora();
+  };
+
+  /** Guarda o retrato de referência ao carregar um dicionário na tela. */
+  const abrirDicionario = (dataset: any) => {
+    const bruto = dataset?.schema_metadata ?? null;
+    const clone = bruto ? JSON.parse(JSON.stringify(bruto)) : null;
+    salvoNoBanco.current = JSON.stringify(clone);
+    setEstadoDoSalvamento("salvo");
+    setEditedSchema(clone);
   };
 
   /**
-   * Agente 2 — melhora a redação do que a PESSOA escreveu, só nas colunas que
-   * ela editou (B24, fecha a C16).
+   * Agente 2 — melhora a redação de UMA coluna.
    *
-   * ⛔ **A resposta é parcial ⇒ merge, e só das chaves que foram mandadas.** O
-   * Agente 2 não tem por que inventar coluna, mas aceitar chave desconhecida
-   * criaria definição para coluna que não existe nesta base.
+   * ⭐ **Um botão por coluna, e não mais um em lote.** O lote comparava a tela
+   * com o que estava salvo para saber o que mandar; com a gravação automática os
+   * dois estão sempre iguais, e o contador viveria em zero. Escolher a coluna é
+   * mais explícito que qualquer diff — e some a pergunta "editei desde quando?".
+   *
+   * ⚠️ **Não grava aqui.** A alteração entra no estado e a gravação automática a
+   * leva ao banco, pelo mesmo caminho de qualquer edição manual. É isso que
+   * impede um agente de escrever por cima do outro.
    */
-  const handleRefinarSemantica = async () => {
-    const editadas = definicoesEditadas();
-    if (!editadas.length) return;
+  const handleRefinarColuna = async (col: string) => {
+    const definicao = colunasDoSchema[col]?.semantic_definition ?? "";
+    if (!definicao.trim()) {
+      toast({
+        title: "Escreva a definição primeiro",
+        description: "O Agente 2 melhora a redação do que você escreveu — sem texto, não há o que melhorar.",
+      });
+      return;
+    }
 
-    setIsRefining(true);
+    setRefinandoColuna(col);
     try {
-      const paraRefinar: Record<string, string> = {};
-      for (const col of editadas) {
-        paraRefinar[col] = editedSchema.columns[col]?.semantic_definition ?? "";
-      }
-
       const res = await supabase.functions.invoke('ai-agents', {
-        body: { action: 'refine_semantics', columns: paraRefinar, dataSamples: [] }
+        body: { action: 'refine_semantics', columns: { [col]: definicao }, dataSamples: [] }
       });
       if (res.error) throw res.error;
 
       const refinadas = (res.data?.result ?? {}) as Record<string, string>;
-      setEditedSchema((antes) => {
-        if (!antes) return antes;
-        const columns = { ...antes.columns };
-        for (const col of editadas) {
-          if (typeof refinadas[col] === "string" && columns[col]) {
-            columns[col] = { ...columns[col], semantic_definition: refinadas[col] };
-          }
-        }
-        return { ...antes, columns };
-      });
+      const nova = refinadas[col];
+      // ⚠️ Só a chave que foi mandada é aceita de volta. O Agente 2 não tem por
+      // que inventar coluna, mas aceitar chave desconhecida criaria definição
+      // para coluna que não existe nesta base.
+      if (typeof nova !== "string" || !nova.trim()) {
+        throw new Error("A IA não devolveu uma descrição para esta coluna.");
+      }
 
-      toast({
-        title: "Contexto refinado",
-        description: "Revise o texto antes de salvar — o Agente 2 melhora a redação, não o conteúdo.",
-      });
+      mexerNaColuna(col, { semantic_definition: nova });
     } catch (err) {
       console.error(err);
       toast({
-        title: "Erro ao refinar contexto",
+        title: "Erro ao refinar a descrição",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     } finally {
-      setIsRefining(false);
+      setRefinandoColuna(null);
     }
   };
-
-  /** Salvar edição. ⛔ **Nunca mexe na `versao`** — ver `handleMarcarConferida`. */
-  const handleSalvarDicionario = () =>
-    gravarSchema(montarSchema(Number(editedSchema?.versao ?? 1)), "Dicionário salvo");
 
   /**
    * ⭐⭐ **Marcar a base como conferida — e é um ATO, não uma inferência.**
@@ -548,28 +648,20 @@ export default function DatabasePage() {
    * tem papel". Numa base v1 as colunas **não têm papel nenhum** — a tela mostra
    * o default deduzido pela máquina, e um salvamento qualquer gravaria esses
    * defaults e promoveria a base sem ninguém ter lido nada. Silenciaria
-   * exatamente o aviso que existe para dizer que ninguém leu.
+   * exatamente o aviso que existe para dizer que ninguém leu. E com a gravação
+   * automática isso deixou de ser hipótese: **todo** salvamento é automático
+   * agora, então a `versao` precisava sair do caminho comum.
    *
-   * ⚠️ **Não contradiz a decisão do B22** (a reconciliação não promove): lá o
-   * que acontece é um casamento de nomes de coluna, sem pessoa afirmando nada.
-   * Aqui há alguém clicando num botão que diz o que ele está afirmando.
+   * ⚠️ **Continua sendo ato explícito mesmo gravando sozinho:** o que muda a
+   * versão é o clique. A persistência é que virou automática, não a decisão.
    *
    * O grão é pré-requisito porque é o campo que mais muda resposta e o que a IA
    * mais erra: "uma venda" e "um dia por loja" fazem a mesma soma significar
    * coisas diferentes. Base conferida sem grão declarado seria a pior
    * combinação — o A3 confiando num dicionário que não diz o que é uma linha.
    */
-  const handleMarcarConferida = () =>
-    gravarSchema(
-      montarSchema(2),
-      "Base marcada como conferida — o chat vai confiar neste dicionário",
-    );
-
-  const handleMarcarNaoConferida = () =>
-    gravarSchema(
-      montarSchema(1),
-      "Base marcada como não conferida — o chat volta a declarar presunção",
-    );
+  const marcarRevisao = (versao: number) =>
+    setEditedSchema((antes) => antes && ({ ...antes, versao }));
 
   const handleDeleteDataset = async (id: string) => {
     if (!window.confirm("Atenção: Tem certeza que deseja excluir permanentemente esta base de dados? Esta ação não pode ser desfeita.")) {
@@ -655,6 +747,10 @@ export default function DatabasePage() {
               key={dataset.id}
               className={`p-5 rounded-xl border cursor-pointer transition-all hover:border-primary/50 hover:bg-muted/20 ${selectedDataset?.id === dataset.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'border-border bg-background'}`}
               onClick={() => {
+                // ⚠️ Antes de trocar: o que foi digitado nos últimos instantes
+                // ainda não passou pelo debounce, e trocar cancelaria o timer.
+                // Chamada aqui, ela ainda enxerga a base ANTIGA pelo closure.
+                descarregarPendente();
                 setSelectedDataset(selectedDataset?.id === dataset.id ? null : dataset);
                 // ⛔ O diff pertence a UMA base. Sem esta linha, reler a base A,
                 // clicar na base B e apertar "Aplicar" gravaria as colunas de A
@@ -662,7 +758,7 @@ export default function DatabasePage() {
                 setDiff(null);
                 setIsEditingSchema(false);
                 setEditSheetUrl(dataset.google_sheet_url || dataset.google_sheet_id || "");
-                setEditedSchema(dataset.schema_metadata ? JSON.parse(JSON.stringify(dataset.schema_metadata)) : null);
+                abrirDicionario(dataset);
               }}
             >
               <div className="flex justify-between items-start mb-4">
@@ -699,17 +795,24 @@ export default function DatabasePage() {
             <Button 
               onClick={() => {
                 if (selectedDataset.status === 'active') {
+                  descarregarPendente();
                   setIsEditingSchema(!isEditingSchema);
                   setDiff(null);
                   setEditSheetUrl(selectedDataset.google_sheet_url || selectedDataset.google_sheet_id || "");
-                  setEditedSchema(selectedDataset.schema_metadata ? JSON.parse(JSON.stringify(selectedDataset.schema_metadata)) : null);
+                  abrirDicionario(selectedDataset);
                 } else {
                   setShowPipeline(true);
                 }
               }} 
               variant={selectedDataset.status === 'active' ? (isEditingSchema ? 'secondary' : 'outline') : 'default'}
             >
-              {selectedDataset.status === 'active' ? (isEditingSchema ? 'Cancelar Edição' : 'Editar Esquema') : 'Continuar Rascunho'} 
+              {/*
+                ⚠️ "Concluir", não "Cancelar Edição": ele reclonava o dicionário
+                do `selectedDataset`, ou seja, DESCARTAVA o não salvo. Com a
+                gravação automática não há o que descartar, e manter o rótulo
+                antigo prometeria um desfazer que não existe.
+              */}
+              {selectedDataset.status === 'active' ? (isEditingSchema ? 'Concluir' : 'Editar Esquema') : 'Continuar Rascunho'} 
               {!isEditingSchema && <ArrowRight className="ml-2 h-4 w-4" />}
             </Button>
             <Button
@@ -725,6 +828,48 @@ export default function DatabasePage() {
           <div className="p-6">
             {selectedDataset.status === 'active' && isEditingSchema && editedSchema ? (
               <div className="space-y-8">
+
+                {/*
+                  ⭐⭐ **O indicador ocupou o lugar do botão "Salvar dicionário".**
+
+                  O botão saía fácil demais do campo de visão — e ignorá-lo custava
+                  o trabalho inteiro no primeiro F5 (I-15). Agora tudo grava
+                  sozinho, e o que a tela precisa dizer é só se já gravou.
+
+                  ⚠️ Fica no TOPO, não no rodapé: o painel é longo, e um estado
+                  que você não vê não informa nada.
+
+                  ⭐ **O botão volta APENAS no erro** — sem nenhuma forma de
+                  reagir, uma falha de rede seria a mesma perda silenciosa que
+                  estamos consertando.
+                */}
+                <div className="flex items-center gap-2 text-xs">
+                  {estadoDoSalvamento === "salvando" && (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      <span className="text-muted-foreground">Salvando…</span>
+                    </>
+                  )}
+                  {estadoDoSalvamento === "salvo" && (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        Tudo salvo — esta tela grava sozinha a cada alteração.
+                      </span>
+                    </>
+                  )}
+                  {estadoDoSalvamento === "erro" && (
+                    <>
+                      <span className="text-destructive font-medium">
+                        Não consegui salvar. Suas alterações estão só neste navegador.
+                      </span>
+                      <Button variant="outline" size="sm" className="h-6 px-2" onClick={() => void salvarAgora()}>
+                        Tentar de novo
+                      </Button>
+                    </>
+                  )}
+                </div>
+
                 
                 {/* 1. Conexão */}
                 <div className="space-y-3">
@@ -1032,7 +1177,7 @@ export default function DatabasePage() {
                         : "O chat avisa o planejador de que os conceitos abaixo foram deduzidos por máquina, e pede que ele declare presunção sempre que usar uma coluna que precisou interpretar."}
                     </p>
                     {baseConferida ? (
-                      <Button variant="outline" size="sm" disabled={isSavingSchema} onClick={handleMarcarNaoConferida}>
+                      <Button variant="outline" size="sm" onClick={() => marcarRevisao(1)}>
                         Marcar como não conferida
                       </Button>
                     ) : (
@@ -1040,14 +1185,14 @@ export default function DatabasePage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={isSavingSchema || !grao.trim()}
-                          onClick={handleMarcarConferida}
+                          disabled={!grao.trim()}
+                          onClick={() => marcarRevisao(2)}
                         >
                           Marcar como conferida
                         </Button>
                         <p className="text-[11px] text-muted-foreground">
                           {grao.trim()
-                            ? "Ao marcar, você afirma que leu o papel de cada coluna e o grão desta base. Salva o dicionário junto."
+                            ? "Ao marcar, você afirma que leu o papel de cada coluna e o grão desta base."
                             : "Preencha o grão acima para poder marcar: base conferida sem dizer o que é uma linha é a pior combinação."}
                         </p>
                       </>
@@ -1069,7 +1214,29 @@ export default function DatabasePage() {
                       return (
                         <div key={colName} className="flex flex-col md:flex-row gap-3 pb-3 border-b border-border/50 last:border-0 last:pb-0">
                           <div className="md:flex-1 flex flex-col gap-1">
-                            <label className="text-xs font-bold font-mono text-primary">{colName}</label>
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-xs font-bold font-mono text-primary">{colName}</label>
+                              {/*
+                                ⭐ **Um Agente 2 por coluna** — você escolhe qual
+                                descrição melhorar, em vez de um botão em lote
+                                decidir por um diff. Ele não grava: a alteração
+                                entra no estado e a gravação automática a leva ao
+                                banco, pelo mesmo caminho de uma edição à mão.
+                              */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                                disabled={refinandoColuna !== null}
+                                title="Agente 2: melhora a redação desta descrição, sem mudar o conteúdo"
+                                onClick={() => handleRefinarColuna(colName)}
+                              >
+                                {refinandoColuna === colName
+                                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                                  : <Sparkles className="h-3 w-3" />}
+                                <span className="ml-1">Melhorar</span>
+                              </Button>
+                            </div>
                             <textarea
                               className="w-full text-sm p-2 rounded-md border border-border bg-background resize-y min-h-[60px]"
                               value={colData.semantic_definition || ''}
@@ -1128,41 +1295,6 @@ export default function DatabasePage() {
                     })}
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2 justify-between">
-                    {/*
-                      ⭐ **O Agente 2 recebe só o que foi editado** (B24, C16).
-                      Antes ia o mapa inteiro, e ele devolvia doze frases
-                      reescritas para quem tinha mexido em uma — reescrevendo
-                      definição que a pessoa já tinha aprovado.
-
-                      ⛔ Aqui não há campo de ordem, e a remoção é deliberada: o
-                      que existia ("Ordem para o Agente 2") travava o botão
-                      quando vazio e NUNCA era enviado — a ação não lê prompt
-                      nenhum. E não é para consertar mandando: o prompt do
-                      Agente 2 diz "PRESERVE O CONTEÚDO, você melhora a redação,
-                      não o conteúdo". Ele existe para deixar legível o que a
-                      pessoa escreveu, não para reescrever sob encomenda.
-                    */}
-                    <Button
-                      variant="secondary"
-                      disabled={isRefining || definicoesEditadas().length === 0}
-                      title={definicoesEditadas().length === 0
-                        ? "Edite alguma descrição para o Agente 2 ter o que melhorar"
-                        : undefined}
-                      onClick={handleRefinarSemantica}
-                    >
-                      {isRefining
-                        ? "Processando..."
-                        : definicoesEditadas().length === 0
-                          ? "Nada editado para refinar"
-                          : `Refinar o que editei (${definicoesEditadas().length})`}
-                    </Button>
-
-                    <Button disabled={isSavingSchema} onClick={handleSalvarDicionario}>
-                      {isSavingSchema && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Salvar dicionário
-                    </Button>
-                  </div>
                 </div>
 
                 {/* 3. Refinar Formatação */}
@@ -1188,10 +1320,16 @@ export default function DatabasePage() {
                     <Button disabled={isRefining || !refinePrompt.trim()} onClick={async () => {
                       setIsRefining(true);
                       try {
-                        const currentRules = Object.entries(selectedDataset.schema_metadata.columns).reduce((acc: any, [k, v]: [string, any]) => {
-                          acc[k] = v.formatting_rule;
-                          return acc;
-                        }, {});
+                        // ⚠️ Parte do que está NA TELA, não do que está salvo.
+                        // Até 2026-09-03 ele lia `selectedDataset.schema_metadata`,
+                        // montava o novo schema a partir dele e gravava direto —
+                        // então uma descrição refinada e ainda não gravada era
+                        // apagada no banco E na tela. Ver I-15.
+                        const currentRules = Object.entries(colunasDoSchema).reduce(
+                          (acc: Record<string, unknown>, [k, v]) => {
+                            acc[k] = v.formatting_rule;
+                            return acc;
+                          }, {});
 
                         const res = await supabase.functions.invoke('ai-agents', {
                           body: { action: 'refine_format', prompt: refinePrompt, columns: currentRules, dataSamples: [] }
@@ -1205,23 +1343,30 @@ export default function DatabasePage() {
                           resultado = JSON.parse(limpo);
                         }
 
-                        const newRules = resultado?.formattingRules;
-                        if (!newRules) throw new Error("A IA nao retornou um formato valido.");
-                        const newSchema = { ...selectedDataset.schema_metadata };
-                        Object.keys(newRules).forEach(col => {
-                          if (newSchema.columns[col]) {
-                            newSchema.columns[col].formatting_rule = newRules[col];
-                          }
-                        });
+                        const newRules = resultado?.formattingRules as Record<string, FormattingRule> | undefined;
+                        if (!newRules) throw new Error("A IA não retornou um formato válido.");
 
-                        await supabase.from('datasets').update({ schema_metadata: newSchema }).eq('id', selectedDataset.id);
-                        setSelectedDataset({...selectedDataset, schema_metadata: newSchema});
-                        setEditedSchema(newSchema);
+                        // ⛔ Sem spread raso e sem gravar aqui: só mexe no estado,
+                        // e a gravação automática leva ao banco. O spread de antes
+                        // era de um nível só, então `newSchema.columns` era o mesmo
+                        // objeto e a atribuição mutava o `selectedDataset` no lugar.
+                        setEditedSchema((antes) => {
+                          if (!antes) return antes;
+                          const columns = { ...antes.columns };
+                          for (const [col, regra] of Object.entries(newRules)) {
+                            if (columns[col]) columns[col] = { ...columns[col], formatting_rule: regra };
+                          }
+                          return { ...antes, columns };
+                        });
                         setRefinePrompt("");
-                        alert("Regras refinadas com sucesso pela IA!");
+                        toast({ title: "Regras de formatação atualizadas" });
                       } catch (err) {
-                        alert("Erro ao refinar");
                         console.error(err);
+                        toast({
+                          title: "Erro ao refinar a formatação",
+                          description: err instanceof Error ? err.message : String(err),
+                          variant: "destructive",
+                        });
                       } finally {
                         setIsRefining(false);
                       }
