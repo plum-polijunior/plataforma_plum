@@ -812,3 +812,46 @@ para todo cargo daria acesso que ninguém concedeu. O Admin precisa porque ele n
 formulário de permissões do `Dashboard.tsx`, que assume acesso irrestrito para ele.
 
 **Status:** vigente. Ver `execucao/B22-reler-e-reconciliar/MANUAL.md`.
+
+
+### D-057 · 2026-09-03 · ⭐⭐ Marcar uma base como conferida é um ATO de pessoa, não uma inferência da tela
+
+**Decisão.** No B23 o "Editar Esquema" passou a editar o dicionário v2 inteiro de uma base ativa —
+grão, observações, `papel_analitico` e `vocabulario_util`. Com isso surgiu a pergunta: **salvar essa
+tela promove `versao` 1 → 2?**
+
+Não. **Salvar edição nunca promove.** Quem promove é um botão **separado**, "Marcar como conferida",
+que exige o **grão preenchido**, diz em uma linha o que a pessoa está afirmando, e é **reversível**.
+
+**Por quê.** `conferido = versao >= 2` muda uma coisa só, e é grande: com `false`, `paraPrompt`
+anexa *"Este dicionário NÃO foi conferido por uma pessoa… declare presunção"*. Promover **cala esse
+aviso**. É uma afirmação sobre trabalho humano, então quem a faz tem de ser um humano.
+
+⭐ **E promover precisava ser possível**, senão a decisão seria só "nunca": as bases da demo são v1 e
+**não serão recadastradas**, porque recadastrar cria uuid novo e órfã os cards (C13). Sem esta porta,
+uma base cujo grão e cujos papéis alguém acabou de revisar continuaria dizendo ao A3 "ninguém me
+leu" — para sempre.
+
+**O que foi rejeitado, e é o mais instrutivo:** promover **automaticamente por completude** — "se o
+grão está preenchido e toda coluna tem papel, então foi conferida".
+
+⛔ Numa base **v1 as colunas não têm papel nenhum**. A tela mostra o default deduzido pela máquina
+(`PAPEL_POR_FORMATACAO` no leitor), e um salvamento qualquer gravaria esses defaults e promoveria a
+base **sem ninguém ter lido nada** — silenciando exatamente o aviso que existe para dizer que ninguém
+leu. A completude do objeto seria satisfeita pelo próprio ato de abrir a tela.
+
+⭐ **A lição generalizável:** quando um campo afirma que *houve revisão humana*, ele não pode ser
+derivado da **forma** do dado. Forma é o que a máquina preenche; revisão é o que a pessoa faz. Toda
+inferência aqui transforma "está completo" em "foi conferido", e são coisas diferentes.
+
+⚠️ **Não contradiz a D-056**, e a fronteira é limpa: lá o que não promove é a **reconciliação** do
+B22, que casa nomes de coluna com o cabeçalho da planilha e não pergunta nada a ninguém. Aqui há
+alguém clicando num botão que declara o que está afirmando. As duas regras dizem a mesma coisa por
+lados opostos — **a versão sobe onde houve pessoa, e só aí.**
+
+**O grão como pré-requisito** não é burocracia: é o campo que mais muda resposta e o que a IA mais
+erra ("uma venda" e "um dia por loja" fazem a mesma soma significar coisas diferentes). Base
+conferida sem dizer o que é uma linha seria a pior combinação — o A3 confiando num dicionário que
+não declara o próprio grão.
+
+**Status:** vigente. Ver `execucao/B23-dicionario-na-base-ativa/MANUAL.md`.

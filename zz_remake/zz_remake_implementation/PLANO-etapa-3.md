@@ -413,15 +413,42 @@ Em `Cfgdatabase.tsx`, sobre uma base **ativa**:
 ⚠️ **Colisão de nome vale aqui igual ao passo 1 do cadastro** (C11): dois
 cabeçalhos que normalizam para o mesmo nome travam a reconciliação.
 
-### B23 · 🔧 Observações editáveis na base ativa
+### B23 · 🔧 Observações editáveis na base ativa — ✅ **FEITO em 2026-09-03**
 
 Na mesma tela do B22: `schema_metadata.observacoes` e `grao` editáveis fora do
 cadastro (§A6). Trabalho de tela; o consumo pelo A3 já existe desde o B14.
 
-### B24 · 🔧 O Agente 2 refina só o que a pessoa editou
+⭐⭐ **Saiu MAIOR que este escopo, a pedido do 👤:** entraram também
+`papel_analitico` e `vocabulario_util` por coluna. ⇒ Na prática o que ficou
+editável é o **dicionário v2 inteiro** numa base ativa, não só os dois campos de
+base. Ver `execucao/B23-dicionario-na-base-ativa/MANUAL.md`.
+
+⭐ **E apareceu um buraco que este bloco não previa:** *acrescentar* observação
+não existia em lugar nenhum — nem no cadastro. Só dava para editar ou apagar o
+que o Agente 1 tivesse escrito, então uma base cuja IA não apontou observação
+nenhuma **nunca ganhava a primeira**. Que é justamente a que mais vale, porque é
+a regra que só a pessoa sabe. Corrigido nos dois lugares.
+
+⚠️ **A decisão dura do bloco não estava aqui:** editar papel, vocabulário e grão
+numa base ativa é exatamente o que `versao: 2` afirma ter sido conferido por
+gente. Promover virou um **ato explícito** — botão próprio, exigindo o grão,
+reversível; salvar edição nunca promove. Ver **D-057**, com o motivo pelo qual a
+promoção automática por completude foi recusada.
+
+### B24 · 🔧 O Agente 2 refina só o que a pessoa editou — ✅ **FEITO em 2026-09-03**
 
 Guardar a saída original do Agente 1 em estado e no `sketch`, e mandar ao
 `refine_semantics` apenas as chaves que divergirem dela (§A7).
+
+⭐ **Feito nos DOIS lugares**, e não só no cadastro como este bloco dizia: o
+"Editar Esquema" tinha o mesmo defeito, na mesma tela que o B23 estava mexendo.
+Lá a linha de base é o que está **salvo no banco**, não a saída de um agente.
+
+⛔ **E saiu de lá o campo "Ordem para o Agente 2 (Opcional)"**, que travava o
+botão quando vazio e **nunca era enviado** — a ação não lê `prompt` nenhum. Não
+foi consertado mandando: o prompt do Agente 2 diz *"PRESERVE O CONTEÚDO, você
+melhora a redação, não o conteúdo"*, e um campo de ordem livre briga com o papel
+dele.
 
 ⚠️ **A saída volta parcial**, então o merge é no front: o que não foi refinado
 fica exatamente como estava. Substituir o objeto inteiro pela resposta apagaria
@@ -438,8 +465,8 @@ as colunas não enviadas.
 | B20 | — | `ai-plum-chat` | — | sim | ✅ 2026-08-31 |
 | B21 | — | — | — | **sim** | ✅ 2026-09-03 |
 | B22 | — | ⚠️ **— (ver abaixo)** | — | **sim** | ✅ 2026-09-03 |
-| B23 | — | — | — | **sim** | |
-| B24 | — | — | — | **sim** | |
+| B23 | — | — | — | **sim** | ✅ 2026-09-03 |
+| B24 | — | — | — | **sim** | ✅ 2026-09-03 |
 
 ⚠️ **Correção de 2026-09-03: o B22 NÃO precisa de deploy de `ai-plum-chat`**, e esta tabela dizia que
 sim. A ação `cabecalhos_da_planilha` já servia base ativa — `exigirAdminDaBase` confere organização,
@@ -468,6 +495,8 @@ dois pedidos leem a mesma planilha.
 | **C12** — `allowed_columns` não revalidado | ✅ B22 remove a coluna que sumiu da matriz junto |
 | **C14** — recadastrar a mesma planilha não avisava nada | ✅ B21. ⚠️ E o texto da C14 estava errado: dizia que a detecção não podia ser pela URL |
 | **C15** — mudar coluna no Sheets obrigava a recadastrar | ✅ B22 |
+| **C16** — "Refinar semântica" refinava todas as colunas | ✅ B24, nos dois lugares |
+| **C17** — observações da base editáveis fora do cadastro | ✅ B23, e saiu maior: o dicionário v2 inteiro |
 | **`plum_reconhecimento` vestigial** | ⚠️ **resolvido pelo oposto do que esta linha previa.** Ela dizia *"B20 volta a usá-la"*; o B20 a **dropou** (`20260827120000_drop_plum_reconhecimento.sql`), porque o que ela guardava deixou de ser uma chamada de LLM — o índice do A2 sai de um `select` no `schema_metadata`. O §A3 já dizia isso; esta tabela é que ficou para trás |
 
 ---

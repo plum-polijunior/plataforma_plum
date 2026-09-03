@@ -49,6 +49,14 @@ nas duas tabelas de 26 casos**. Nunca reimplemente a normalização num componen
 de produção diz `'codigo'` — ler é inofensivo, **escrever** com o valor errado dá `23514`. Importe as
 constantes.
 
+⭐ **`src/lib/dicionario.ts` é o mesmo caso, e tem DUAS telas escrevendo** (cadastro e "Editar
+Esquema"): `PAPEIS`, `REGRA_SEM_FORMATACAO`, `VERSAO_DO_DICIONARIO` e `vocabularioEfetivo`.
+
+⚠️ O último não é açúcar: `colunasComVocabulario` (no leitor, Deno) filtra **só** por
+`vocabulario_util`, sem olhar o papel. Um `true` sobrando numa coluna de medida faz o chat pedir a
+lista de valores de uma coluna numérica em **toda** pergunta daquela base — e sobra fácil, porque a
+tela esconde o interruptor fora de dimensão. A checagem é no **salvamento**, nunca no `onChange`.
+
 ## 6. Rotas e nomes que enganam
 
 - **`/dashboard` NÃO é o dashboard** — é "Minha Organização" (membros, cargos, permissões). O
