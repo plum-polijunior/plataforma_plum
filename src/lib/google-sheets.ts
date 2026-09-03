@@ -20,6 +20,29 @@ const PADRAO_ID = /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/;
 const PADRAO_ID_CRU = /^[a-zA-Z0-9_-]{20,}$/;
 
 /**
+ * ⛔ **O link de "Publicar na web", que NÃO é um endereço de planilha.**
+ *
+ * A forma dele é `/spreadsheets/d/e/2PACX-.../pubhtml`, e o `e` ali é literal —
+ * o identificador longo que vem depois é de uma *publicação*, não da planilha.
+ * Não serve para a API, e nem sequer prova que a planilha existe.
+ *
+ * ⚠️ **Por que ele precisa de um padrão próprio, em vez de simplesmente falhar.**
+ * O `PADRAO_ID` para no primeiro `/`, então este link casa com ele e devolve
+ * `id: "e"` — para TODA planilha publicada, sem exceção. Enquanto o `id` era só
+ * um parâmetro de leitura isso era uma falha isolada e barulhenta (a API não
+ * acha a planilha "e"). Desde o B21 ele é **chave de identidade**: duas
+ * planilhas publicadas diferentes passariam a ser "a mesma base", e a segunda
+ * seria recusada apontando para a primeira. ⛔ Colisão de identidade é pior que
+ * erro de leitura, porque ela não parece erro.
+ */
+const PADRAO_PUBLICADO = /\/spreadsheets\/d\/e\//;
+
+/** O link colado é de "Publicar na web"? Serve para escolher a mensagem. */
+export function ehLinkPublicado(entrada: string | null | undefined): boolean {
+  return PADRAO_PUBLICADO.test((entrada ?? "").trim());
+}
+
+/**
  * O `gid` identifica a ABA dentro da planilha. Aparece como `#gid=123` (o mais
  * comum) ou `?gid=123`, e a URL real do Google costuma trazer os dois.
  */
@@ -61,6 +84,10 @@ export function extrairSheetRef(entrada: string | null | undefined): SheetRef | 
   // de ser tratada como "sem aba definida".
   const gid = gidCasou?.[1] != null ? Number.parseInt(gidCasou[1], 10) : null;
 
+  // ⛔ Antes do `PADRAO_ID`, e a ordem é o conserto: ele casaria com este link
+  // e devolveria `id: "e"`. Ver `PADRAO_PUBLICADO`.
+  if (PADRAO_PUBLICADO.test(texto)) return null;
+
   const casou = texto.match(PADRAO_ID);
   if (casou?.[1]) return { id: casou[1], gid };
 
@@ -78,6 +105,17 @@ export function extrairSheetRef(entrada: string | null | undefined): SheetRef | 
 export function extrairSheetId(entrada: string | null | undefined): string | null {
   return extrairSheetRef(entrada)?.id ?? null;
 }
+
+/**
+ * ⭐ Mensagem própria, porque o `ERRO_LINK_INVALIDO` mandaria a pessoa fazer
+ * exatamente o que ela já fez: *"copie o endereço da barra"*. Quem publicou a
+ * planilha copiou um endereço de verdade — só que o errado, e o que falta é
+ * saber qual é a diferença.
+ */
+export const ERRO_LINK_PUBLICADO =
+  "Esse é o link de \"Publicar na web\", que não dá acesso à planilha. " +
+  "Abra a planilha no Google Sheets e copie o endereço da barra do navegador " +
+  "(ele tem /spreadsheets/d/ seguido de um código longo).";
 
 /** Mensagem única para as duas telas, para o usuário não ver textos diferentes. */
 export const ERRO_LINK_INVALIDO =

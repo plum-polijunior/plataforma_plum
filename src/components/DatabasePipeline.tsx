@@ -6,36 +6,44 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Database, FileSpreadsheet, Bot, CheckCircle, ArrowRight, Loader2, Code } from "lucide-react";
-import { extrairSheetRef, ERRO_LINK_INVALIDO } from "@/lib/google-sheets";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  ehLinkPublicado,
+  extrairSheetRef,
+  ERRO_LINK_INVALIDO,
+  ERRO_LINK_PUBLICADO,
+} from "@/lib/google-sheets";
 import { normalizarNomeDeColuna } from "@/lib/colunas";
+// ⭐ Saíram daqui no B22: o "Editar Esquema" passou a escrever dicionário
+// também, e duas definições de "coluna sem formatação" divergiriam em silêncio.
+import {
+  REGRA_SEM_FORMATACAO,
+  VERSAO_DO_DICIONARIO,
+  type FormattingRule,
+  type PapelAnalitico,
+} from "@/lib/dicionario";
 
 interface DatabasePipelineProps {
   organizationId: string;
+  /**
+   * ⭐ Sair do cadastro e abrir uma base que já existe (B21).
+   *
+   * Existe porque quem controla a troca entre "lista de bases" e "pipeline" é o
+   * `Cfgdatabase`, e o pipeline não tem como se desmontar sozinho. Sem ela, o
+   * diálogo de *"essa planilha já está cadastrada"* seria um beco: avisaria e
+   * deixaria a pessoa no mesmo lugar, com o mesmo link colado.
+   */
+  onAbrirBase?: (datasetId: string) => void;
 }
-
-interface FormattingRule {
-  type: string;
-  params: Record<string, unknown>;
-  explicacao: string;
-}
-
-const REGRA_SEM_FORMATACAO: FormattingRule = { type: "nenhuma", params: {}, explicacao: "" };
-
-/**
- * ⭐ A versão do dicionário que este cadastro escreve.
- *
- * ⚠️ **`versao` não é enfeite: ela é o que diz ao chat se houve gente no meio.**
- * O A3 lê `conferido = versao >= 2` e calibra presunção por base — dicionário v1
- * nunca passou por humano, então os conceitos ali são palpite de modelo. Ver
- * `supabase/functions/_shared/dicionario.ts`.
- *
- * ⛔ As bases v1 **não são migradas** e conviverão para sempre: recadastrar cria
- * uuid novo e órfã os cards da base (CASCADE em `dashboard_cards`). O leitor
- * tolera as duas formas por requisito, não por gentileza.
- */
-const VERSAO_DO_DICIONARIO = 2;
-
-type PapelAnalitico = "medida" | "dimensao" | "identificador" | "temporal";
 
 /** O rótulo de cada papel na tela, e o que ele significa para quem revisa. */
 const PAPEIS: { valor: PapelAnalitico; rotulo: string; ajuda: string }[] = [
@@ -56,7 +64,10 @@ const PAPEIS: { valor: PapelAnalitico; rotulo: string; ajuda: string }[] = [
 const celulaEmTexto = (valor: unknown): string =>
   valor === null || valor === undefined || valor === "" ? "—" : String(valor);
 
-export default function DatabasePipeline({ organizationId }: DatabasePipelineProps) {
+export default function DatabasePipeline({
+  organizationId,
+  onAbrirBase,
+}: DatabasePipelineProps) {
   const { toast } = useToast();
   // 0: Conectar planilha · 1: Colunas · 2: Formatação · 3: Semântica
   //
@@ -67,6 +78,16 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const [fileName, setFileName] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sheetUrl, setSheetUrl] = useState("");
+
+  /**
+   * ⭐ A base ATIVA que já usa esta planilha e esta aba (B21).
+   *
+   * Preenchida só quando o `handleConectarPlanilha` encontra uma, e é o que abre
+   * o diálogo. `null` é o caminho normal do cadastro.
+   */
+  const [baseExistente, setBaseExistente] = useState<
+    { id: string; name: string } | null
+  >(null);
 
   // Data States
   const [originalColumns, setOriginalColumns] = useState<string[]>([]);
@@ -124,8 +145,8 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
    * A ordem aqui não é arbitrária, e cada passo depende do anterior:
    *
    *   1. extrai `id` e `gid` do link (`extrairSheetRef`, já testado);
-   *   2. retoma rascunho pelo `google_sheet_id` — identidade de verdade, ao
-   *      contrário da assinatura de colunas que se usava antes;
+   *   2. procura uma base que já use ESSA planilha nESSA aba — rascunho para
+   *      retomar, ou base ativa para recusar (B21);
    *   3. cria a base com o link, ainda `processing`;
    *   4. lê o cabeçalho pela Edge Function (nenhuma célula de dado é lida);
    *   5. ⭐ **concede as colunas ao Admin** — sem isto, tudo daqui para a frente
@@ -135,22 +156,58 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
   const handleConectarPlanilha = async () => {
     const ref = extrairSheetRef(sheetUrl);
     if (!ref) {
-      setUploadError(ERRO_LINK_INVALIDO);
+      // ⚠️ A mensagem genérica manda "copie o endereço da barra", que é o que
+      // quem colou um link de "Publicar na web" acredita ter feito.
+      setUploadError(ehLinkPublicado(sheetUrl) ? ERRO_LINK_PUBLICADO : ERRO_LINK_INVALIDO);
       return;
     }
 
     setIsProcessing(true);
     setUploadError(null);
     try {
-      // Retomada de rascunho pelo id da planilha. Duas bases com as mesmas
-      // colunas deixam de se confundir, que era o furo do casamento anterior.
-      const { data: rascunhos } = await supabase
+      // ⭐ **A busca é por PLANILHA + ABA, em qualquer status** (B21).
+      //
+      // Até 2026-09-03 ela filtrava `status = 'processing'`, e o efeito era a
+      // C14: base **ativa** com a mesma planilha não era encontrada, o cadastro
+      // caía no `insert` e a pessoa terminava com duas bases idênticas na tela
+      // — sem nada dizendo qual delas o chat usa.
+      //
+      // ⛔ **Sem comparar o conjunto de colunas**, que é o que a C14 propunha.
+      // Seria voltar ao casamento por assinatura que o B13 abandonou: duas
+      // planilhas diferentes com as mesmas colunas se confundiam. O `id` do
+      // documento já resolve — o mesmo Sheets dá o mesmo `id` em qualquer forma
+      // de link (`/edit`, `?usp=sharing`, com ou sem `#gid`), e há teste disso.
+      //
+      // ⚠️ **A ABA entra na chave, e não é detalhe.** Uma base é uma aba (§B1):
+      // duas abas do mesmo arquivo são duas bases legítimas, com cabeçalho, grão
+      // e formatação próprios. Casar só pelo `google_sheet_id` recusaria a
+      // segunda aba como se fosse repetição.
+      let consulta = supabase
         .from('datasets')
-        .select('id, sketch, status')
+        .select('id, name, sketch, status')
         .eq('organization_id', organizationId)
-        .eq('status', 'processing')
         .eq('google_sheet_id', ref.id);
 
+      // ⚠️ `.eq(coluna, null)` não casa NULL no PostgREST — vira `?col=eq.null`
+      // e não encontra nada. E o desvio é por `=== null`, nunca por veracidade:
+      // `gid = 0` é a PRIMEIRA aba de toda planilha, um valor legítimo.
+      consulta = ref.gid === null
+        ? consulta.is('google_sheet_gid', null)
+        : consulta.eq('google_sheet_gid', ref.gid);
+
+      const { data: existentes } = await consulta;
+
+      // ⭐ Ativa tem precedência sobre rascunho. Se as duas existirem para a
+      // mesma aba (cadastro recomeçado e abandonado depois de uma base ficar
+      // pronta), o que interessa dizer é que **já existe base**; retomar o
+      // rascunho criaria a segunda.
+      const ativa = existentes?.find((d) => d.status === 'active');
+      if (ativa) {
+        setBaseExistente({ id: ativa.id, name: ativa.name ?? "essa base" });
+        return;
+      }
+
+      const rascunhos = existentes?.filter((d) => d.status !== 'active');
       let id = rascunhos?.[0]?.id ?? null;
       const sketch = rascunhos?.[0]?.sketch as any;
 
@@ -831,6 +888,49 @@ export default function DatabasePipeline({ organizationId }: DatabasePipelinePro
 
   return (
     <div className="space-y-6">
+
+      {/*
+        ⭐ **O diálogo do B21 — a planilha já é uma base ativa.**
+
+        ⚠️ Ele é a razão de `handleConectarPlanilha` ter deixado de decidir e
+        inserir no mesmo `await`: antes não havia ponto de espera nenhum no
+        fluxo, e o único aviso da tela era um toast, que não pergunta nada.
+
+        ⛔ Nenhuma das saídas cria base. Era o que acontecia até 2026-09-03, em
+        silêncio, e é a C14 inteira.
+      */}
+      <AlertDialog
+        open={baseExistente !== null}
+        onOpenChange={(aberto) => { if (!aberto) setBaseExistente(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Essa planilha já está cadastrada</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta aba já é a base <strong>{baseExistente?.name}</strong>. Cadastrar
+              de novo criaria uma segunda base idêntica, e nada indicaria qual
+              delas o chat usa.
+              <br />
+              <br />
+              Se a planilha mudou — coluna nova, coluna que saiu — abra a base e
+              use <strong>Reler a planilha</strong> em "Editar Esquema". Assim os
+              cards do dashboard e a matriz de permissões continuam valendo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Colar outro link</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const id = baseExistente?.id;
+                setBaseExistente(null);
+                if (id) onAbrirBase?.(id);
+              }}
+            >
+              Abrir a base
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Stepper Header */}
       <div className="flex items-center justify-between mb-8 rounded-xl border border-border bg-card/30">
