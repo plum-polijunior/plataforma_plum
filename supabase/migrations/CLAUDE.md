@@ -9,7 +9,7 @@ que descreva o banco de outra forma está errado — houve um PRD, apagado em 20
 
 `supabase/config.toml` só tem `project_id`. O fluxo real é **colar o SQL no SQL Editor do painel** e
 rodar. É decisão consciente, para manter um humano no meio do passo destrutivo — ver
-`contexto/30-decisoes.md` D-005.
+`contexto_interno/30-decisoes.md` D-005.
 
 **O procedimento** (o `docs/PASSO-A-PASSO-APLICAR.md` que descrevia isso foi apagado em 2026-08-14):
 
@@ -75,7 +75,7 @@ inexistente. **Atualize `src/integrations/supabase/types.ts` na mesma alteraçã
 ## 5. As regras de segurança que nasceram de incidente
 
 Todas vêm do escalonamento de privilégio de 2026-07-22
-(`contexto/31-incidentes-e-licoes.md` I-01). Violá-las é regressão, não estilo:
+(`contexto_interno/31-incidentes-e-licoes.md` I-01). Violá-las é regressão, não estilo:
 
 - escopo de tenant **sempre** por `public.current_org_id()` — nunca subquery direta em `profiles`
   dentro de policy (recursão de RLS);

@@ -38,7 +38,7 @@
  * influencia é qual BASE o A2 escolhe, e influencia isso escrevendo bom
  * dicionário — que é o incentivo certo.
  *
- * Ver `contexto/30-decisoes.md` D-054.
+ * Ver `contexto_interno/30-decisoes.md` D-054.
  */
 
 /** O papel de LLM que aquele agente consome. Casa com `Papel` do `llm_core`. */

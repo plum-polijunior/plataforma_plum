@@ -374,7 +374,7 @@ export default function PlumChat() {
         // Só guarda o que pode ser reusado depois. Plano com data absoluta
         // fica de fora: "quanto faturei hoje" gera `["2026-08-12", ...]`, e
         // reusar isso amanhã devolveria o número do dia errado, em silêncio.
-        // Ver `src/lib/plano-cache.ts` e `contexto/30-decisoes.md` D-024 —
+        // Ver `src/lib/plano-cache.ts` e `contexto_interno/30-decisoes.md` D-024 —
         // estender o cache a datas relativas foi avaliado e recusado.
         if (plan && !planoTemData(plan)) {
           supabase

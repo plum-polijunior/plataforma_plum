@@ -29,7 +29,7 @@ function lerTemaSalvo(): Tema {
  * limpeza, a classe `tema-escuro` ficava presa em `document.documentElement`
  * depois do logout, e a landing (que não tem opinião própria sobre tema)
  * herdava por cascata a paleta escura — bug real, registrado em
- * `contexto/31-incidentes-e-licoes.md` I-06.
+ * `contexto_interno/31-incidentes-e-licoes.md` I-06.
  */
 export function useTema() {
   const [tema, setTema] = useState<Tema>(lerTemaSalvo);

@@ -1,0 +1,1 @@
+plum_porteiro.md é o arquivo que discuto as ideias, os demais são documentos que podem ser analisados para entender melhor o contexto das alterações

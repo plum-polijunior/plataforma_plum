@@ -166,9 +166,9 @@ proteção contra um dano impossível. Ver `03-erros-comuns.md`.
 | | Onde |
 |---|---|
 | 🏗️ código da plataforma | `src/`, `supabase/functions/`, `query_engine/`, `supabase/migrations/` |
-| 🏗️ contexto da plataforma | `contexto/01`, `02`, `11`, `12`, `20` |
-| 🔧 método e templates | `contexto/40-implementacao/` |
-| 🔧 conhecimento de cliente | `contexto/40-implementacao/clientes/<cliente>/` |
+| 🏗️ contexto da plataforma | `contexto_interno/01`, `02`, `11`, `12`, `20` |
+| 🔧 método e templates | `contexto_interno/40-implementacao/` |
+| 🔧 conhecimento de cliente | `contexto_interno/40-implementacao/clientes/<cliente>/` |
 
 ⚠️ **Regra de dependência:** código da plataforma **nunca importa** nada de `40-implementacao/`. O
 conhecimento de cliente é carregado como **dado** (via `schema_metadata` e regras no banco), nunca

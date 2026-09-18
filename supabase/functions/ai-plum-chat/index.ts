@@ -1027,7 +1027,7 @@ async function postarNoExecutor(payload: unknown): Promise<RespostaDoExecutor> {
 // então a mesma pergunta saía como "Vendas" numa execução e "Venda" ou
 // "Estudos Técnicos" na seguinte. Previsão de assunto não escala em
 // multi-tenant sem empurrar a taxonomia para o usuário, e nada no produto
-// chegou a consumir o campo (`contexto/30-decisoes.md` D-026). Note a ironia acima:
+// chegou a consumir o campo (`contexto_interno/30-decisoes.md` D-026). Note a ironia acima:
 // foi justamente o `assunto` que causou o incidente que motivou este schema.
 const SCHEMA_GUARD = {
   type: "OBJECT",
@@ -1884,7 +1884,7 @@ async function handleAdHocExecutar(
         gastoMaximo = Math.max(gastoMaximo, g.gasto);
       }
       // ⚠️⚠️ **O mais apertado manda no lote, e isto é DÍVIDA REGISTRADA** —
-      // ver "Dívidas conhecidas" em `contexto/20-pendencias.md`. Não conserte
+      // ver "Dívidas conhecidas" em `contexto_interno/20-pendencias.md`. Não conserte
       // sem ler o porquê lá.
       //
       // `aprovarLote` decide por saldo único, e um pedido não declara de qual

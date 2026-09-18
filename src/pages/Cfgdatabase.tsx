@@ -481,7 +481,7 @@ export default function DatabasePage() {
    * partindo do schema **salvo** e ignorando o que estava em edição — e ainda
    * fazia `setEditedSchema` com o resultado. Refinar a semântica e em seguida
    * pedir uma ordem de formatação apagava o refino no banco **e** na tela, sem
-   * F5 nenhum. Ver `contexto/31-incidentes-e-licoes.md` I-15.
+   * F5 nenhum. Ver `contexto_interno/31-incidentes-e-licoes.md` I-15.
    *
    * ⚠️ **Não devolve o resultado para o estado**, e isso não é economia: o
    * `montarSchema` faz `grao.trim()` e descarta observação vazia. Reescrever o

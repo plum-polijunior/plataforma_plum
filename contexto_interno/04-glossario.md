@@ -178,7 +178,7 @@ liberais. No remake, é o tradutor de linguagem natural e a camada de ação. �
 
 ## Documentação
 
-**🏗️ / 🔧** · marcadores de camada usados em todo o `contexto/`: plataforma / implementação.
+**🏗️ / 🔧** · marcadores de camada usados em todo o `contexto_interno/`: plataforma / implementação.
 
 **`status: vigente | superado | proposta`** · o frontmatter de cada arquivo.
 **`proposta`** significa desenhado e **não implementado**.

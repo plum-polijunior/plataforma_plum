@@ -29,14 +29,14 @@ operacional (isso é o `CLAUDE.md` da raiz e `infra/aws/PASSO-A-PASSO.md`).
 | | Dono |
 |---|---|
 | o que **está no ar**, comandos, deploy, armadilhas de código | `CLAUDE.md` (raiz) |
-| **para onde vamos** e **por quê** | `contexto/` |
+| **para onde vamos** e **por quê** | `contexto_interno/` |
 
 ⚠️ `12-visao-tecnologica.md` é o arquivo mais tentado a duplicar o `CLAUDE.md`. Se os dois
 discordarem, o `CLAUDE.md` está certo sobre o presente.
 
 ## ⚠️ Não existe mais pasta de arquivo
 
-`docs/` e `contexto/90-arquivo/` foram apagados em 2026-08-14. Consequência prática: **este conjunto
+`docs/` e `contexto_interno/90-arquivo/` foram apagados em 2026-08-14. Consequência prática: **este conjunto
 de arquivos é tudo o que existe.** Não há um segundo lugar para "guardar por segurança" — se um
 porquê não estiver em `30-decisoes.md`, ele não está em lugar nenhum.
 

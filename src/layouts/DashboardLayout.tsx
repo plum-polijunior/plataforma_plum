@@ -52,7 +52,7 @@ export function DashboardLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   /**
    * Rail recolhido/expandido, só no desktop. Estado puramente de apresentação —
-   * não toca em sessão, cargo nem rota. Ver `contexto/30-decisoes.md` D-029.
+   * não toca em sessão, cargo nem rota. Ver `contexto_interno/30-decisoes.md` D-029.
    */
   const [railAberto, setRailAberto] = useState(false);
   const navigate = useNavigate();

@@ -27,7 +27,7 @@ atualizado_em: 2026-09-03
 | T3 | ~~Corrigir o passo-a-passo de migration~~ — **resolvido por remoção**: o arquivo foi apagado e o procedimento ficou em `supabase/migrations/CLAUDE.md` |
 | T4 | `query_engine/.pytest_cache/` no `.gitignore` | Arquivo gerado versionado |
 | T5 | ~~Marcar o PRD do query engine como superado no ponto do cache~~ — **resolvido por remoção** (arquivo apagado em 2026-08-14) |
-| T6 | Dividir `12-visao-tecnologica.md` (**434** linhas) em `12a-arquiteto` / `12b-contrato` / `12c-dados` | Estourou o teto de 400 da regra 4 do `contexto/CLAUDE.md`. `30-decisoes` e `31-incidentes` têm exceção declarada; este não. ⚠️ Cresceu 5 linhas desde que este item foi aberto — não encolhe sozinho |
+| T6 | Dividir `12-visao-tecnologica.md` (**434** linhas) em `12a-arquiteto` / `12b-contrato` / `12c-dados` | Estourou o teto de 400 da regra 4 do `contexto_interno/CLAUDE.md`. `30-decisoes` e `31-incidentes` têm exceção declarada; este não. ⚠️ Cresceu 5 linhas desde que este item foi aberto — não encolhe sozinho |
 | T7 | ⚠️ **Apagar a Edge Function órfã `plum-chat`** | ⭐ Ver a linha nova em "Dívidas conhecidas". `ACTIVE`, sem código no repositório, `verify_jwt: false`. O comando é `DELETE /v1/projects/{ref}/functions/plum-chat` |
 | T8 | ⚠️ **Tabela inexistente devolve `{"error": …}` em vez de levantar** | `pandas_executor.py:654` destoa do resto do executor, que levanta `MissingColumnError`, `RawRowsBlocked`, `RowLimitExceeded`. Com **uma** tabela isso nunca apareceu, porque o `main.py` sobrescrevia o `from`; com multi-planilha vira o modo de falha mais provável — planejador erra o nome da planilha e o card fica **vazio em silêncio**, enquanto `MissingColumnError` apareceria. Ver `PLANO-etapa-3.md` §A2 |
 

@@ -133,7 +133,7 @@ A tese *"a IA não lê seus dados"* é **fraca**, e o motivo é desconfortável 
 ler os dados gera incômodo; o Google ler gera indiferença.
 
 Além disso ela nunca foi 100% verdadeira: o onboarding já envia linha de dado para o LLM
-(`contexto/20-pendencias.md` D7 registra isso como violação da premissa P1.1).
+(`contexto_interno/20-pendencias.md` D7 registra isso como violação da premissa P1.1).
 
 ⚠️ **Correção de 2026-08-25 — e ela piora, não melhora, do lado comercial.** Este parágrafo dizia
 "cabeçalho + 5 linhas". São **20** desde o B12, e todas as 20 passam pelos agentes de formatação e

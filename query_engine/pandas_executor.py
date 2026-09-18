@@ -90,7 +90,7 @@ class CardinalidadeExcedida(ExecutorError):
 # Redutora × seletora — classificação por comportamento
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# ⚠️ Não é whitelist (`contexto/30-decisoes.md`, V6 decisão 4). O `agg` continua
+# ⚠️ Não é whitelist (`contexto_interno/30-decisoes.md`, V6 decisão 4). O `agg` continua
 # indo direto para o pandas; esta tabela só diz o que cada função FAZ com os
 # valores, para o motor saber quando um resultado carrega literal da base.
 #
@@ -1699,7 +1699,7 @@ def apply_formatting_rules(
     `type` fora do enum ou `"nenhuma"` não transforma a coluna, mas loga um
     warning — a falha de tipagem precisa ficar visível para alguém, nunca
     sumir em silêncio (era o problema central da dívida de keyword-match,
-    hoje em `contexto/20-pendencias.md`).
+    hoje em `contexto_interno/20-pendencias.md`).
     """
     df = df.copy()
     for col, rule in (formatting_rules or {}).items():

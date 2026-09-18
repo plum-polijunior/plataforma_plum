@@ -32,7 +32,7 @@ const Index = () => {
   // ficar presa em `document.documentElement` de uma sessão anterior — o
   // cleanup no próprio hook já cobre o caminho normal (logout), isto cobre o
   // resto (ex.: um link direto para `/` numa aba onde a classe ficou presa por
-  // uma versão antiga do código). Ver `contexto/31-incidentes-e-licoes.md`
+  // uma versão antiga do código). Ver `contexto_interno/31-incidentes-e-licoes.md`
   // I-06: a landing precisa ser sempre clara, nunca herdar o tema do produto.
   useEffect(() => {
     document.documentElement.classList.remove("tema-escuro");

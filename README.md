@@ -8,17 +8,17 @@ Sheets, a IA gera um dicionário semântico da base, e depois conversa com os da
 
 | Você é… | Leia |
 |---|---|
-| 🤖 **um agente** (ou qualquer pessoa nova) | ⭐ **[`contexto/00-LEIA-PRIMEIRO.md`](contexto/00-LEIA-PRIMEIRO.md)** |
+| 🤖 **um agente** (ou qualquer pessoa nova) | ⭐ **[`contexto_interno/00-LEIA-PRIMEIRO.md`](contexto/00-LEIA-PRIMEIRO.md)** |
 | 💻 vai **mexer no código** | [`CLAUDE.md`](CLAUDE.md) + o `CLAUDE.md` da pasta que vai tocar |
-| 🧠 quer entender **o produto** | [`contexto/01-o-que-e-o-plum.md`](contexto/01-o-que-e-o-plum.md) |
-| ⚠️ quer **não acreditar em coisa errada** | [`contexto/03-erros-comuns.md`](contexto/03-erros-comuns.md) |
+| 🧠 quer entender **o produto** | [`contexto_interno/01-o-que-e-o-plum.md`](contexto/01-o-que-e-o-plum.md) |
+| ⚠️ quer **não acreditar em coisa errada** | [`contexto_interno/03-erros-comuns.md`](contexto/03-erros-comuns.md) |
 
 ⚠️ **Existem duas coisas chamadas "Plum":** a **plataforma** (multi-tenant, plug-and-play — uma
 demo) e a **implementação** (vertical, por cliente — é o que se vende). Confundir as duas é o erro
-mais caro do projeto: [`contexto/02-plataforma-vs-implementacao.md`](contexto/02-plataforma-vs-implementacao.md).
+mais caro do projeto: [`contexto_interno/02-plataforma-vs-implementacao.md`](contexto/02-plataforma-vs-implementacao.md).
 
-⚠️ `docs/` e `contexto/90-arquivo/` foram apagados em 2026-08-14. O porquê das decisões está em
-[`contexto/30-decisoes.md`](contexto/30-decisoes.md).
+⚠️ `docs/` e `contexto_interno/90-arquivo/` foram apagados em 2026-08-14. O porquê das decisões está em
+[`contexto_interno/30-decisoes.md`](contexto/30-decisoes.md).
 
 ## Rodar
 

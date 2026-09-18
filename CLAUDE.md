@@ -1,19 +1,55 @@
 # CLAUDE.md — Plataforma Plum
 
+<!-- ───────────────── CHAVE DE CONTEXTO ───────────────── -->
+
+## ⭐ MODO ATIVO: `interno`
+
+> Trocar de modo é editar **uma palavra** na linha acima. Valores: `interno` · `externo` · `ambos`.
+
+Existem duas teses de produto, com contextos **independentes**. O modo decide qual delas está
+valendo nesta sessão.
+
+⏳ **A troca é sequencial, não paralela.** A tese externa está **congelada** até
+`zz_remake/zz_remake_implementation/` terminar. Quando o remake interno fechar, o modo vira
+`externo` — e aí `contexto_externo/` sai de proposta e entra em execução. Antes disso, o que
+está lá é preparação: leia, não implemente.
+
+| Modo | Leia | Não leia | Fato novo vai para | Prefixo de decisão |
+|---|---|---|---|---|
+| `interno` | `contexto_interno/` | `contexto_externo/` | `contexto_interno/` | `D-xxx` |
+| `externo` | `contexto_externo/` | `contexto_interno/` | `contexto_externo/` | `D-E-xxx` |
+| `ambos` | as duas | — | ⛔ **pergunte antes de escrever** | — |
+
+⛔ **O modo governa DOCUMENTAÇÃO e decisão de produto — nunca o código.** `src/`,
+`supabase/functions/` e `query_engine/` servem às duas teses e estão **sempre** no escopo, com
+seus `CLAUDE.md` de pasta. Mudança em código compartilhado exige pensar nas duas teses,
+independentemente do modo.
+
+⛔ **O risco do modo errado não é ler demais — é escrever no lugar errado.** Ler o contexto da
+outra tese gasta tokens. **Gravar** uma decisão da tese externa em `contexto_interno/30-decisoes.md`
+apodrece a documentação em silêncio, e ninguém percebe até alguém agir pelo arquivo errado. Isso
+vale em dobro para a skill `contexto-plum` (§9): ela roteia fatos para arquivos, e **tem de ler
+esta chave antes de gravar qualquer coisa**.
+
+⚠️ **Se esta seção sumir, estiver ambígua ou trouxer valor não listado: não adivinhe.** Pergunte
+qual é o modo antes de escrever em qualquer `contexto_*`. Leitura pode seguir; escrita, não.
+
+<!-- ──────────────── FIM DA CHAVE DE CONTEXTO ──────────────── -->
+
 Contexto operacional para agentes de código. Leia isto antes de qualquer alteração.
 
 > ⭐ **Este arquivo é a verdade sobre o que ESTÁ NO AR** — comandos, schema real, armadilhas.
 > Para entender **o produto, o negócio e para onde vamos**, comece por
-> **`contexto/00-LEIA-PRIMEIRO.md`**. E antes de mexer em qualquer pasta, leia o `CLAUDE.md`
+> **`contexto_interno/00-LEIA-PRIMEIRO.md`**. E antes de mexer em qualquer pasta, leia o `CLAUDE.md`
 > **dela** (`src/`, `query_engine/`, `supabase/functions/`, `supabase/migrations/`).
 >
 > ⚠️ Existem **duas** coisas chamadas "Plum": a **plataforma** (multi-tenant, plug-and-play, uma
 > demo) e a **implementação** (vertical, por cliente — é o que se vende). Confundir as duas é o erro
-> mais caro do projeto: `contexto/02-plataforma-vs-implementacao.md`.
+> mais caro do projeto: `contexto_interno/02-plataforma-vs-implementacao.md`.
 >
-> ⚠️ **`docs/` e `contexto/90-arquivo/` foram APAGADOS em 2026-08-14.** O que sobrou daquele
-> material está em `contexto/30-decisoes.md` (o porquê de cada escolha) e
-> `contexto/31-incidentes-e-licoes.md` (o que deu errado e virou regra). Referência a arquivo de
+> ⚠️ **`docs/` e `contexto_interno/90-arquivo/` foram APAGADOS em 2026-08-14.** O que sobrou daquele
+> material está em `contexto_interno/30-decisoes.md` (o porquê de cada escolha) e
+> `contexto_interno/31-incidentes-e-licoes.md` (o que deu errado e virou regra). Referência a arquivo de
 > `docs/` neste repositório é resquício — se encontrar alguma, corrija.
 
 **O que é:** plataforma multitenant de *Natural Language Query* sobre planilhas.
@@ -54,7 +90,7 @@ npx --yes deno check supabase/functions/<nome>/index.ts   # uma Edge Function
 
 ⚠️ O `deno check` precisa de `nodeModulesDir: "auto"` num `deno.json` (o `_shared/llm/claude.ts`
 importa o SDK da Anthropic de `npm:`). Nenhum dos dois está no CI —
-`contexto/20-pendencias.md` tem o item, e `31-incidentes-e-licoes.md` I-11 tem a história.
+`contexto_interno/20-pendencias.md` tem o item, e `31-incidentes-e-licoes.md` I-11 tem a história.
 
 ⛔ **"O build passou" não é evidência de nada neste repositório.** Antes de escrever essa frase,
 rode um dos dois comandos acima.
@@ -74,7 +110,7 @@ O CI (`.github/workflows/query-engine.yml`) roda `npm test` + `pytest` a cada pu
 toque `query_engine/`, `supabase/functions/` ou `src/lib/`, e só publica no Lambda se os dois
 passarem — são as barreiras de privacidade/segurança (bloqueio de linha bruta, extração de
 coluna do RBAC) que não podem regredir em silêncio. (k-anonimato foi removido em 2026-08-08
-por decisão de produto — ver `contexto/30-decisoes.md` D-012.)
+por decisão de produto — ver `contexto_interno/30-decisoes.md` D-012.)
 
 **Migrations não são aplicadas por CLI.** `supabase/config.toml` só contém `project_id`;
 o fluxo real é copiar o SQL no **SQL Editor do painel Supabase** e rodar, na ordem do §6, lendo o
@@ -121,7 +157,7 @@ divergência de `_shared/*` que podia aparecer sem ninguém ter feito deploy dei
 
 ⛔ **E fica mais perigosa numa coisa só, que já custou uma queda:** a Vercel publica o front **no
 push**, a Edge Function **não**. Toda mudança de contrato entre os dois é par indivisível com deploy
-assimétrico — o front chega antes, sempre. Ver `contexto/31-incidentes-e-licoes.md` I-14, e a regra
+assimétrico — o front chega antes, sempre. Ver `contexto_interno/31-incidentes-e-licoes.md` I-14, e a regra
 que nasceu dele: **ponte de compatibilidade, nunca janela.**
 
 Como conferir os três consumidores de `_shared/query_plan.ts` sem Docker (o `functions download`
@@ -167,8 +203,8 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `src/lib/colunas.ts` | ⭐ metade de um contrato entre duas linguagens — normaliza nome de coluna, e o Python espelha. Tabela de casos replicada nos testes dos dois lados |
 | `src/lib/google-sheets.ts` | extrai `id` **e `gid`** da URL colada (`extrairSheetRef`); `extrairSheetId` é wrapper |
 | `query_engine/config.py` | segredos via SSM Parameter Store — nunca `.env` com valor |
-| `query_engine/cache.py` | TTL de 15 min, **ligado** desde 2026-08-07 (`contexto/30-decisoes.md` D-011) |
-| `contexto/12-visao-tecnologica.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
+| `query_engine/cache.py` | TTL de 15 min, **ligado** desde 2026-08-07 (`contexto_interno/30-decisoes.md` D-011) |
+| `contexto_interno/12-visao-tecnologica.md` | ⭐ arquitetura do chat + query engine (§9 lá: chat ≠ dashboard) |
 | `infra/aws/PASSO-A-PASSO.md` | histórico do plano de EC2 **abandonado** — aponta pra `infra/aws/` |
 | `supabase/migrations/` | aplicar **em ordem** (§6), e à mão pelo SQL Editor |
 | `supabase/functions/ai-plum-chat/` | chat: Agente Z/A/C + `execute_plan` (executor real) |
@@ -183,7 +219,7 @@ armadilhas. Se um arquivo não está listado, faz o que o nome diz.
 | `infra/aws/PASSO-A-PASSO.md` | ⭐ fonte única de verdade do executor — **não duplicar** |
 | `testes/chat/` | roteiros de validação **manual** — não roda no CI (ver README lá) |
 | o PRD antigo (apagado em 2026-08-14) | visão/roadmap — **NÃO** é o schema real (§3) |
-| `contexto/31-incidentes-e-licoes.md` I-01 | ⭐ pós-mortem do escalonamento de privilégio (origem do §4) |
+| `contexto_interno/31-incidentes-e-licoes.md` I-01 | ⭐ pós-mortem do escalonamento de privilégio (origem do §4) |
 
 ---
 
@@ -427,7 +463,7 @@ Três invocações sequenciais, todas recebendo `schemaMetadata`:
    ⚠️ **Plano com data absoluta nunca é guardado** (`planoTemData`): "quanto faturei hoje"
    vira `["2026-08-12", ...]`, e reusar amanhã devolveria o dia errado em silêncio. Estender
    o cache a datas relativas foi avaliado e **recusado** — ver
-   `contexto/30-decisoes.md` D-024.
+   `contexto_interno/30-decisoes.md` D-024.
 3. `synthesize_answer` — **Agente C** (Sintetizador). Vê a pergunta + o vetor de resultados
    do executor, **nunca a base**. Não inventa número que não esteja no resultado.
 
@@ -498,9 +534,9 @@ precisa de agregação, sempre, sem exceção), teto de linhas verificado **ante
 nunca um filtro silenciosamente ignorado. `column_roles` (percent/date/number/text) substitui
 a antiga constante global `_PCT_COLS`/`_STRING_COLS` — mas continua derivado por **keyword-
 match em texto livre** sobre a `cleaning_rule` do Agente 3, a mesma dívida do
-`contexto/20-pendencias.md` P7. Havia também **k-anonimato** aqui (grupo com menos de `k_min`
+`contexto_interno/20-pendencias.md` P7. Havia também **k-anonimato** aqui (grupo com menos de `k_min`
 linhas de origem era suprimido, contado em `suppressed_groups`) — removido em 2026-08-08 por
-decisão de produto, ver `contexto/30-decisoes.md` D-012. `suppressed_groups`
+decisão de produto, ver `contexto_interno/30-decisoes.md` D-012. `suppressed_groups`
 continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 
 ### Invariantes de produto
@@ -516,7 +552,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   ⚠️ **Uma exceção desde 2026-09-03, e só ela:** em "Editar Esquema" (base **já ativa**) os agentes
   2 e 3.1 gravam sem revisão prévia — a tela não tem botão de salvar, grava sozinha, e a correção é
   posterior. O R-06 continua inteiro no **chat** (nenhuma IA escreve) e no **cadastro** (o
-  dicionário só vale no "Finalizar e Salvar"). Ver `contexto/30-decisoes.md` D-058 e o I-15.
+  dicionário só vale no "Finalizar e Salvar"). Ver `contexto_interno/30-decisoes.md` D-058 e o I-15.
 - **R-11 Limites do plano:** colunas ∈ `allowed_cols`, agg ∈ {sum,avg,min,max,count},
   `limit` 1..500, **joins bloqueados**. Desde 2026-08-11 o `col` de uma agregação também
   aceita uma **expressão aritmética** — `{"agg":"sum","col":{"op":"mul","args":["qtd","preco"]}}`
@@ -534,7 +570,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - **R-12 k-Anonimato — removido em 2026-08-08.** Existia aqui até então: nenhum vetor de
   resultado saía sem agregação (isso **continua** valendo, ver R-02) e todo grupo precisava de
   no mínimo `k_min` linhas de origem, configurável por organização. A parte de "mínimo de
-  linhas por grupo" foi removida por decisão de produto — ver `contexto/30-decisoes.md` D-012 na
+  linhas por grupo" foi removida por decisão de produto — ver `contexto_interno/30-decisoes.md` D-012 na
   raiz do repo pelo raciocínio completo. Mantido aqui como registro histórico do número, não
   reintroduzir sem decisão de produto equivalente.
 - **O Plum não cria planilhas.** O usuário cola a URL da própria planilha e compartilha com
@@ -545,7 +581,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   os cards/perguntas de uma vez. O teto de linhas é checado **antes** do parse, pelos
   metadados da planilha. **Cache de dados (linhas) com TTL de 15 min ligado desde
   2026-08-07** (`query_engine/cache.py`, chave por planilha+aba+conjunto exato de colunas —
-  decisão registrada em `contexto/30-decisoes.md` D-011, aceitando conscientemente que a linha bruta do cliente
+  decisão registrada em `contexto_interno/30-decisoes.md` D-011, aceitando conscientemente que a linha bruta do cliente
   fica até 15 min na memória do processo). Cabeçalho e contagem de linhas têm cache próprio,
   separado, também 15 min.
 - **Chat é 100% privado por usuário.** RLS de `plum_chat` é `auth.uid() = user_id`.
@@ -606,7 +642,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   fora da árvore do layout, então um wrapper claro no app daria a todo diálogo do produto o
   tema errado. ⚠️ Se `.dark` voltar a ser usado, os tokens `--glow-*`, `--glass-*` e
   `--gradient-*` precisam ser redefinidos lá dentro: eles foram retunados de roxo para vinho
-  e só existem em `:root`. Ver `contexto/30-decisoes.md` D-029.
+  e só existem em `:root`. Ver `contexto_interno/30-decisoes.md` D-029.
 - ⭐ **O produto logado TEM tema escuro — é um terceiro mecanismo, `.tema-escuro`, não `.dark`.**
   Acrescentado depois do merge da landing (leva `feat/fase-5b-periodo-linha-e-tema`), então não
   estava documentado aqui até agora. `src/hooks/use-tema.ts` (usado uma única vez, em
@@ -623,7 +659,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   sobre tema, então herdavam a paleta escura por cascata. Corrigido com `return () =>
   classList.remove(...)` no efeito (fecha o caso normal, porque o hook só desmonta saindo do
   produto) **e** um efeito defensivo idêntico em `Index.tsx`/`Auth.tsx`/`NotFound.tsx` (fecha
-  o resto). Ver `contexto/31-incidentes-e-licoes.md` I-06.
+  o resto). Ver `contexto_interno/31-incidentes-e-licoes.md` I-06.
   ⚠️ **Escrita de `profiles.tema` é só via RPC**, nunca `UPDATE` direto: a única policy de
   UPDATE em `profiles` exige `id <> auth.uid()` (regra 5 abaixo) — abrir self-UPDATE
   reabriria a autopromoção que a migration de 2026-07-22 fechou. `definir_tema()` é
@@ -694,7 +730,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   link ou emoji. Quem renderiza é `src/components/RespostaMarkdown.tsx`, e **só** a bolha do
   assistente: a do usuário é texto literal, porque interpretar Markdown na pergunta reescreveria
   o que ele digitou. Mexeu no contrato de um lado, mexa no outro — prompt novo com front antigo
-  entrega `- ` literal ao usuário. Ver `contexto/30-decisoes.md` D-027.
+  entrega `- ` literal ao usuário. Ver `contexto_interno/30-decisoes.md` D-027.
 - ⚠️ **O extrator de classes do Tailwind é regex sobre o arquivo e não pula comentário.** Citar
   o nome de uma classe dentro de um comentário faz o CSS dela ser gerado — utilitário morto no
   bundle (custou 2,08 kB em 2026-08-11, só por explicar o que havia antes). Descreva a classe
@@ -729,8 +765,8 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   propósito, para não ter a mesma heurística em duas linguagens. O que sobra de dívida real é
   menor: quem escolhe o `type` continua sendo um LLM (Agente 3) olhando 5 linhas de amostra.
 - A matriz de permissões (quais colunas cada cargo vê) ainda mora só em `Dashboard.tsx`,
-  duplicada em intenção com um plano nunca aplicado (`contexto/20-pendencias.md` P9, na
-  raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `contexto/20-pendencias.md` P9 — o
+  duplicada em intenção com um plano nunca aplicado (`contexto_interno/20-pendencias.md` P9, na
+  raiz do repo) que queria movê-la para `Cfgdatabase.tsx`. Ver `contexto_interno/20-pendencias.md` P9 — o
   plano continua válido, só não é prioridade no momento.
 - ~~Pelo menos uma base em produção tem `datasets.google_sheet_id` guardando a URL completa~~
   — **não se confirmou (conferido em 2026-08-11).** As 3 bases em produção têm ID puro, 44
@@ -759,7 +795,7 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
   algum dia o `schema_metadata` passar a guardar o cabeçalho original por coluna, a normalização
   em Python deixa de ser necessária — e é a saída preferível, porque elimina a duplicação
   acima. Não é retroativo: o original das bases atuais já foi perdido.
-- Chat real (`execute_plan`) — RESOLVIDO em 2026-08-08, ver `contexto/31-incidentes-e-licoes.md` I-07. O 403
+- Chat real (`execute_plan`) — RESOLVIDO em 2026-08-08, ver `contexto_interno/31-incidentes-e-licoes.md` I-07. O 403
   `"base nao encontrada"` original não reproduzia mais, e o 403 diferente que apareceu depois
   (`aws4fetch` → Function URL do Lambda) já tinha sido corrigido: a Function URL com
   `AuthType=AWS_IAM` exige tanto `lambda:InvokeFunctionUrl` quanto `lambda:InvokeFunction` na
@@ -809,8 +845,8 @@ continua no retorno por compatibilidade com quem consome a resposta, sempre `0`.
 - [ ] Explique brevemente cada alteração feita (convenção deste projeto).
 - [ ] ⭐ **Mudou algum FATO sobre o produto** (não só código) — uma decisão, uma pendência, um
       comportamento, uma crença que se revelou falsa? **Rode a skill `contexto-plum`.** Ela roteia a
-      mudança para o arquivo certo de `contexto/` e impede que o mesmo fato ganhe dois donos. Sem
-      esse passo, `contexto/` apodrece como `docs/` apodreceu.
+      mudança para o arquivo certo de `contexto_interno/` e impede que o mesmo fato ganhe dois donos. Sem
+      esse passo, `contexto_interno/` apodrece como `docs/` apodreceu.
 
 ---
 
@@ -830,18 +866,18 @@ própria sessão ou digite `/`.
 |---|---|
 | Arquivo | O que traz |
 |---|---|
-| ⭐ `contexto/00-LEIA-PRIMEIRO.md` | O roteador. Se você é novo aqui, comece por ele |
-| ⭐ `contexto/03-erros-comuns.md` | As crenças falsas que este repo produz, com a verdade ao lado. 60 linhas |
-| ⭐ `contexto/30-decisoes.md` | **O porquê de cada escolha**, com o que foi rejeitado junto. É o que o código não conta |
-| `contexto/31-incidentes-e-licoes.md` | O que já deu errado e qual regra nasceu disso |
-| `contexto/20-pendencias.md` | Trabalho adiado, por dificuldade, com o raciocínio junto |
-| `contexto/02-plataforma-vs-implementacao.md` | O teste que toda proposta de feature tem de passar |
-| `contexto/12-visao-tecnologica.md` | Arquitetura-alvo do remake (⚠️ proposta, não é o que está no ar) |
+| ⭐ `contexto_interno/00-LEIA-PRIMEIRO.md` | O roteador. Se você é novo aqui, comece por ele |
+| ⭐ `contexto_interno/03-erros-comuns.md` | As crenças falsas que este repo produz, com a verdade ao lado. 60 linhas |
+| ⭐ `contexto_interno/30-decisoes.md` | **O porquê de cada escolha**, com o que foi rejeitado junto. É o que o código não conta |
+| `contexto_interno/31-incidentes-e-licoes.md` | O que já deu errado e qual regra nasceu disso |
+| `contexto_interno/20-pendencias.md` | Trabalho adiado, por dificuldade, com o raciocínio junto |
+| `contexto_interno/02-plataforma-vs-implementacao.md` | O teste que toda proposta de feature tem de passar |
+| `contexto_interno/12-visao-tecnologica.md` | Arquitetura-alvo do remake (⚠️ proposta, não é o que está no ar) |
 | `DESIGN.md` | Sistema de design: as duas superfícies, paleta validada, os cinco estados do card |
 | `infra/aws/PASSO-A-PASSO.md` | Como subir o executor — fonte única |
 | `supabase/migrations/CLAUDE.md` | Como aplicar migration, e as regras de segurança do banco |
 
 ⚠️ **O histórico narrativo foi apagado em 2026-08-14** (`docs/`, incluindo `fases dashboard/`, os
 logs de PR e os documentos de fase). O que sobreviveu daquilo é o **fato** e o **porquê**, em
-`contexto/30-decisoes.md` e `contexto/31-incidentes-e-licoes.md`. Medições e prompts literais que
+`contexto_interno/30-decisoes.md` e `contexto_interno/31-incidentes-e-licoes.md`. Medições e prompts literais que
 só existiam nos documentos de fase **não** foram preservados — se precisar deles, `git log`.

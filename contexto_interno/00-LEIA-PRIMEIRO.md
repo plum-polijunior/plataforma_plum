@@ -34,7 +34,7 @@ atualizado_em: 2026-09-03
 
 | Não leia | Por quê |
 |---|---|
-| `zz_remake/*.md` (a raiz da pasta) | Rascunhos da discussão do remake (`REMAKE-PLUM-tese-e-arquitetura_V1..V7`). ⚠️ **Contêm propostas contraditórias entre si, de propósito** — são a conversa, não a conclusão. A conclusão está em `contexto/` |
+| `zz_remake/*.md` (a raiz da pasta) | Rascunhos da discussão do remake (`REMAKE-PLUM-tese-e-arquitetura_V1..V7`). ⚠️ **Contêm propostas contraditórias entre si, de propósito** — são a conversa, não a conclusão. A conclusão está em `contexto_interno/` |
 | `zz_remake_2/` | Trabalho **fora de escopo** enquanto o remake não terminar — o próprio `LEIA-PRIMEIRO.md` de lá diz isso. Não é continuação: é outra coisa, guardada para depois |
 
 ⭐⭐ **`zz_remake/zz_remake_implementation/` é o oposto: leia.** É onde vive o plano de
@@ -53,7 +53,7 @@ nome, e desde 2026-09-03 os dois estão **dentro de `zz_remake/`** — a pasta d
 
 Ver `03-erros-comuns.md`.
 
-⚠️ **`docs/` e `contexto/90-arquivo/` não existem mais** — foram apagados em 2026-08-14, depois de o
+⚠️ **`docs/` e `contexto_interno/90-arquivo/` não existem mais** — foram apagados em 2026-08-14, depois de o
 **fato** e o **porquê** de cada coisa terem sido extraídos para `30-decisoes.md` e
 `31-incidentes-e-licoes.md`. Se algum arquivo aqui ainda apontar para lá, é resquício: corrija.
 
@@ -95,10 +95,10 @@ pergunta, um deles está velho. Os donos são:
 | Qual é o schema do banco? | `supabase/migrations/` (o `login_supabase.sql` está lá dentro). **Nada mais** |
 | Como rodo, testo, faço deploy? | `CLAUDE.md` (raiz) |
 | Quais são as armadilhas desta pasta? | o `CLAUDE.md` da própria pasta |
-| Por que decidimos assim? | `contexto/30-decisoes.md` |
+| Por que decidimos assim? | `contexto_interno/30-decisoes.md` |
 | Como subo o executor na AWS? | `infra/aws/PASSO-A-PASSO.md` |
 | Qual é o sistema de design? | `DESIGN.md` |
-| O que está pendente? | `contexto/20-pendencias.md` |
+| O que está pendente? | `contexto_interno/20-pendencias.md` |
 
 ---
 

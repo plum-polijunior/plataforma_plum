@@ -6,7 +6,7 @@ Como subir/operar: **`infra/aws/PASSO-A-PASSO.md`** — fonte única, não dupli
 ⚠️ **`implementation.md` e `prd.md` foram apagados em 2026-08-14** — ficam registrados aqui porque
 os dois circularam bastante e podem reaparecer numa branch antiga ou no Drive. Se encontrar cópia:
 o `implementation.md` descreve a arquitetura **EC2 abandonada**, e o `prd.md` §6 afirma que o cache
-está desligado quando ele está **LIGADO** desde 2026-08-07 (TTL 15 min, `contexto/30-decisoes.md`
+está desligado quando ele está **LIGADO** desde 2026-08-07 (TTL 15 min, `contexto_interno/30-decisoes.md`
 D-011). Nenhum dos dois é fonte de verdade sobre nada.
 
 ## 1. Motorista cego — a regra que define esta pasta
@@ -27,13 +27,13 @@ credencial AWS · frescor · RBAC de coluna. Vazar uma não basta para forjar a 
 
 | Proteção | Por quê |
 |---|---|
-| `RawRowsBlocked` | todo plano precisa de agregação. ⚠️ Em revisão pelo remake (`contexto/30-decisoes.md` D-033) |
+| `RawRowsBlocked` | todo plano precisa de agregação. ⚠️ Em revisão pelo remake (`contexto_interno/30-decisoes.md` D-033) |
 | `RowLimitExceeded` **antes do parse** | o `limit` do plano corta a saída, nunca protegeu a entrada |
 | `MissingColumnError` | coluna referenciada e não carregada é **erro**. Filtro ignorado em silêncio devolveria o total da base com o rótulo do recorte — número errado com etiqueta convincente |
 
 ⚠️ **k-anonimato foi REMOVIDO em 2026-08-08.** `suppressed_groups` continua no retorno por
 compatibilidade, sempre `0`. **Não reintroduzir nada dessa família** — ver
-`contexto/30-decisoes.md` D-012.
+`contexto_interno/30-decisoes.md` D-012.
 
 ## 4. `sheets.py` — três coisas não óbvias
 
@@ -46,7 +46,7 @@ compatibilidade, sempre `0`. **Não reintroduzir nada dessa família** — ver
 
 Mexeu em `normalizar_coluna`? Mexa em `src/lib/colunas.ts` **e nas duas tabelas de 26 casos**
 (`query_engine/tests/test_sheets.py` e `src/lib/colunas.test.ts`). Divergir aqui não vira bypass —
-vira "coluna não encontrada". Ver `contexto/30-decisoes.md` D-017.
+vira "coluna não encontrada". Ver `contexto_interno/30-decisoes.md` D-017.
 
 ## 6. Segredos e testes
 

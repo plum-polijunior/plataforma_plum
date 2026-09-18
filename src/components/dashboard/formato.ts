@@ -19,7 +19,7 @@
  * indevido é informação falsa.
  *
  * Isto é a mesma dívida de keyword-match registrada em
- * `contexto/20-pendencias.md` — a diferença é que aqui ela só afeta a
+ * `contexto_interno/20-pendencias.md` — a diferença é que aqui ela só afeta a
  * exibição, nunca o cálculo.
  */
 const PISTAS_MOEDA = [
@@ -55,7 +55,7 @@ export function formatarValor(valor: number, unidade: Unidade): string {
     //   texto "10%" numa célula comum               → 10    (pontos)
     //
     // Nada no `formatting_rule` diz qual é: o `type` informa QUE é percentual,
-    // não em QUE escala. É a dívida C7 de `contexto/20-pendencias.md`.
+    // não em QUE escala. É a dívida C7 de `contexto_interno/20-pendencias.md`.
     //
     // O corte: abaixo de 1 assume-se fração. É `< 1` e não `<= 1` de propósito
     // — uma média de exatamente 1,0 é comum em coluna de pontos (1% médio) e
@@ -65,7 +65,7 @@ export function formatarValor(valor: number, unidade: Unidade): string {
     // todos abaixo de 1% (0,3% de taxa, por exemplo) seria multiplicada por 100
     // e mostraria 30%. O conserto certo é no executor, que enxerga a COLUNA
     // INTEIRA em vez de um agregado — decidir a escala com 40 valores à vista é
-    // outra coisa. Ver `contexto/20-pendencias.md` C7.
+    // outra coisa. Ver `contexto_interno/20-pendencias.md` C7.
     const emPontos = Math.abs(valor) < 1 ? valor * 100 : valor;
     // Percentual nunca é compactado: "12,9 mil %" não existe.
     return `${emPontos.toLocaleString("pt-BR", {

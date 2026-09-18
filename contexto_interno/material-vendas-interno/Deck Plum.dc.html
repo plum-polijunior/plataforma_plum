@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&amp;family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+html, body { margin: 0; padding: 0; background: #241B20; }
+a { color: #7A2F56; }
+a:hover { color: #5C2340; }
+</style>
+</helmet>
+<x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1920" height="1080" hint-size="100%,100%" data-uneditable="">
+
+<section data-label="Capa" data-screen-label="01" style="background:#F4F2F6 url('assets/capa-bg-v3.jpg') center/cover no-repeat;color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;padding:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="display:block;width:680px;height:680px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 58%, rgba(0,0,0,0) 76%);mask-image:radial-gradient(circle at center, #000 58%, rgba(0,0,0,0) 76%);" />
+  <div style="background:#7A2F56;border-radius:12px;padding:30px 56px;box-shadow:0 18px 44px rgba(122,47,86,0.24);display:flex;flex-direction:column;gap:10px;">
+    <p style="font:400 34px/1.3 'Newsreader',serif;color:#fff;margin:0;text-align:center;">Do dado à decisão, em segundos.</p>
+    <p style="font:400 34px/1.3 'Newsreader',serif;color:#fff;margin:0;text-align:center;">O Plum é a camada que faz a IA acertar.</p>
+  </div>
+</section>
+
+<section data-label="Quem somos" data-screen-label="02" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;padding:100px 108px 84px;display:flex;flex-direction:column;overflow:hidden;" data-speaker-notes="">
+  <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.16em;text-transform:uppercase;color:#7A2F56;margin:0 0 40px;">Poli Júnior</p>
+  <h2 style="font:400 76px/1.08 'Newsreader',serif;margin:0 0 60px;letter-spacing:-0.01em;">Quem somos?</h2>
+  <div style="display:grid;grid-template-columns:1.35fr 0.65fr;gap:90px;align-items:center;">
+    <div style="display:flex;flex-direction:column;gap:40px;">
+      <p style="font:400 38px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">A Poli Júnior é uma <span style="font-weight:700;color:#1E1E24;">associação civil sem fins lucrativos</span>, constituída por <span style="font-weight:700;color:#1E1E24;">alunos da Escola Politécnica da USP</span>, <span style="font-weight:700;color:#1E1E24;">melhor faculdade de engenharia da América Latina</span>.</p>
+      <p style="font:400 38px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Executamos <span style="font-weight:700;color:#1E1E24;">projetos de sucesso</span> em <span style="font-weight:700;color:#1E1E24;">diversas áreas da engenharia</span>.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:36px;align-items:center;">
+      <img src="assets/logo-poli-junior.png" alt="Poli Júnior" style="display:block;width:100%;max-width:420px;height:auto;border-radius:10px;" />
+      <img src="assets/logo-poli-usp.png" alt="Escola Politécnica da USP" style="display:block;width:280px;height:auto;" />
+    </div>
+  </div>
+</section>
+
+<section data-label="Empresas parceiras" data-screen-label="03" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;padding:96px 108px 84px;display:flex;flex-direction:column;overflow:hidden;" data-speaker-notes="">
+  <h2 style="font:400 60px/1.12 'Newsreader',serif;margin:0 0 66px;max-width:1100px;letter-spacing:-0.01em;">Quem conta com as soluções da Poli Júnior</h2>
+  <div style="flex:1;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(3,1fr);gap:24px;">
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/01.png" alt="Bradesco" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/02.png" alt="Life Fitness" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/03.png" alt="Vale do Minho" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/04.png" alt="Track &amp; Field" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/05.png" alt="St Marche" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/06.png" alt="Ambev" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/07.png" alt="Itaú" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/08.png" alt="OLX" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/09.png" alt="Soma Uma" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/10.png" alt="Mercado Livre" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/11.png" alt="Vigor" style="max-width:100%;max-height:100%;object-fit:contain;" /></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/12.png" alt="Tok&amp;Stok" style="max-width:100%;max-height:100%;object-fit:contain;" /></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/13.png" alt="Banco Pine" style="max-width:100%;max-height:100%;object-fit:contain;" /></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/14.png" alt="PlayKids" style="max-width:100%;max-height:100%;object-fit:contain;" /></div>
+    <div style="background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:34px;"><img src="assets/parceiras/15.png" alt="Klabin" style="max-width:100%;max-height:100%;object-fit:contain;" /></div>
+  </div>
+</section>
+
+<section data-label="Chat convencional" data-screen-label="04" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:96px 108px 84px;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <div style="display:flex;flex-direction:column;gap:52px;">
+    <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;text-wrap:pretty;">O que acontece ao colocar suas planilhas num chat de IA convencional?</h2>
+    <div style="display:flex;flex-direction:column;gap:34px;">
+      <p style="font:400 30px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;"><span style="font-weight:700;color:#1E1E24;">Vai funcionar.</span> A resposta vem em segundos, bem escrita, com o número no meio da frase.</p>
+      <p style="font:400 30px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;"><span style="font-weight:700;color:#1E1E24;">E aí você conferiu um dado.</span> Estava errado.</p>
+      <p style="font:700 30px/1.45 'Public Sans',sans-serif;color:#1E1E24;margin:0;">O problema não é ter errado. É você não ter como saber.</p>
+    </div>
+  </div>
+  <div style="background:rgba(255,255,255,0.72);border-radius:20px;box-shadow:0 30px 70px rgba(36,27,32,0.10);padding:44px 46px;display:flex;flex-direction:column;gap:34px;">
+    <p style="font:500 24px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#A79FA4;margin:0;">Chat de IA · exemplo</p>
+    <div style="align-self:flex-end;max-width:88%;background:#EFEFF2;border-radius:18px 18px 6px 18px;padding:24px 30px;">
+      <p style="font:600 30px/1.4 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Tive alguma venda extraordinária em agosto?</p>
+    </div>
+    <p style="font:italic 400 30px/1.6 'Public Sans',sans-serif;color:#2D2B38;margin:0;">Sim. Suas vendas em agosto somaram <span style="font-style:normal;font-weight:700;color:#B3261E;">R$ 85.100</span> <span style="font-style:normal;font-weight:700;color:#B3261E;font-size:26px;">✗</span> — <span style="color:#CF7A72;text-decoration:underline;text-decoration-style:dashed;text-underline-offset:7px;">o melhor mês do semestre</span>, <span style="color:#CF7A72;text-decoration:underline;text-decoration-style:dashed;text-underline-offset:7px;">puxadas por um pico na segunda quinzena</span>.</p>
+  </div>
+</section>
+
+<section data-label="Arquitetura" data-screen-label="05" data-speaker-notes="Esse erro aconteceu no nosso próprio produto, em agosto de 2026, e foi o que nos levou a mudar a arquitetura: nenhum agente faz conta, nunca, mesmo quando os dois números estão na tela e a multiplicação parece óbvia. Contar que o erro foi nosso é mais forte do que atribuí-lo a um terceiro — demonstra que a defesa nasceu de dor real." style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:82px 108px 70px;display:flex;flex-direction:column;gap:48px;overflow:hidden;">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">Não é falta de prompt. É falta de arquitetura.</h2>
+  <div style="display:grid;grid-template-columns:0.82fr 1.18fr;gap:70px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:26px;">
+      <p style="font:400 28px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;">Modelo de linguagem prevê a próxima palavra. <span style="font-weight:700;color:#1E1E24;">Número, para ele, é palavra.</span></p>
+      <p style="font:400 28px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;">Ele soma no texto, arredonda no texto, e devolve com a mesma confiança de quando acerta.</p>
+      <p style="font:500 36px/1.28 'Newsreader',serif;color:#7A2F56;margin:8px 0 0;">Um número errado que parece certo não dispara alarme nenhum.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;">
+      <div style="background:#EFEFF2;padding:22px 30px;"><p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.08em;text-transform:uppercase;color:#6C6570;margin:0;">IA sozinha</p></div>
+      <div style="background:#E8D3DF;padding:22px 30px;"><p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.08em;text-transform:uppercase;color:#7A2F56;margin:0;">IA + Plum</p></div>
+      <div style="background:#EFEFF2;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">a IA calcula</p></div>
+      <div style="background:#F3E7EE;padding:26px 30px;"><p style="font:700 26px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">a IA nunca calcula</p></div>
+      <div style="background:#EFEFF2;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">o número sai do texto</p></div>
+      <div style="background:#F3E7EE;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">o número sai de um motor determinístico</p></div>
+      <div style="background:#EFEFF2;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">infere o contexto com confiança, mesmo errando</p></div>
+      <div style="background:#F3E7EE;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">só usa os contextos que vocês aprovaram</p></div>
+      <div style="background:#EFEFF2;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">erro plausível, sem aviso</p></div>
+      <div style="background:#F3E7EE;padding:26px 30px;"><p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">o erro é estruturalmente impossível</p></div>
+    </div>
+  </div>
+  <div style="margin-top:auto;background:rgba(255,255,255,0.62);border-radius:14px;padding:34px 40px;display:flex;gap:34px;align-items:flex-start;box-shadow:0 14px 40px rgba(36,27,32,0.06);">
+    <p style="font:600 24px/1.2 'Public Sans',sans-serif;letter-spacing:0.12em;text-transform:uppercase;color:#7A2F56;margin:4px 0 0;flex:0 0 auto;">caso real</p>
+    <p style="font:400 26px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Os R$ 85.100 do slide anterior: o modelo pegou 1.480 unidades e preço médio de R$ 57,50 e multiplicou os dois. <span style="font-weight:700;color:#1E1E24;">Isso só é receita se todo produto custar o mesmo</span> — e ali eles iam de R$ 2,50 a R$ 90,00. O número estava errado, <span style="font-weight:700;color:#1E1E24;">tinha a ordem de grandeza certa</span>, e o decisor não tinha como saber.</p>
+  </div>
+</section>
+
+<section data-label="A solução" data-screen-label="06" data-speaker-notes="Pergunta que sempre vem: &quot;por que a própria IA não faz isso?&quot; Resposta: porque a garantia depende do negócio, não do modelo. O que faturamento significa aqui, qual das duas colunas de data vale, que o mês fecha no dia 25 — isso é o dicionário da operação do cliente. Nenhum modelo genérico vem com o significado dos dados dele dentro." style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:100px 108px 84px;display:flex;flex-direction:column;overflow:hidden;">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">O Plum é o que falta entre a IA e os seus dados.</h2>
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+    <div style="display:grid;grid-template-columns:auto 300px auto 340px auto 250px auto;grid-template-rows:auto auto;align-items:center;justify-items:center;column-gap:0;row-gap:20px;">
+      <div style="background:rgba(255,255,255,0.62);border-radius:14px;padding:34px 40px;box-shadow:0 14px 40px rgba(36,27,32,0.07);"><p style="font:700 32px/1 'Public Sans',sans-serif;letter-spacing:0.1em;color:#1E1E24;margin:0;">DECISOR</p></div>
+      <p style="font:400 48px/1 'Public Sans',sans-serif;color:#7A2F56;margin:0;">⇄</p>
+      <div style="background:rgba(255,255,255,0.62);border-radius:14px;padding:34px 44px;box-shadow:0 14px 40px rgba(36,27,32,0.07);"><p style="font:700 32px/1 'Public Sans',sans-serif;letter-spacing:0.1em;color:#1E1E24;margin:0;">IA</p></div>
+      <p style="font:400 48px/1 'Public Sans',sans-serif;color:#7A2F56;margin:0;">⇄</p>
+      <div style="background:#7A2F56;border-radius:14px;padding:40px 52px;box-shadow:0 18px 44px rgba(122,47,86,0.28);"><p style="font:700 38px/1 'Public Sans',sans-serif;letter-spacing:0.12em;color:#fff;margin:0;">PLUM</p></div>
+      <p style="font:400 48px/1 'Public Sans',sans-serif;color:#7A2F56;margin:0;">⇄</p>
+      <div style="background:rgba(255,255,255,0.62);border-radius:14px;padding:34px 40px;box-shadow:0 14px 40px rgba(36,27,32,0.07);display:flex;flex-direction:column;gap:10px;align-items:flex-start;">
+        <p style="font:700 32px/1 'Public Sans',sans-serif;letter-spacing:0.1em;color:#1E1E24;margin:0;">PLANILHAS</p>
+        <p style="font:400 24px/1 'Public Sans',sans-serif;color:#A79FA4;margin:0;">+ documentos</p>
+      </div>
+      <div></div>
+      <p style="font:italic 400 24px/1.35 'Public Sans',sans-serif;color:#6C6570;margin:0;text-align:center;padding:0 16px;">pergunta em português, interpreta o resultado</p>
+      <div></div>
+      <p style="font:italic 400 24px/1.35 'Public Sans',sans-serif;color:#6C6570;margin:0;text-align:center;padding:0 16px;">calcula, confere contra o dicionário, aplica permissão e devolve o número pronto</p>
+      <div></div>
+      <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.08em;text-transform:uppercase;color:#7A2F56;margin:0;background:#F3E7EE;border-radius:999px;padding:12px 22px;white-space:nowrap;">somente leitura</p>
+      <div></div>
+    </div>
+  </div>
+  <p style="font:400 34px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;">A IA pergunta. O Plum calcula. <span style="font-weight:700;color:#1E1E24;">A conta nunca sai do texto.</span></p>
+</section>
+
+<section data-label="Na prática" data-screen-label="07" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:72px 88px 64px;display:flex;flex-direction:column;gap:34px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">A mesma pergunta. Agora com o número certo.</h2>
+  <div style="background:#7A2F56;border-radius:20px;padding:36px 44px;display:grid;grid-template-columns:1fr 88px 1.25fr;align-items:center;gap:0;overflow:hidden;">
+    <div style="min-width:0;max-height:100%;box-sizing:border-box;background:#fff;border-radius:14px;padding:20px;box-shadow:0 26px 60px rgba(36,27,32,0.30);display:flex;">
+      <img src="assets/print-prompt.png" alt="Novo card com a pergunta em português" style="display:block;width:100%;max-height:100%;object-fit:contain;border-radius:6px;">
+    </div>
+    <p style="font:400 56px/1 'Public Sans',sans-serif;color:rgba(255,255,255,0.9);margin:0;text-align:center;">→</p>
+    <div style="min-width:0;max-height:100%;box-sizing:border-box;background:#fff;border-radius:14px;padding:16px;box-shadow:0 26px 60px rgba(36,27,32,0.30);display:flex;">
+      <img src="assets/print-dashboard.png" alt="Gráfico de receita por mês com variações" style="display:block;width:100%;max-height:100%;object-fit:contain;border-radius:6px;">
+    </div>
+  </div>
+  <p style="font:400 32px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;max-width:1500px;text-wrap:pretty;">A IA disse que agosto foi o melhor mês do semestre. <span style="font-weight:700;color:#1E1E24;">Foi o pior, com queda de 61%.</span> Entre a alucinação dita com confiança e o cálculo do motor determinístico, <span style="font-weight:700;color:#1E1E24;">a diferença foi de R$ 56,3 mil</span> — no mesmo mês, sobre os mesmos dados.</p>
+</section>
+
+<section data-label="O dicionário" data-screen-label="08" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:64px 108px 44px;display:flex;flex-direction:column;gap:30px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 54px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">A garantia não vem do software. Vem de estruturar seus dados.</h2>
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="background:rgba(255,255,255,0.62);border-radius:12px;padding:22px 44px;display:flex;flex-direction:column;gap:8px;box-shadow:0 10px 28px rgba(36,27,32,0.04);">
+        <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#A98BA0;margin:0;">01 · Padronizar</p>
+        <p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Entendemos a estrutura dos seus dados e os jargões utilizados, formatando e limpando os valores <span style="font-weight:700;color:#1E1E24;">antes de fazer qualquer cálculo</span>.</p>
+      </div>
+      <div style="background:rgba(255,255,255,0.62);border-radius:12px;padding:22px 44px;display:flex;flex-direction:column;gap:8px;box-shadow:0 10px 28px rgba(36,27,32,0.04);">
+        <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#A98BA0;margin:0;">02 · Explicar</p>
+        <p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Escrevemos com o seu time o que cada dado significa aqui dentro: o que conta como faturamento, qual data vale, o que nunca se soma.</p>
+      </div>
+    </div>
+    <div style="background:#7A2F56;border-radius:18px;padding:26px 44px 28px;display:flex;flex-direction:column;justify-content:flex-start;gap:14px;box-shadow:0 22px 54px rgba(122,47,86,0.26);">
+      <p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.14em;text-transform:uppercase;color:#E8C9D9;margin:0;">03 · Encontrar</p>
+      <p style="font:400 40px/1.3 'Public Sans',sans-serif;color:#fff;margin:0;max-width:1450px;text-wrap:pretty;">Conecte todas as suas planilhas — <span style="font-weight:700;">o Plum cruza os dados de todas</span>.</p>
+      <div style="background:rgba(255,255,255,0.14);border-radius:12px;padding:24px 30px;display:flex;flex-direction:column;gap:10px;max-width:1450px;">
+        <p style="font:500 32px/1.3 'Public Sans',sans-serif;color:#fff;margin:0;">“Consigo pagar as dívidas de hoje?”</p>
+        <p style="font:400 24px/1.4 'Public Sans',sans-serif;color:#EFD8E5;margin:0;">pega o saldo em <span style="font-family:ui-monospace,monospace;">fluxo_de_caixa.xlsx</span> e compara com a dívida em <span style="font-family:ui-monospace,monospace;">orcamento.xlsx</span></p>
+      </div>
+    </div>
+    <p style="font:500 36px/1.3 'Newsreader',serif;color:#7A2F56;margin:0;">E ele só sabe porque os passos 1 e 2 ensinaram.</p>
+  </div>
+  <p style="font:400 28px/1.45 'Public Sans',sans-serif;color:#5A545F;margin:0;max-width:1560px;border-top:1px solid #DDD6DE;padding-top:22px;text-wrap:pretty;">Isso é o <span style="font-weight:600;color:#2D2B38;">onboarding de dados</span>: semanas de trabalho com o seu time. O entregável é seu — e é o que faz o Plum funcionar. Nenhuma ferramenta de prateleira entrega isso.</p>
+</section>
+
+<section data-label="Contrato × planilha" data-screen-label="09" data-speaker-notes="O documento entra como fonte de regra, nunca como objeto de análise — resumir contrato a IA generativa já faz muito bem, e não é aí que está o nosso valor. O parâmetro extraído da cláusula é tratado como presunção e aparece sempre na resposta, com a citação literal e o link para o trecho: &quot;apliquei desconto máximo de 15%, extraído da cláusula 7.2, pág. 4&quot;. Nenhum chat genérico consegue dizer de onde veio a regra que aplicou." style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:70px 108px 60px;display:flex;flex-direction:column;gap:28px;overflow:hidden;">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 52px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">A regra está no contrato. O número está na planilha.</h2>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+    <div style="width:100%;max-width:1300px;display:flex;justify-content:space-between;gap:60px;">
+      <div style="background:rgba(255,255,255,0.62);border-radius:14px;padding:24px 30px;box-shadow:0 12px 34px rgba(36,27,32,0.06);min-width:420px;">
+        <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.12em;text-transform:uppercase;color:#7A2F56;margin:0 0 14px;">Contrato</p>
+        <p style="font:400 27px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">cláusula 7.2</p>
+        <p style="font:500 27px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">“desconto máximo de 15%”</p>
+      </div>
+      <div style="background:rgba(255,255,255,0.62);border-radius:14px;padding:24px 30px;box-shadow:0 12px 34px rgba(36,27,32,0.06);min-width:420px;text-align:right;">
+        <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.12em;text-transform:uppercase;color:#7A2F56;margin:0 0 14px;">Planilha de vendas</p>
+        <p style="font:400 27px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">12.400 linhas</p>
+        <p style="font:400 27px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">jan – ago</p>
+      </div>
+    </div>
+    <div style="width:100%;max-width:900px;display:flex;justify-content:space-between;">
+      <p style="font:600 62px/1 'Public Sans',sans-serif;color:#7A2F56;margin:0;">↘</p>
+      <p style="font:600 62px/1 'Public Sans',sans-serif;color:#7A2F56;margin:0;">↙</p>
+    </div>
+    <div style="background:#7A2F56;border-radius:999px;padding:20px 42px;box-shadow:0 16px 40px rgba(122,47,86,0.26);">
+      <p style="font:700 30px/1 'Public Sans',sans-serif;letter-spacing:0.14em;color:#fff;margin:0;">PLUM</p>
+    </div>
+    <p style="font:600 54px/1 'Public Sans',sans-serif;color:#7A2F56;margin:0;">↓</p>
+    <p style="font:400 30px/1.2 'Public Sans',sans-serif;color:#2D2B38;margin:0;">37 vendas violaram o contrato</p>
+    <p style="font:600 104px/1 'Newsreader',serif;color:#7A2F56;margin:0;letter-spacing:-0.02em;">R$ 84.200</p>
+    <div style="display:flex;align-items:center;gap:20px;">
+      <p style="font:400 24px/1 'Public Sans',sans-serif;color:#6C6570;margin:0;">↳ cláusula 7.2, pág. 4</p>
+      <a href="#" style="font:600 24px/1 'Public Sans',sans-serif;color:#fff;background:#7A2F56;border-radius:8px;padding:12px 22px;text-decoration:none;">ver trecho</a>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:44px;">
+    <p style="font:400 25px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;"><span style="font-weight:700;color:#7A2F56;">Fornecedor</span> — <span style="font-style:italic;">o reajuste aplicado nas notas ficou acima do índice que o contrato define?</span></p>
+    <p style="font:400 25px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;"><span style="font-weight:700;color:#7A2F56;">Crédito</span> — <span style="font-style:italic;">quais clientes estão acima do limite que a nossa própria política permite?</span></p>
+    <p style="font:400 25px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;"><span style="font-weight:700;color:#7A2F56;">Logística</span> — <span style="font-style:italic;">quantas entregas estouraram o SLA escrito no contrato, e o que isso custou?</span></p>
+  </div>
+  <p style="font:500 30px/1.35 'Newsreader',serif;color:#1E1E24;margin:0;">O documento diz a regra. O motor faz a conta. E o Plum mostra de qual cláusula a regra veio.</p>
+</section>
+
+<section data-label="Quando o Plum entra" data-screen-label="10" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:100px 108px 84px;display:flex;flex-direction:column;gap:70px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">Quando ninguém vai alocar um analista.</h2>
+  <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:22px;min-height:0;">
+      <p style="font:500 40px/1.2 'Newsreader',serif;color:#7A2F56;margin:0;">Cinco minutos antes da reunião.</p>
+      <p style="font:400 30px/1.5 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">A pergunta é simples, a resposta está na base, e não dá tempo de pedir para ninguém. Ele pergunta e entra na sala com o número.</p>
+      <img src="assets/exec-relogio.png" alt="Executivo olhando o relógio de pulso" style="display:block;width:100%;max-width:460px;height:auto;align-self:center;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(ellipse 46% 46% at 50% 50%, #000 62%, rgba(0,0,0,0) 100%);mask-image:radial-gradient(ellipse 46% 46% at 50% 50%, #000 62%, rgba(0,0,0,0) 100%);" />
+    </div>
+    <div style="display:flex;flex-direction:column;gap:22px;min-height:0;">
+      <p style="font:500 40px/1.2 'Newsreader',serif;color:#7A2F56;margin:0;">A análise que nunca vira prioridade.</p>
+      <p style="font:400 30px/1.5 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Precisa cruzar quatro coisas para uma decisão de médio porte. Não justifica abrir uma demanda — então a decisão sai sem o dado.</p>
+      <svg viewBox="0 0 520 340" style="width:100%;max-width:640px;height:auto;align-self:center;" aria-label="Diagrama cruzando fluxo de caixa, dívidas, comissões, estoque e contratos">
+        <g stroke="#C4A6B6" stroke-width="3">
+          <path d="M260 170 95 40M260 170 425 40M260 170 85 300M260 170 260 305M260 170 435 300"></path>
+        </g>
+        <g fill="#FFFFFF" stroke="#7A2F56" stroke-width="3">
+          <rect x="10" y="17" width="170" height="46" rx="23"></rect>
+          <rect x="340" y="17" width="170" height="46" rx="23"></rect>
+          <rect x="5" y="282" width="160" height="46" rx="23"></rect>
+          <rect x="180" y="282" width="160" height="46" rx="23"></rect>
+          <rect x="355" y="282" width="160" height="46" rx="23"></rect>
+        </g>
+        <g fill="#2D2B38" font-family="Public Sans, sans-serif" font-size="19" text-anchor="middle">
+          <text x="95" y="47">fluxo de caixa</text>
+          <text x="425" y="47">dívidas</text>
+          <text x="85" y="312">comissões</text>
+          <text x="260" y="312">estoque</text>
+          <text x="435" y="312">contratos</text>
+        </g>
+        <circle cx="260" cy="170" r="48" fill="#7A2F56"></circle>
+        <text x="260" y="177" fill="#FFFFFF" font-family="Public Sans, sans-serif" font-size="20" font-weight="700" letter-spacing="2" text-anchor="middle">PLUM</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-label="Case V.tal" data-screen-label="11" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:84px 108px 76px;display:flex;flex-direction:column;gap:44px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <img src="assets/logo-vtal.png" alt="V.tal" style="position:absolute;top:154px;left:1547px;transform:translateX(-50%);height:110px;width:auto;border-radius:8px;" />
+  <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.16em;text-transform:uppercase;color:#7A2F56;margin:0;">Cases de sucesso · V.tal</p>
+  <h2 style="font:400 50px/1.15 'Newsreader',serif;margin:0;max-width:1450px;letter-spacing:-0.01em;">Economizando Mais de 4800 Horas Anuais com um Agente Copiloto de IA Generativa</h2>
+  <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:56px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+      <p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#7A2F56;margin:0;">Problema</p>
+      <p style="font:400 25px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">A V.tal operava com painéis e automações internas dispersas, gerando ineficiência e uma crescente preocupação na alta gestão. Essa fragmentação não apenas limitava a produtividade, mas também criava uma séria vulnerabilidade de segurança, com dados sigilosos sendo expostos em chatbots públicos, causando preocupação sobre a governança e o risco cibernético.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px;">
+      <p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#7A2F56;margin:0;">Solução</p>
+      <p style="font:400 25px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Para unificar a inteligência e garantir a governança, foi desenvolvido um agente de IA generativa customizado. Utilizando o Gemini na GCP, a solução foi integrada à nuvem da V.tal através de uma interface nova em Power Apps, capacitando a alta gestão com funcionalidades de análise inteligente de documentos e outras tarefas estratégicas em um ambiente seguro.</p>
+    </div>
+    <div style="background:#F3E7EE;border-radius:14px;padding:30px 34px;display:flex;flex-direction:column;gap:22px;">
+      <p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#7A2F56;margin:0;">ROI</p>
+      <p style="font:400 25px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;">A solução centralizada otimizou o tempo de mais de 200 funcionários da alta gestão e 3.000 funcionários das equipes, impulsionando a estratégia.</p>
+      <p style="font:400 25px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;">Economia de mais de 4.800 horas anuais, convertendo-se em mais de R$585.000 anualmente em recursos estratégicos.</p>
+      <p style="font:400 25px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;">Fortalecimento da cibersegurança ao eliminar o uso de ferramentas externas e posicionamento da V.tal à frente no mercado de IA.</p>
+    </div>
+  </div>
+</section>
+
+<section data-label="O custo de hoje" data-screen-label="12" data-speaker-notes="Preencher junto, em voz alta, nunca chegar com a tabela pronta — número que o cliente diz é número que ele defende internamente depois. Ancore em decisão atrasada e pergunta não feita: é o que dói, e é o que o Plum realmente muda." style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:92px 108px 80px;display:flex;flex-direction:column;gap:48px;overflow:hidden;">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">Quanto custa hoje uma resposta sobre seus dados?</h2>
+  <div style="flex:1;display:grid;grid-template-columns:1.5fr 1fr 1fr;align-content:start;">
+    <div style="padding:18px 0;"></div>
+    <div style="padding:18px 26px;"><p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#6C6570;margin:0;">Hoje</p></div>
+    <div style="padding:18px 26px;background:#E8D3DF;"><p style="font:600 26px/1 'Public Sans',sans-serif;letter-spacing:0.1em;text-transform:uppercase;color:#7A2F56;margin:0;">Com Plum</p></div>
+
+    <div style="padding:30px 0;"><p style="font:400 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Tempo até a resposta</p></div>
+    <div style="padding:30px 26px;background:rgba(255,255,255,0.62);border-bottom:2px dashed #C4A6B6;"></div>
+    <div style="padding:30px 26px;background:#F3E7EE;"><p style="font:700 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">minutos</p></div>
+
+    <div style="padding:30px 0;"><p style="font:400 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Analistas envolvidos</p></div>
+    <div style="padding:30px 26px;background:rgba(255,255,255,0.62);border-bottom:2px dashed #C4A6B6;"></div>
+    <div style="padding:30px 26px;background:#F3E7EE;"><p style="font:700 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">1 — você</p></div>
+
+    <div style="padding:30px 0;"><p style="font:400 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Perguntas que ninguém faz porque dá trabalho</p></div>
+    <div style="padding:30px 26px;background:rgba(255,255,255,0.62);border-bottom:2px dashed #C4A6B6;"></div>
+    <div style="padding:30px 26px;background:#F3E7EE;"><p style="font:700 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">—</p></div>
+
+    <div style="padding:30px 0;"><p style="font:400 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Decisões tomadas sem o dado no último trimestre</p></div>
+    <div style="padding:30px 26px;background:rgba(255,255,255,0.62);border-bottom:2px dashed #C4A6B6;"></div>
+    <div style="padding:30px 26px;background:#F3E7EE;"><p style="font:700 28px/1.35 'Public Sans',sans-serif;color:#1E1E24;margin:0;">—</p></div>
+  </div>
+  <p style="font:400 30px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;max-width:1450px;text-wrap:pretty;"><span style="font-weight:700;color:#1E1E24;">A terceira linha é a mais cara das quatro</span> — e é a única que não aparece em relatório de custo nenhum.</p>
+</section>
+
+<section data-label="Segurança" data-screen-label="13" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:80px 108px 70px;display:flex;flex-direction:column;gap:40px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 58px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">O seu TI continua no controle.</h2>
+  <div style="flex:1;display:grid;grid-template-columns:56px 420px 1fr;row-gap:40px;column-gap:32px;align-content:center;align-items:center;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.4" stroke-linecap="round" style="width:48px;height:48px;"><rect x="4" y="10.5" width="16" height="10" rx="2"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path></svg>
+    <p style="font:700 28px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Somente leitura, por arquitetura</p>
+    <p style="font:400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;">o Plum nunca escreve na sua planilha nem no seu documento. Escopo de leitura, e nada além</p>
+
+    <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.4" stroke-linecap="round" style="width:48px;height:48px;"><path d="M2.5 12s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.6"></circle></svg>
+    <p style="font:700 28px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Permissão por coluna</p>
+    <p style="font:400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;">o vendedor vê venda, o diretor vê margem. Default é <span style="font-weight:700;">nada</span> — libera-se explicitamente</p>
+
+    <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.4" stroke-linecap="round" style="width:48px;height:48px;"><path d="M6 3h8l4 4v14H6V3Z"></path><path d="M14 3v4h4"></path><path d="M9 12h6M9 16h6"></path></svg>
+    <p style="font:700 28px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Permissão por documento</p>
+    <p style="font:400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;">o contrato do jurídico não responde ao comercial. Mesmo default: nada</p>
+
+    <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.4" stroke-linecap="round" style="width:48px;height:48px;"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 9h6M9 13h6M9 17h3"></path></svg>
+    <p style="font:700 28px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Trilha de auditoria</p>
+    <p style="font:400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;">toda mudança de acesso fica registrada, e o registro não é editável</p>
+
+    <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.4" stroke-linecap="round" style="width:48px;height:48px;"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 8h8M8 13h2M13 13h3M8 17h2M13 17h3"></path></svg>
+    <p style="font:700 28px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Motor determinístico</p>
+    <p style="font:400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;">o número é calculado em Python, nunca escrito pelo modelo — e toda regra vinda de um documento mostra a cláusula de origem</p>
+  </div>
+  <p style="font:400 30px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;max-width:1500px;text-wrap:pretty;">Você compartilha suas planilhas e documentos com o Plum como leitor. <span style="font-weight:700;color:#1E1E24;">A governança continua sendo sua.</span></p>
+</section>
+
+<section data-label="Para onde vai" data-screen-label="14" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:92px 108px 80px;display:flex;flex-direction:column;gap:56px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <h2 style="font:400 54px/1.1 'Newsreader',serif;margin:0;letter-spacing:-0.01em;">O mesmo motor, cada vez mais perto do seu negócio.</h2>
+  <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:64px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:24px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.3" stroke-linecap="round" style="width:56px;height:56px;"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>
+      <p style="font:500 36px/1.2 'Newsreader',serif;color:#7A2F56;margin:0;">Agentes por vertical</p>
+      <p style="font:400 25px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">as análises típicas do seu setor entram no seu catálogo sem projeto novo:</p>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="display:flex;gap:14px;align-items:baseline;">
+          <span style="font:400 22px/1.4 'Public Sans',sans-serif;color:#7A2F56;">•</span>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <p style="font:600 24px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Risco de concentração</p>
+            <p style="font:italic 400 23px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">“Quanto do meu faturamento depende dos 10 maiores clientes?”</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:baseline;">
+          <span style="font:400 22px/1.4 'Public Sans',sans-serif;color:#7A2F56;">•</span>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <p style="font:600 24px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Comparável: crescimento × sazonalidade</p>
+            <p style="font:italic 400 23px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">“Cresci de verdade, ou agosto sempre é assim?”</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:baseline;">
+          <span style="font:400 22px/1.4 'Public Sans',sans-serif;color:#7A2F56;">•</span>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <p style="font:600 24px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Decomposição de variação</p>
+            <p style="font:italic 400 23px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">“Minha receita caiu 12% em agosto. Foi preço, volume ou mix?”</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:baseline;">
+          <span style="font:400 22px/1.4 'Public Sans',sans-serif;color:#7A2F56;">•</span>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <p style="font:600 24px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Aderência de política</p>
+            <p style="font:italic 400 23px/1.35 'Public Sans',sans-serif;color:#7A2F56;margin:0;text-wrap:pretty;">“Alguma venda passou do desconto máximo permitido?”</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:baseline;">
+          <span style="font:400 22px/1.4 'Public Sans',sans-serif;color:#7A2F56;">•</span>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <p style="font:600 24px/1.3 'Public Sans',sans-serif;color:#1E1E24;margin:0;">Recência e evasão</p>
+            <p style="font:italic 400 23px/1.35 'Public Sans',sans-serif;color:#7A2F56;margin:0;text-wrap:pretty;">“Quais clientes compravam todo mês e pararam?”</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:24px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="width:56px;height:56px;"><path d="M20.5 12c0 4.1-3.8 7.2-8.5 7.2-1 0-2-.15-2.9-.42L4.5 20.5l1.3-3.3A6.9 6.9 0 0 1 3.5 12C3.5 7.9 7.3 4.8 12 4.8s8.5 3.1 8.5 7.2Z"></path></svg>
+      <p style="font:500 36px/1.2 'Newsreader',serif;color:#7A2F56;margin:0;">Onde você já está</p>
+      <p style="font:400 26px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">a pergunta sai do navegador e vai para o WhatsApp. Mesmo motor, mesma permissão, mesma garantia.</p>
+      <div style="display:flex;flex-direction:column;gap:16px;border-top:1px solid #DDD6DE;padding-top:24px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.3" stroke-linecap="round" style="width:52px;height:52px;"><rect x="3.5" y="3.5" width="7" height="7" rx="2"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="2"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="2"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="2"></rect></svg>
+        <p style="font:500 32px/1.2 'Newsreader',serif;color:#7A2F56;margin:0;">Dashboards automáticos em tempo real</p>
+        <p style="font:400 26px/1.45 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">Transforme uma pergunta em card fixo na sua página inicial. Ele recalcula sozinho, no intervalo que você definir, sem ninguém reabrir planilha.</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:24px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#7A2F56" stroke-width="1.3" stroke-linecap="round" style="width:56px;height:56px;"><path d="M3.5 18.5 9 11l4 3.4 7.5-9.4"></path><path d="M16.5 5.1h4v4"></path></svg>
+      <p style="font:500 36px/1.2 'Newsreader',serif;color:#7A2F56;margin:0;">Interpretação, não só consulta</p>
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <p style="font:italic 400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">“se minha glosa subir para 50 mil, minha margem vai para quanto?”</p>
+        <p style="font:italic 400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">“consigo pagar as comissões com o caixa que tenho hoje?”</p>
+        <p style="font:italic 400 26px/1.4 'Public Sans',sans-serif;color:#2D2B38;margin:0;text-wrap:pretty;">“se eu cortasse os dez produtos de menor margem, quanto perderia de receita?”</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Fechamento" data-screen-label="15" style="background:radial-gradient(circle at center, #FFFFFF 0%, #F4F4F8 60%, #ECEAF0 100%);color:#1E1E24;font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;position:relative;padding:72px 108px 72px;display:flex;flex-direction:column;gap:40px;overflow:hidden;" data-speaker-notes="">
+  <img src="assets/logo-poli-junior-mark.png" alt="Poli Júnior" style="position:absolute;top:36px;right:48px;width:74px;height:auto;mix-blend-mode:multiply;" />
+  <img src="assets/logo-plum-v3.jpg" alt="Plum" style="position:absolute;bottom:18px;right:28px;width:150px;height:150px;object-fit:contain;mix-blend-mode:multiply;-webkit-mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);mask-image:radial-gradient(circle at center, #000 50%, rgba(0,0,0,0) 70%);" />
+  <div style="display:flex;flex-direction:column;gap:22px;">
+    <h2 style="font:400 92px/1 'Newsreader',serif;color:#7A2F56;margin:0;letter-spacing:-0.01em;">Obrigado!</h2>
+    <p style="font:400 36px/1.35 'Public Sans',sans-serif;color:#2D2B38;margin:0;">Estamos prontos para transformar seus dados em decisões.</p>
+  </div>
+  <div style="flex:1;min-height:0;align-self:center;display:flex;align-items:center;justify-content:center;gap:120px;">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <img src="assets/foto-carlos.png" alt="Carlos" style="display:block;width:180px;height:180px;border-radius:50%;object-fit:cover;margin-bottom:8px;" />
+      <p style="font:500 34px/1.2 'Newsreader',serif;color:#1E1E24;margin:0;">Carlos</p>
+      <p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#6C6570;margin:0;">Gerente do Núcleo de Inovação</p>
+      <p style="font:600 28px/1.35 'Public Sans',sans-serif;color:#7A2F56;margin:6px 0 0;">(85) 9768-9522</p>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <img src="assets/foto-antonio.png" alt="Antonio" style="display:block;width:180px;height:180px;border-radius:50%;object-fit:cover;margin-bottom:8px;" />
+      <p style="font:500 34px/1.2 'Newsreader',serif;color:#1E1E24;margin:0;">Antonio</p>
+      <p style="font:400 26px/1.35 'Public Sans',sans-serif;color:#6C6570;margin:0;">Coordenador Comercial</p>
+      <p style="font:600 28px/1.35 'Public Sans',sans-serif;color:#7A2F56;margin:6px 0 0;">(11) 98224-4437</p>
+    </div>
+  </div>
+  <div style="margin-bottom:62px;background:#7A2F56;border-radius:18px;padding:44px 52px;display:flex;flex-direction:column;gap:18px;">
+    <p style="font:600 24px/1 'Public Sans',sans-serif;letter-spacing:0.16em;text-transform:uppercase;color:#E8C9D9;margin:0;">Próximo passo</p>
+    <p style="font:400 30px/1.45 'Public Sans',sans-serif;color:#fff;margin:0;max-width:1500px;text-wrap:pretty;">uma sessão de 1 hora com quem cuida das suas bases hoje. Saímos dela com o mapa das suas planilhas e dos contratos que governam elas, e uma estimativa de escopo do onboarding — sem custo.</p>
+  </div>
+</section>
+
+</x-import>
+</x-dc>
+</body>
+</html>

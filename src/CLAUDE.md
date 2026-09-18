@@ -19,7 +19,7 @@ layout — wrapper daria a todo diálogo o tema errado.
 
 ⚠️ **Efeito que escreve em nó global precisa de limpeza.** Sem `return () => classList.remove(...)`
 a classe sobrevive ao logout e vaza para a landing/`/auth`/404, que não têm opinião própria sobre
-tema. Já aconteceu — `contexto/31-incidentes-e-licoes.md` I-06.
+tema. Já aconteceu — `contexto_interno/31-incidentes-e-licoes.md` I-06.
 
 ⚠️ `profiles.tema` é escrito **só por RPC `definir_tema()`**, nunca `UPDATE` direto: a única policy
 de UPDATE em `profiles` exige `id <> auth.uid()` de propósito, contra autopromoção.
@@ -60,7 +60,7 @@ mesmo agora que o "Editar Esquema" grava sozinho e os dois momentos distam ~900 
 valor cru, então trocar o papel e voltar devolve a escolha; é o banco que recebe o saneado.
 
 ⚠️ **E naquela tela há UM caminho de escrita do `schema_metadata`** (`salvarAgora`), de propósito:
-dois caminhos no mesmo painel já apagaram o trabalho de alguém — `contexto/31-incidentes-e-licoes.md`
+dois caminhos no mesmo painel já apagaram o trabalho de alguém — `contexto_interno/31-incidentes-e-licoes.md`
 I-15. Quem gravar tem de partir do que está na tela, nunca do que está salvo.
 
 ## 6. Rotas e nomes que enganam

@@ -40,13 +40,13 @@ oito dias com uma cópia antiga sem nenhum sintoma (D-028, encerrada em 2026-08-
 Ele extrai as colunas para o RBAC. ⚠️ **Toda forma nova na gramática é um lugar onde uma coluna pode
 se esconder do RBAC:** `addCol` descarta o que não é string, e foi assim que `walkArithmetic`
 autorizou plano sem olhar os operandos. `extractColumns` tem de andar recursivamente por qualquer
-estrutura nova. Ver `contexto/31-incidentes-e-licoes.md` I-05. Testes: `query_plan.test.ts`
+estrutura nova. Ver `contexto_interno/31-incidentes-e-licoes.md` I-05. Testes: `query_plan.test.ts`
 (`npm test`).
 
 ## 4. Fail-open é decisão, não descuido
 
 O Z-dash (`dashboard-agent`) é fail-**open** de propósito — é economia de custo, não controle de
-segurança. Não "conserte" isso. Ver `contexto/30-decisoes.md` D-023.
+segurança. Não "conserte" isso. Ver `contexto_interno/30-decisoes.md` D-023.
 
 ## 5. Nada de decisão de autorização a partir de dado do cliente
 

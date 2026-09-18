@@ -23,7 +23,7 @@ medido, e é falso.**
 Existe uma integração nativa GitHub↔Supabase (Project Settings → Integrations → GitHub, ligada ao
 branch `plataforma`, diretório `supabase`), e ela **publica** — mas com **cobertura desconhecida**.
 No push medido, ela republicou duas funções que aquele commit não tocava e **deixou de fora a
-única** que ele mudava. O relato completo está em `contexto/31-incidentes-e-licoes.md` **I-03**; não
+única** que ele mudava. O relato completo está em `contexto_interno/31-incidentes-e-licoes.md` **I-03**; não
 é repetido aqui para não criar um segundo dono do fato.
 
 As duas regras que sobreviveram àquela medição:
@@ -37,7 +37,7 @@ As duas regras que sobreviveram àquela medição:
 outra pessoa. Como `_shared/` é empacotado **por função** e não compartilhado em runtime, isso deixa
 cópias divergentes do interpretador de RBAC no ar sem ninguém ter feito deploy.
 
-Migrations continuam manuais, de propósito (`contexto/30-decisoes.md` D-005).
+Migrations continuam manuais, de propósito (`contexto_interno/30-decisoes.md` D-005).
 
 Comando:
 
